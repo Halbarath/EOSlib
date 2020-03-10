@@ -24,8 +24,8 @@ void EOSfinalizeMaterial(EOSMATERIAL *material);
 // Access functions
 
 // Main functions
-double EOSPofRhoU(EOSMATERIAL *material, double p, double u);
-double EOSCofRhoU(EOSMATERIAL *material, double p, double u);
+double EOSPofRhoU(EOSMATERIAL *material, double rho, double u);
+double EOSCofRhoU(EOSMATERIAL *material, double rho, double u);
 double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2);
 
 // T<-->U conversion functions

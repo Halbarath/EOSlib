@@ -6,6 +6,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
 #include "EOSlib.h"
 
 EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, int featureset)
@@ -35,25 +36,37 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, int fe
 
 void EOSfinalizeMaterial(EOSMATERIAL *material)
 {
-	if (material->tillmaterial != NULL)
+	switch(material->matType)
 	{
-		tillFinalizeMaterial(material->tillmaterial);
+		case 0:
+			tillFinalizeMaterial(material->tillmaterial);
+			break;
+		case 1:
+			ANEOSfinalizeMaterial(material->ANEOSmaterial);
+			break;
+		default:
+		assert(0);
 	}
-	if (material->ANEOSmaterial != NULL)
-	{
-		ANEOSfinalizeMaterial(material->ANEOSmaterial);
-	}
+
 	free(material);
 }
 
 
-double EOSPofRhoU(EOSMATERIAL *material, double p, double u)
+double EOSPofRhoU(EOSMATERIAL *material, double rho, double u)
 {
 	double P = 0;
 	
-	if (material->tillmaterial != NULL)
+	switch(material->matType)
 	{
-	} else if (material->ANEOSmaterial !
+		case 0:
+			P = eosPressure(material->tillmaterial, rho, u);
+			break;
+		case 1:
+			P = ANEOSPofRhoU(material->ANEOSmaterial, rho, u);
+			break;
+		default:
+		assert(0);
+	}
 	
-	return 1.0;
+	return P;
 }
