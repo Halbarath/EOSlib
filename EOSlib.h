@@ -1,6 +1,9 @@
 /*
  * Equation Of State library EOSlib
- * Header of EOSlib.c
+ *
+ * This is a wrapper to be used in Gasoline and ballic
+ * It wraps around the Tillotson material library and the ANEOSmaterial library
+ * but can be extended with additional material libraries
  *
  */
  
@@ -24,18 +27,21 @@ void EOSfinalizeMaterial(EOSMATERIAL *material);
 // Access functions
 
 // Main functions
-double EOSPofRhoU(EOSMATERIAL *material, double rho, double u);
-double EOSCofRhoU(EOSMATERIAL *material, double rho, double u);
-double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2);
+double EOSPofRhoU(EOSMATERIAL *material, double rho, double u); // used in standard Gasoline
+double EOSCofRhoU(EOSMATERIAL *material, double rho, double u); // used in standard Gasoline
+double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2); // used in Gasoline with ISPH
 
-// T<-->U conversion functions
-double EOSTofRhoU(EOSMATERIAL *material, double rho, double u);
-double EOSUofRhoT(EOSMATERIAL *material, double rho, double T);
+// Inverse functions
+double EOSTofRhoU(EOSMATERIAL *material, double rho, double u); // used in ballic
+double EOSUofRhoT(EOSMATERIAL *material, double rho, double T); // used in ballic
+double EOSRhoofPT(EOSMATERIAL *material, double p, double T); // used in Gasoline using Woolfson correction
+
 
 // Derivatives
-double EOSdPdRho(EOSMATERIAL *material, double rho, double u);
-double EOSdPdRho(EOSMATERIAL *material, double rho, double u);
-double EOSdUdRho(EOSMATERIAL *material, double rho, double u);
+double EOSdPdRho(EOSMATERIAL *material, double rho, double u); // used in ballic
+double EOSdPdRho(EOSMATERIAL *material, double rho, double u); // used in ballic
+double EOSdUdRho(EOSMATERIAL *material, double rho, double u); // used in ballic
 
 // Boundary condition solver
-int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1, double *prho2, double *pu2);
+int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,
+ double *prho2, double *pu2); // used in ballic

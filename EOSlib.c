@@ -1,6 +1,9 @@
 /*
  * Equation Of State library EOSlib
- * EOS material
+ *
+ * This is a wrapper to be used in Gasoline and ballic
+ * It wraps around the Tillotson material library and the ANEOSmaterial library
+ * but can be extended with additional material libraries
  *
  */
 
