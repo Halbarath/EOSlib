@@ -9,11 +9,22 @@
  
 #include "../tillotson/tillotson.h"
 #include "../ANEOSmaterial/ANEOSmaterial.h"
+
+#define EOSIdealGas  0
+#define EOSTillotson 1
+#define EOSANEOS     2
+#define iMatIdealGas 0
+#define iMatTillotsonmin 1
+#define iMatTillotsonmax 50
+#define iMatANEOSmin 51
+#define iMatANEOSmax 100
+
  
 typedef struct EOSmaterial
 {
 	int iMat; // Material number
 	int matType; // Material type, 0: Tillotson, 1: ANEOS
+	double rho0; // reference density
 	TILLMATERIAL *tillmaterial; // Pointer to tillotson material
 	ANEOSMATERIAL *ANEOSmaterial; // Pointer to ANEOS material
 	
@@ -21,7 +32,7 @@ typedef struct EOSmaterial
 
 // Initialization and finalization
 
-EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, int featureset);
+EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const void * additional_data);
 void EOSfinalizeMaterial(EOSMATERIAL *material);
 
 // Access functions
