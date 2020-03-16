@@ -29,6 +29,7 @@ void EOSfinalizeMaterial(EOSMATERIAL *material);
 // Main functions
 double EOSPofRhoU(EOSMATERIAL *material, double rho, double u); // used in standard Gasoline
 double EOSCofRhoU(EOSMATERIAL *material, double rho, double u); // used in standard Gasoline
+double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c); // used in standalone Gasoline, can be faster if both values are needed simultaneously
 double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2); // used in Gasoline with ISPH
 
 // Inverse functions
