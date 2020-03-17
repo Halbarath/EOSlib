@@ -10,6 +10,11 @@
 #include "../tillotson/tillotson.h"
 #include "../ANEOSmaterial/ANEOSmaterial.h"
 
+#define EOS_VERSION_TEXT    "1.0.0"
+#define EOS_VERSION_MAJOR   1
+#define EOS_VERSION_MINOR   0
+#define EOS_VERSION_PATCH   0
+
 #define EOSIdealGas  0
 #define EOSTillotson 1
 #define EOSANEOS     2
@@ -38,22 +43,22 @@ void EOSfinalizeMaterial(EOSMATERIAL *material);
 // Access functions
 
 // Main functions
-double EOSPofRhoU(EOSMATERIAL *material, double rho, double u); // used in standard Gasoline
-double EOSCofRhoU(EOSMATERIAL *material, double rho, double u); // used in standard Gasoline
-double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c); // used in standalone Gasoline, can be faster if both values are needed simultaneously
-double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2); // used in Gasoline with ISPH
+double EOSPofRhoU(EOSMATERIAL *material, double rho, double u);
+double EOSCofRhoU(EOSMATERIAL *material, double rho, double u);
+double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c);
+double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2);
 
 // Inverse functions
-double EOSTofRhoU(EOSMATERIAL *material, double rho, double u); // used in ballic
-double EOSUofRhoT(EOSMATERIAL *material, double rho, double T); // used in ballic
-double EOSRhoofPT(EOSMATERIAL *material, double p, double T); // used in Gasoline using Woolfson correction
+double EOSTofRhoU(EOSMATERIAL *material, double rho, double u);
+double EOSUofRhoT(EOSMATERIAL *material, double rho, double T);
+double EOSRhoofPT(EOSMATERIAL *material, double p, double T);
 
 
 // Derivatives
-double EOSdPdRho(EOSMATERIAL *material, double rho, double u); // used in ballic
-double EOSdPdRho(EOSMATERIAL *material, double rho, double u); // used in ballic
-double EOSdUdRho(EOSMATERIAL *material, double rho, double u); // used in ballic
+double EOSdPdRho(EOSMATERIAL *material, double rho, double u);
+double EOSdPdU(EOSMATERIAL *material, double rho, double u);
+double EOSdUdRho(EOSMATERIAL *material, double rho, double u);
 
 // Boundary condition solver
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,
- double *prho2, double *pu2); // used in ballic
+ double *prho2, double *pu2);
