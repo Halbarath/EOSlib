@@ -33,7 +33,11 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 		// not implemented
 	} else if (iMat>=iMatTillotsonmin && iMat<=iMatTillotsonmax)
 	{
-		//Tillotson material number
+		/* Check if the Tillotson library has the right version. */
+		if (TILL_VERSION_MAJOR != 3) {
+			fprintf(stderr, "EOSinitMaterial: Tillotson library has the wrong version (%s)\n", TILL_VERSION_TEXT);
+			exit(1);
+		}
 		material->matType = EOSTillotson;
 		material->tillmaterial = tillInitMaterial(iMat, dKpcUnit, dMsolUnit);
 		if (additional_data != NULL)
@@ -43,7 +47,11 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 		material->rho0 = material->tillmaterial->rho0;
 	} else if (iMat>=iMatANEOSmin && iMat <=iMatANEOSmax)
 	{
-		//ANEOS material number
+		/* Check if the ANEOS library has the right version. */
+		if (ANEOS_VERSION_MAJOR != 1) {
+			fprintf(stderr, "EOSinitMaterial: ANEOS library has the wrong version (%s)\n", ANEOS_VERSION_TEXT);
+			exit(1);
+		}
 		material->matType = EOSANEOS;
 		material->ANEOSmaterial = ANEOSinitMaterial(iMat, dKpcUnit, dMsolUnit);
 		material->rho0 = ANEOSgetRho0(material->ANEOSmaterial);
