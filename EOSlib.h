@@ -15,14 +15,16 @@
 #define EOS_VERSION_MINOR   0
 #define EOS_VERSION_PATCH   0
 
-#define EOSIdealGas  0
-#define EOSTillotson 1
+#define WOOLFSON_MIN_PRESSURE 1e-3
+
+#define EOSIDEALGAS  0
+#define EOSTILLOTSON 1
 #define EOSANEOS     2
-#define iMatIdealGas 0
-#define iMatTillotsonmin 1
-#define iMatTillotsonmax 50
-#define iMatANEOSmin 51
-#define iMatANEOSmax 100
+#define iMATIDEALGAS 0
+#define iMATTILLOTSONMIN 1
+#define iMATTILLOTSONMAX 50
+#define iMATANEOSMIN 51
+#define iMATANEOSMAX 100
 
  
 typedef struct EOSmaterial
@@ -62,3 +64,6 @@ double EOSdUdRho(EOSMATERIAL *material, double rho, double u);
 // Boundary condition solver
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,
  double *prho2, double *pu2);
+ 
+// Woolfson correction
+double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P, double T);

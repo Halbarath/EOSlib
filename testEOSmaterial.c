@@ -5,10 +5,10 @@
 
 int main(int argc, char *argv[])
 {
-	//double dKpcUnit = 2.06701e-13;
-	//double dMsolUnit = 4.80438e-08;
-	double dKpcUnit = -1.0;
-	double dMsolUnit = -1.0;
+	double dKpcUnit = 2.06701e-13;
+	double dMsolUnit = 4.80438e-08;
+	//double dKpcUnit = -1.0;
+	//double dMsolUnit = -1.0;
 	
 	// Version check
 	if (EOS_VERSION_MAJOR != 1) {
@@ -101,6 +101,17 @@ int main(int argc, char *argv[])
 	T2 = EOSTofRhoU(material2, rhosolved, usolved);
 	printf("T: original %.15e, solved %.15e\n", T1, T2);
 	printf("P: original %.15e, solved %.15e\n", P1, P2);
+
+	// Test Woolfson correction
+	double woolfsoncoeff = EOSWoolfsonCoeff(material1, material2, P1, T1);
+	printf("woolfsoncoeff %.15e\n", woolfsoncoeff);
+	
+	
+	double Ttest1 = EOSTofRhoU(material1, 9.01005, 7.02281);
+	printf("Ttest1 %.15e\n", Ttest1);
+	
+	double Ttest2 = EOSTofRhoU(material2, 9.01005, 2.74867);
+	printf("Ttest2 %.15e\n", Ttest2);
 
 	// Finalize
 	EOSfinalizeMaterial(material1);

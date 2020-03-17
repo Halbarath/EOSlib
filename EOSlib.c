@@ -28,24 +28,24 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 	material = (EOSMATERIAL *) calloc(1, sizeof(EOSMATERIAL));
 	material->iMat = iMat;
 
-	if (iMat == iMatIdealGas)
+	if (iMat == iMATIDEALGAS)
 	{
 		// not implemented
-	} else if (iMat>=iMatTillotsonmin && iMat<=iMatTillotsonmax)
+	} else if (iMat>=iMATTILLOTSONMIN && iMat<=iMATTILLOTSONMAX)
 	{
 		/* Check if the Tillotson library has the right version. */
 		if (TILL_VERSION_MAJOR != 3) {
 			fprintf(stderr, "EOSinitMaterial: Tillotson library has the wrong version (%s)\n", TILL_VERSION_TEXT);
 			exit(1);
 		}
-		material->matType = EOSTillotson;
+		material->matType = EOSTILLOTSON;
 		material->tillmaterial = tillInitMaterial(iMat, dKpcUnit, dMsolUnit);
 		if (additional_data != NULL)
 		{
 			tillInitLookup(material->tillmaterial, 1000, 1000, 1e-4, 200.0, 1200.0);
 		}
 		material->rho0 = material->tillmaterial->rho0;
-	} else if (iMat>=iMatANEOSmin && iMat <=iMatANEOSmax)
+	} else if (iMat>=iMATANEOSMIN && iMat <=iMATANEOSMAX)
 	{
 		/* Check if the ANEOS library has the right version. */
 		if (ANEOS_VERSION_MAJOR != 1) {
@@ -67,10 +67,10 @@ void EOSfinalizeMaterial(EOSMATERIAL *material)
 {
 	switch(material->matType)
 	{
-		case EOSIdealGas:
+		case EOSIDEALGAS:
 		// not implemented
 			break;
-		case EOSTillotson:
+		case EOSTILLOTSON:
 			tillFinalizeMaterial(material->tillmaterial);
 			break;
 		case EOSANEOS:
@@ -92,10 +92,10 @@ double EOSPofRhoU(EOSMATERIAL *material, double rho, double u)
 	
 	switch(material->matType)
 	{
-		case EOSIdealGas:
+		case EOSIDEALGAS:
 		// not implemented
 			break;
-		case EOSTillotson:
+		case EOSTILLOTSON:
 			P = tillPressure(material->tillmaterial, rho, u);
 			break;
 		case EOSANEOS:
@@ -118,10 +118,10 @@ double EOSCofRhoU(EOSMATERIAL *material, double rho, double u)
 	
 	switch(material->matType)
 	{
-		case EOSIdealGas:
+		case EOSIDEALGAS:
 		// not implemented
 			break;
-		case EOSTillotson:
+		case EOSTILLOTSON:
 			P = tillPressureSound(material->tillmaterial, rho, u, &c);
 			c = sqrt(c); // TODO: remove after changed in Tillotson library
 			break;
@@ -147,10 +147,10 @@ double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c)
 	
 	switch(material->matType)
 	{
-		case EOSIdealGas:
+		case EOSIDEALGAS:
 		// not implemented
 			break;
-		case EOSTillotson:
+		case EOSTILLOTSON:
 			P = tillPressureSound(material->tillmaterial, rho, u, c);
 			*c = sqrt(*c); // TODO: remove after changed in Tillotson library
 			break;
@@ -174,10 +174,10 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
 	double u2;
 	switch(material->matType)
 	{
-		case EOSIdealGas:
+		case EOSIDEALGAS:
 		// not implemented
 			break;
-		case EOSTillotson:
+		case EOSTILLOTSON:
 			u2 = tillLookupU(material->tillmaterial, rho1, u1, rho2, 0); // last argument is actually a particle number
 			break;
 		case EOSANEOS:
@@ -198,10 +198,10 @@ double EOSTofRhoU(EOSMATERIAL *material, double rho, double u)
 	double T;
 	switch(material->matType)
 	{
-		case EOSIdealGas:
+		case EOSIDEALGAS:
 		// not implemented
 			break;
-		case EOSTillotson:
+		case EOSTILLOTSON:
 			T = tillTempRhoU(material->tillmaterial, rho, u);
 			break;
 		case EOSANEOS:
@@ -222,10 +222,10 @@ double EOSUofRhoT(EOSMATERIAL *material, double rho, double T)
 	double u;
 	switch(material->matType)
 	{
-		case EOSIdealGas:
+		case EOSIDEALGAS:
 		// not implemented
 			break;
-		case EOSTillotson:
+		case EOSTILLOTSON:
 			u = tillURhoTemp(material->tillmaterial, rho, T);
 			break;
 		case EOSANEOS:
@@ -246,10 +246,10 @@ double EOSRhoofPT(EOSMATERIAL *material, double p, double T)
 	double rho;
 	switch(material->matType)
 	{
-		case EOSIdealGas:
+		case EOSIDEALGAS:
 		// not implemented
 			break;
-		case EOSTillotson:
+		case EOSTILLOTSON:
 			rho = tillRhoPTemp(material->tillmaterial, p, T);
 			break;
 		case EOSANEOS:
@@ -270,10 +270,10 @@ double EOSdPdRho(EOSMATERIAL *material, double rho, double u)
 	double dPdRho;
 	switch(material->matType)
 	{
-		case EOSIdealGas:
+		case EOSIDEALGAS:
 		// not implemented
 			break;
-		case EOSTillotson:
+		case EOSTILLOTSON:
 			dPdRho = tilldPdrho(material->tillmaterial, rho, u);
 			break;
 		case EOSANEOS:
@@ -294,10 +294,10 @@ double EOSdPdU(EOSMATERIAL *material, double rho, double u)
 	double dPdU;
 	switch(material->matType)
 	{
-		case EOSIdealGas:
+		case EOSIDEALGAS:
 		// not implemented
 			break;
-		case EOSTillotson:
+		case EOSTILLOTSON:
 			dPdU = tilldPdu(material->tillmaterial, rho, u);
 			break;
 		case EOSANEOS:
@@ -318,10 +318,10 @@ double EOSdUdRho(EOSMATERIAL *material, double rho, double u)
 	double dUdRho;
 	switch(material->matType)
 	{
-		case EOSIdealGas:
+		case EOSIDEALGAS:
 		// not implemented
 			break;
-		case EOSTillotson:
+		case EOSTILLOTSON:
 			dUdRho = tilldudrho(material->tillmaterial, rho, u);
 			break;
 		case EOSANEOS:
@@ -405,4 +405,47 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
     iRet = 0;
 
     return iRet;
+}
+
+/*
+ * Calculate the coefficient
+ *
+ * f_ij := rho_mat1(P, T)/rho_mat2(P, T)
+ *
+ * needed to correct the density at a material interface.
+ */
+double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P, double T)
+{
+    double rho1;
+    double rho2;
+
+    // Check if there is indeed a material interface.
+    if (material1->iMat == material2->iMat)
+	{
+        return 1.0;
+	}
+    /*
+     * In the low density region a density correction can be problematic (dPdrho not monotonic,
+     * interpretation of mixed phases in the Tillotson EOS difficult), so the correction factor
+     * is one in this case.
+     */
+
+    if (P < WOOLFSON_MIN_PRESSURE) {
+        fprintf(stderr, "Warning: Pressure is close to zero so no density correction is done.\n");
+        return 1.0;
+    }
+
+	rho1 = EOSRhoofPT(material1, P, T);
+	rho2 = EOSRhoofPT(material2, P, T);
+
+
+    // If the density is unphysical return 1 so the density is not corrected.
+    if ((rho1 <= 0.0) || (rho2 <= 0.0))
+    {
+        fprintf(stderr, "CalcWoolfsonCoeff: unphysical density (rho1= %g, rho2= %g).\n", rho1, rho2);
+        //        return 1.0;
+        return -1.0;
+    }
+
+    return (rho1/rho2);
 }
