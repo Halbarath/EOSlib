@@ -34,7 +34,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 	} else if (iMat>=iMATTILLOTSONMIN && iMat<=iMATTILLOTSONMAX)
 	{
 		/* Check if the Tillotson library has the right version. */
-		if (TILL_VERSION_MAJOR != 3) {
+		if (TILL_VERSION_MAJOR != 3 && TILL_VERSION_MINOR < 4) {
 			fprintf(stderr, "EOSinitMaterial: Tillotson library has the wrong version (%s)\n", TILL_VERSION_TEXT);
 			exit(1);
 		}
@@ -123,7 +123,6 @@ double EOSCofRhoU(EOSMATERIAL *material, double rho, double u)
 			break;
 		case EOSTILLOTSON:
 			P = tillPressureSound(material->tillmaterial, rho, u, &c);
-			c = sqrt(c); // TODO: remove after changed in Tillotson library
 			break;
 		case EOSANEOS:
 			c = ANEOSCofRhoU(material->ANEOSmaterial, rho, u);
@@ -152,7 +151,6 @@ double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c)
 			break;
 		case EOSTILLOTSON:
 			P = tillPressureSound(material->tillmaterial, rho, u, c);
-			*c = sqrt(*c); // TODO: remove after changed in Tillotson library
 			break;
 		case EOSANEOS:
 			T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);

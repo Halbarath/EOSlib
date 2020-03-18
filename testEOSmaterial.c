@@ -112,6 +112,8 @@ int main(int argc, char *argv[])
 	
 	double Ttest2 = EOSTofRhoU(material2, 9.01005, 2.74867);
 	printf("Ttest2 %.15e\n", Ttest2);
+	
+	printf("surface temp: %.15e\n", EOSTofRhoU(material1, material1->rho0, 0.44));
 
 	// Finalize
 	EOSfinalizeMaterial(material1);
