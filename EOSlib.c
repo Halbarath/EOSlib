@@ -34,7 +34,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 	} else if (iMat>=iMATTILLOTSONMIN && iMat<=iMATTILLOTSONMAX)
 	{
 		/* Check if the Tillotson library has the right version. */
-		if (TILL_VERSION_MAJOR != 3 && TILL_VERSION_MINOR < 4) {
+		if (TILL_VERSION_MAJOR != 3 || TILL_VERSION_MINOR < 4) {
 			fprintf(stderr, "EOSinitMaterial: Tillotson library has the wrong version (%s)\n", TILL_VERSION_TEXT);
 			exit(1);
 		}
