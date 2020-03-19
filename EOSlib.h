@@ -55,6 +55,7 @@ double EOSTofRhoU(EOSMATERIAL *material, double rho, double u);
 double EOSUofRhoT(EOSMATERIAL *material, double rho, double T);
 double EOSRhoofPT(EOSMATERIAL *material, double p, double T);
 
+int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u);
 
 // Derivatives
 double EOSdPdRho(EOSMATERIAL *material, double rho, double u);

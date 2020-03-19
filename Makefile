@@ -2,7 +2,7 @@ objects = EOSlib.o ../ANEOSmaterial/ANEOSmaterial.o ../tillotson/tillotson.o ../
 
 defs = -DTILL_OUTPUT_ALL_WARNINGS -DTILL_VERBOSE
 
-execs = testEOSmaterial 
+execs = testEOSmaterial calcTemperature calcColdcurveEnergy
 
 # GNU Science library (uncomment if not needed)
 GSL_LIB = -lgsl -lgslcblas
@@ -18,6 +18,12 @@ default:
 all: default
 
 testEOSmaterial: testEOSmaterial.o $(objects)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+calcTemperature: calcTemperature.o $(objects)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+calcColdcurveEnergy: calcColdcurveEnergy.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 clean:

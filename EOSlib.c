@@ -261,6 +261,15 @@ double EOSRhoofPT(EOSMATERIAL *material, double p, double T)
 }
 
 /*
+ * Tests if the given combination is below the cold curve, returns 1 if so and 0 if not
+ */
+int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u)
+{
+	double ucold = EOSUofRhoT(material, rho, 1e-4);
+	return (u < ucold);
+}
+
+/*
  * Calculates the derivative dPdrho(rho,u) for a material
  */
 double EOSdPdRho(EOSMATERIAL *material, double rho, double u)

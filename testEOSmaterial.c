@@ -105,15 +105,11 @@ int main(int argc, char *argv[])
 	// Test Woolfson correction
 	double woolfsoncoeff = EOSWoolfsonCoeff(material1, material2, P1, T1);
 	printf("woolfsoncoeff %.15e\n", woolfsoncoeff);
-	
-	
-	double Ttest1 = EOSTofRhoU(material1, 9.01005, 7.02281);
-	printf("Ttest1 %.15e\n", Ttest1);
-	
-	double Ttest2 = EOSTofRhoU(material2, 9.01005, 2.74867);
-	printf("Ttest2 %.15e\n", Ttest2);
-	
-	printf("surface temp: %.15e\n", EOSTofRhoU(material1, material1->rho0, 0.44));
+
+	// Test EOSisbelowColdCurve
+	int ret1 = EOSisbelowColdCurve(material1, 25, 0.1);
+	int ret2 = EOSisbelowColdCurve(material1, 25, 60);
+	printf("isbelowColdCurve: true = %d, false = %d\n", ret1, ret2);
 
 	// Finalize
 	EOSfinalizeMaterial(material1);
