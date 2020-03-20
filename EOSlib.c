@@ -237,7 +237,7 @@ double EOSUofRhoT(EOSMATERIAL *material, double rho, double T)
 }
 
 /*
- * Calculates the density rho(p,u) for a material
+ * Calculates the density rho(p,T) for a material
  */
 double EOSRhoofPT(EOSMATERIAL *material, double p, double T)
 {
@@ -252,6 +252,30 @@ double EOSRhoofPT(EOSMATERIAL *material, double p, double T)
 			break;
 		case EOSANEOS:
 			rho = ANEOSRhoofPT(material->ANEOSmaterial, p, T);
+			break;
+		default:
+		assert(0);
+	}
+
+	return rho;
+}
+
+/*
+ * Calculates the density rho(u,T) for a material
+ */
+double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
+{
+	double rho;
+	switch(material->matType)
+	{
+		case EOSIDEALGAS:
+		// not implemented
+			break;
+		case EOSTILLOTSON:
+			// not implemented
+			break;
+		case EOSANEOS:
+			rho = ANEOSRhoofUT(material->ANEOSmaterial, u, T);
 			break;
 		default:
 		assert(0);

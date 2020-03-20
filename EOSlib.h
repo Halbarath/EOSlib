@@ -6,6 +6,9 @@
  * but can be extended with additional material libraries
  *
  */
+
+#ifndef EOSLIB_HINCLUDED
+#define EOSLIB_HINCLUDED
  
 #include "../tillotson/tillotson.h"
 #include "../ANEOSmaterial/ANEOSmaterial.h"
@@ -26,6 +29,8 @@
 #define iMATANEOSMIN 51
 #define iMATANEOSMAX 100
 
+#define EOS_TRUE 1
+#define EOS_FALSE 0
  
 typedef struct EOSmaterial
 {
@@ -55,6 +60,8 @@ double EOSTofRhoU(EOSMATERIAL *material, double rho, double u);
 double EOSUofRhoT(EOSMATERIAL *material, double rho, double T);
 double EOSRhoofPT(EOSMATERIAL *material, double p, double T);
 
+double EOSRhoofUT(EOSMATERIAL *material, double u, double T);
+
 int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u);
 
 // Derivatives
@@ -68,3 +75,4 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
  
 // Woolfson correction
 double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P, double T);
+#endif
