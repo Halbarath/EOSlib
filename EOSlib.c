@@ -27,6 +27,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 	EOSMATERIAL *material;
 	material = (EOSMATERIAL *) calloc(1, sizeof(EOSMATERIAL));
 	material->iMat = iMat;
+	material->canDoIsentropic = 0;
 
 	if (iMat == iMATIDEALGAS)
 	{
@@ -43,6 +44,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 		if (additional_data != NULL)
 		{
 			tillInitLookup(material->tillmaterial, 1000, 1000, 1e-4, 200.0, 1200.0);
+			material->canDoIsentropic = 1;
 		}
 		material->rho0 = material->tillmaterial->rho0;
 	} else if (iMat>=iMATANEOSMIN && iMat <=iMATANEOSMAX)
@@ -55,6 +57,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 		material->matType = EOSANEOS;
 		material->ANEOSmaterial = ANEOSinitMaterial(iMat, dKpcUnit, dMsolUnit);
 		material->rho0 = ANEOSgetRho0(material->ANEOSmaterial);
+		material->canDoIsentropic = 1;
 	}
 	
 	return material;
@@ -265,7 +268,7 @@ double EOSRhoofPT(EOSMATERIAL *material, double p, double T)
  */
 double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
 {
-	double rho;
+	double rho = 0;
 	switch(material->matType)
 	{
 		case EOSIDEALGAS:

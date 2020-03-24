@@ -20,6 +20,8 @@
 
 #define WOOLFSON_MIN_PRESSURE 1e-3
 
+#define EOS_N_MATERIAL_MAX 100
+
 #define EOSIDEALGAS  0
 #define EOSTILLOTSON 1
 #define EOSANEOS     2
@@ -37,6 +39,7 @@ typedef struct EOSmaterial
 	int iMat; // Material number
 	int matType; // Material type, 0: Tillotson, 1: ANEOS
 	double rho0; // reference density
+	int canDoIsentropic; // flag to signal if isentropic evolution is availlable
 	TILLMATERIAL *tillmaterial; // Pointer to tillotson material
 	ANEOSMATERIAL *ANEOSmaterial; // Pointer to ANEOS material
 	
