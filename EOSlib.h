@@ -40,6 +40,7 @@ typedef struct EOSmaterial
 	int matType; // Material type, 0: Tillotson, 1: ANEOS
 	double rho0; // reference density
 	int canDoIsentropic; // flag to signal if isentropic evolution is availlable
+	double cReference; // sound speed at reference values
 	TILLMATERIAL *tillmaterial; // Pointer to tillotson material
 	ANEOSMATERIAL *ANEOSmaterial; // Pointer to ANEOS material
 	

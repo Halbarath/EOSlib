@@ -47,6 +47,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 			material->canDoIsentropic = 1;
 		}
 		material->rho0 = material->tillmaterial->rho0;
+		material->cReference = sqrt(material->tillmaterial->A/material->tillmaterial->rho0);
 	} else if (iMat>=iMATANEOSMIN && iMat <=iMATANEOSMAX)
 	{
 		/* Check if the ANEOS library has the right version. */
@@ -58,6 +59,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 		material->ANEOSmaterial = ANEOSinitMaterial(iMat, dKpcUnit, dMsolUnit);
 		material->rho0 = ANEOSgetRho0(material->ANEOSmaterial);
 		material->canDoIsentropic = 1;
+		material->cReference = ANEOSCofRhoT(material->ANEOSmaterial, material->rho0, 1e-4);
 	}
 	
 	return material;
