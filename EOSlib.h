@@ -33,6 +33,9 @@
 
 #define EOS_TRUE 1
 #define EOS_FALSE 0
+
+#define EOS_SUCCESS 0
+#define EOS_FAIL 1
  
 typedef struct EOSmaterial
 {
@@ -40,7 +43,7 @@ typedef struct EOSmaterial
 	int matType; // Material type, 0: Tillotson, 1: ANEOS
 	double rho0; // reference density
 	int canDoIsentropic; // flag to signal if isentropic evolution is availlable
-	double cReference; // sound speed at reference values
+	double minSoundSpeed; // sound speed at reference values
 	TILLMATERIAL *tillmaterial; // Pointer to tillotson material
 	ANEOSMATERIAL *ANEOSmaterial; // Pointer to ANEOS material
 	
@@ -67,6 +70,7 @@ double EOSRhoofPT(EOSMATERIAL *material, double p, double T);
 double EOSRhoofUT(EOSMATERIAL *material, double u, double T);
 
 int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u);
+int EOSIsInTable(EOSMATERIAL *material, double rho, double u);
 
 // Derivatives
 double EOSdPdRho(EOSMATERIAL *material, double rho, double u);

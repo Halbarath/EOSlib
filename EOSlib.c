@@ -47,7 +47,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 			material->canDoIsentropic = 1;
 		}
 		material->rho0 = material->tillmaterial->rho0;
-		material->cReference = sqrt(material->tillmaterial->A/material->tillmaterial->rho0);
+		material->minSoundSpeed = sqrt(material->tillmaterial->A/material->tillmaterial->rho0);
 	} else if (iMat>=iMATANEOSMIN && iMat <=iMATANEOSMAX)
 	{
 		/* Check if the ANEOS library has the right version. */
@@ -59,7 +59,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 		material->ANEOSmaterial = ANEOSinitMaterial(iMat, dKpcUnit, dMsolUnit);
 		material->rho0 = ANEOSgetRho0(material->ANEOSmaterial);
 		material->canDoIsentropic = 1;
-		material->cReference = ANEOSCofRhoT(material->ANEOSmaterial, material->rho0, 1e-4);
+		material->minSoundSpeed = ANEOSCofRhoT(material->ANEOSmaterial, material->rho0, 1e-4);
 	}
 	
 	return material;
@@ -297,6 +297,37 @@ int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u)
 	double ucold = EOSUofRhoT(material, rho, 1e-4);
 	return (u < ucold);
 }
+
+int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
+{
+	int iret = EOS_FAIL;
+	switch(material->matType)
+	{
+		case EOSIDEALGAS:
+			iret = EOS_SUCCESS;
+			break;
+		case EOSTILLOTSON:
+			if (tillIsInTable(material->tillmaterial, rho, u) == TILL_LOOKUP_SUCCESS)
+			{
+				iret = EOS_SUCCESS;
+			} else {
+				printf("iret %d\n", tillIsInTable(material->tillmaterial, rho, u));
+				printf("rho %.15e\n", rho);
+			}
+			break;
+		case EOSANEOS:
+			if (ANEOSTofRhoU(material->ANEOSmaterial, rho, u) > -1e30)
+			{
+				iret = EOS_SUCCESS;
+			}
+			break;
+		default:
+		assert(0);
+	}
+	
+	return iret;
+}
+
 
 /*
  * Calculates the derivative dPdrho(rho,u) for a material

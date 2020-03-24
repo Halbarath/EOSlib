@@ -25,8 +25,8 @@ int main(int argc, char *argv[])
 	material1 = EOSinitMaterial(54, dKpcUnit, dMsolUnit, 0);
 	material2 = EOSinitMaterial(6, dKpcUnit, dMsolUnit, &flag);
 	
-	printf("cReference mat1 %.15e\n", material1->cReference);
-	printf("cReference mat2 %.15e\n", material2->cReference);
+	printf("minSoundSpeed mat1 %.15e\n", material1->minSoundSpeed);
+	printf("minSoundSpeed mat2 %.15e\n", material2->minSoundSpeed);
 	
 	// Test p(rho,u)
 	double rho = 8/material1->ANEOSmaterial->CodeUnitstoCGSforRho;
