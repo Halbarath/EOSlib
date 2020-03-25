@@ -28,7 +28,8 @@ int main(int argc, char *argv[])
 
 	int flag = 1;
 
-	material = EOSinitMaterial(iMat, dKpcUnit, dMsolUnit, &flag);
+	material = EOSinitMaterial(iMat, dKpcUnit, dMsolUnit);
+	EOSinitIsentropicLookup(material, &flag);
 	
 	double T = EOSTofRhoU(material, rho, u);
 	

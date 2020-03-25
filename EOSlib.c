@@ -22,7 +22,7 @@
  *   Tillotson: if not NULL pointer, lookup table is initialized
  *   ANEOS: not used
  */
-EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const void * additional_data)
+EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit)
 {
 	EOSMATERIAL *material;
 	material = (EOSMATERIAL *) calloc(1, sizeof(EOSMATERIAL));
@@ -41,11 +41,6 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 		}
 		material->matType = EOSTILLOTSON;
 		material->tillmaterial = tillInitMaterial(iMat, dKpcUnit, dMsolUnit);
-		if (additional_data != NULL)
-		{
-			tillInitLookup(material->tillmaterial, 1000, 1000, 1e-4, 200.0, 1200.0);
-			material->canDoIsentropic = 1;
-		}
 		material->rho0 = material->tillmaterial->rho0;
 		material->minSoundSpeed = sqrt(material->tillmaterial->A/material->tillmaterial->rho0);
 	} else if (iMat>=iMATANEOSMIN && iMat <=iMATANEOSMAX)
@@ -63,6 +58,25 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 	}
 	
 	return material;
+}
+
+void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data)
+{
+	switch(material->matType)
+	{
+		case EOSIDEALGAS:
+		// not implemented
+			break;
+		case EOSTILLOTSON:
+			tillInitLookup(material->tillmaterial, 1000, 1000, 1e-4, 200.0, 1200.0);
+			material->canDoIsentropic = 1;
+			break;
+		case EOSANEOS:
+			// nothing to do
+			break;
+		default:
+		assert(0);
+	}
 }
 
 /*
