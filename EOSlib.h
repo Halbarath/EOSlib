@@ -51,7 +51,7 @@ typedef struct EOSmaterial
 
 // Initialization and finalization
 
-EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit);
+EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const void * additional_data);
 void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data);
 void EOSfinalizeMaterial(EOSMATERIAL *material);
 

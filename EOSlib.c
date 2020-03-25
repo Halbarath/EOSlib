@@ -22,7 +22,7 @@
  *   Tillotson: if not NULL pointer, lookup table is initialized
  *   ANEOS: not used
  */
-EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit)
+EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const void * additional_data)
 {
 	EOSMATERIAL *material;
 	material = (EOSMATERIAL *) calloc(1, sizeof(EOSMATERIAL));

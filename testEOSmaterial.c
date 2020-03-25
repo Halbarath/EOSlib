@@ -20,13 +20,11 @@ int main(int argc, char *argv[])
 	EOSMATERIAL *material1;
 	EOSMATERIAL *material2;
 
-	int flag = 1;
-
-	material1 = EOSinitMaterial(54, dKpcUnit, dMsolUnit);
-	material2 = EOSinitMaterial(6, dKpcUnit, dMsolUnit);
+	material1 = EOSinitMaterial(54, dKpcUnit, dMsolUnit, 0);
+	material2 = EOSinitMaterial(6, dKpcUnit, dMsolUnit, 0);
 
 	EOSinitIsentropicLookup(material1, 0);
-	EOSinitIsentropicLookup(material2, &flag);
+	EOSinitIsentropicLookup(material2, 0);
 	
 	printf("minSoundSpeed mat1 %.15e\n", material1->minSoundSpeed);
 	printf("minSoundSpeed mat2 %.15e\n", material2->minSoundSpeed);
