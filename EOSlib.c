@@ -17,10 +17,7 @@
  * Initialization of the material structures
  * iMat: Material number
  * dKpcUnit, dMsolUnit: Unit conversion factors
- * additional_data: void pointer that can be used to give additional options:
- *   ideal gas: not used
- *   Tillotson: if not NULL pointer, lookup table is initialized
- *   ANEOS: not used
+ * additional_data: void pointer that can be used to give additional options, not used at the moment
  */
 EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const void * additional_data)
 {
@@ -60,6 +57,9 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 	return material;
 }
 
+/*
+ * Initialize the lookup tables needed for the isentropoic evolution
+ */
 void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data)
 {
 	switch(material->matType)
@@ -304,7 +304,7 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
 }
 
 /*
- * Tests if the given combination is below the cold curve, returns 1 if so and 0 if not
+ * Tests if the given combination is below the cold curve, returns EOS_TRUE if so and EOS_FALSE if not
  */
 int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u)
 {
@@ -312,6 +312,10 @@ int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u)
 	return (u < ucold);
 }
 
+/*
+ * Tests if the given combination is inside the lookup tables
+ * returns EOS_SUCCESS if so, EOS_FAIL if not
+ */
 int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
 {
 	int iret = EOS_FAIL;
