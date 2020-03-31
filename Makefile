@@ -1,4 +1,4 @@
-objects = EOSlib.o ../ANEOSmaterial/ANEOSmaterial.o ../tillotson/tillotson.o ../tillotson/tillinitlookup.o ../tillotson/tillsplint.o ../tillotson/interpol/brent.o
+objects = EOSlib.o ../ANEOSmaterial/ANEOSmaterial.o ../ANEOSmaterial/interpBilinear.o ../tillotson/tillotson.o ../tillotson/tillinitlookup.o ../tillotson/tillsplint.o ../tillotson/interpol/brent.o
 
 defs = -DTILL_OUTPUT_ALL_WARNINGS -DTILL_VERBOSE
 
