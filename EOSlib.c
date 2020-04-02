@@ -24,7 +24,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 	EOSMATERIAL *material;
 	material = (EOSMATERIAL *) calloc(1, sizeof(EOSMATERIAL));
 	material->iMat = iMat;
-	material->canDoIsentropic = 0;
+	material->bEntropyTableInit = EOS_FALSE;
 
 	if (iMat == iMATIDEALGAS)
 	{
@@ -50,7 +50,8 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 		material->matType = EOSANEOS;
 		material->ANEOSmaterial = ANEOSinitMaterial(iMat, dKpcUnit, dMsolUnit);
 		material->rho0 = ANEOSgetRho0(material->ANEOSmaterial);
-		material->canDoIsentropic = 1;
+        // The entropy look up table is initialized in ANEOSinitMaterial
+		material->bEntropyTableInit = EOS_TRUE;
 		material->minSoundSpeed = ANEOSCofRhoT(material->ANEOSmaterial, material->rho0, 1e-4);
 	}
 	
@@ -69,10 +70,11 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
 			break;
 		case EOSTILLOTSON:
 			tillInitLookup(material->tillmaterial, 1000, 1000, 1e-4, 200.0, 1200.0);
-			material->canDoIsentropic = 1;
+			material->bEntropyTableInit = EOS_TRUE;
 			break;
 		case EOSANEOS:
 			// nothing to do
+            if (material->bEntropyTableInit != EOS_TRUE) material->bEntropyTableInit = EOS_TRUE;
 			break;
 		default:
 		assert(0);

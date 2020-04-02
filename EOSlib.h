@@ -42,7 +42,7 @@ typedef struct EOSmaterial
 	int iMat; // Material number
 	int matType; // Material type, 0: Tillotson, 1: ANEOS
 	double rho0; // reference density
-	int canDoIsentropic; // flag to signal if isentropic evolution is availlable
+	int bEntropyTableInit; // flag to signal if the entropy table is initialized
 	double minSoundSpeed; // sound speed at reference values
 	TILLMATERIAL *tillmaterial; // Pointer to tillotson material
 	ANEOSMATERIAL *ANEOSmaterial; // Pointer to ANEOS material
