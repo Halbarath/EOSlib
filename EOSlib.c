@@ -55,7 +55,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 		material->bEntropyTableInit = EOS_TRUE;
 		material->minSoundSpeed = ANEOSCofRhoT(material->ANEOSmaterial, material->rho0, 1e-4);
         // Currently not initialized
-        material->MatString = "ANEOS: Unknown material";
+        strcpy(material->MatString, "ANEOS: Unknown material");
 	}
 	
 	return material;
@@ -422,6 +422,31 @@ double EOSdUdRho(EOSMATERIAL *material, double rho, double u)
 	}
 
 	return dUdRho;
+}
+
+/*
+ * Calculate the cold part of the internal energy, i.e., u(rho, T=0).
+ */
+double EOSUCold(EOSMATERIAL *material, double rho)
+{
+    double ucold;
+	switch(material->matType)
+	{
+		case EOSIDEALGAS:
+		// not implemented
+			break;
+		case EOSTILLOTSON:
+			ucold = tillColdULookup(material->tillmaterial, rho);
+			break;
+		case EOSANEOS:
+            // For ANEOS temperatures below T_min cause problems
+			ucold = ANEOSUofRhoT(material->ANEOSmaterial, rho, 1e-4);
+			break;
+		default:
+		    assert(0);
+	}
+
+	return ucold;
 }
 
 /*
