@@ -115,6 +115,10 @@ int main(int argc, char *argv[])
 	int ret2 = EOSisbelowColdCurve(material1, 25, 60);
 	printf("isbelowColdCurve: true = %d, false = %d\n", ret1, ret2);
 
+	ret1 = EOSisbelowColdCurve(material2, 25, 0.1);
+	ret2 = EOSisbelowColdCurve(material2, 25, 60);
+	printf("isbelowColdCurve: true = %d, false = %d\n", ret1, ret2);
+
 	// Test coldU
 	printf("cold u = %g\n",EOSUCold(material1, rho));
 	printf("cold u = %g\n",EOSUCold(material2, rho));
