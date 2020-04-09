@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <math.h>
+#include <string.h>
 #include "EOSlib.h"
 
 /*
@@ -105,6 +106,28 @@ void EOSfinalizeMaterial(EOSMATERIAL *material)
 	}
 
 	free(material);
+}
+
+/*
+ * Print material data, e.g., EOS coefficients or the size of the EOS table.
+ */
+int EOSPrintMat(EOSMATERIAL *material)
+{
+	switch(material->matType)
+	{
+		case EOSIDEALGAS:
+		    // not implemented
+			break;
+		case EOSTILLOTSON:
+			tillPrintMat(material->tillmaterial);
+			break;
+		case EOSANEOS:
+            // not implemented yet
+			break;
+		default:
+	        assert(0);
+	}
+    return EOS_SUCCESS;
 }
 
 /*

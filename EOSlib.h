@@ -57,6 +57,7 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
 void EOSfinalizeMaterial(EOSMATERIAL *material);
 
 // Access functions
+int EOSPrintMat(EOSMATERIAL *material);
 
 // Main functions
 double EOSPofRhoU(EOSMATERIAL *material, double rho, double u);
