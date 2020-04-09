@@ -23,44 +23,44 @@
  */
 EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const void * additional_data)
 {
-	EOSMATERIAL *material;
-	material = (EOSMATERIAL *) calloc(1, sizeof(EOSMATERIAL));
-	material->iMat = iMat;
-	material->bEntropyTableInit = EOS_FALSE;
+    EOSMATERIAL *material;
+    material = (EOSMATERIAL *) calloc(1, sizeof(EOSMATERIAL));
+    material->iMat = iMat;
+    material->bEntropyTableInit = EOS_FALSE;
 
-	if (iMat == iMATIDEALGAS)
-	{
-		// not implemented
-	} else if (iMat>=iMATTILLOTSONMIN && iMat<=iMATTILLOTSONMAX)
-	{
-		/* Check if the Tillotson library has the right version. */
-		if (TILL_VERSION_MAJOR != 3 || TILL_VERSION_MINOR < 4) {
-			fprintf(stderr, "EOSinitMaterial: Tillotson library has the wrong version (%s)\n", TILL_VERSION_TEXT);
-			exit(1);
-		}
-		material->matType = EOSTILLOTSON;
-		material->tillmaterial = tillInitMaterial(iMat, dKpcUnit, dMsolUnit);
-		material->rho0 = material->tillmaterial->rho0;
-		material->minSoundSpeed = sqrt(material->tillmaterial->A/material->tillmaterial->rho0);
+    if (iMat == iMATIDEALGAS)
+    {
+        // not implemented
+    } else if (iMat>=iMATTILLOTSONMIN && iMat<=iMATTILLOTSONMAX)
+    {
+        /* Check if the Tillotson library has the right version. */
+        if (TILL_VERSION_MAJOR != 3 || TILL_VERSION_MINOR < 4) {
+            fprintf(stderr, "EOSinitMaterial: Tillotson library has the wrong version (%s)\n", TILL_VERSION_TEXT);
+            exit(1);
+        }
+        material->matType = EOSTILLOTSON;
+        material->tillmaterial = tillInitMaterial(iMat, dKpcUnit, dMsolUnit);
+        material->rho0 = material->tillmaterial->rho0;
+        material->minSoundSpeed = sqrt(material->tillmaterial->A/material->tillmaterial->rho0);
         tilliMatString(material->tillmaterial, material->MatString);
-	} else if (iMat>=iMATANEOSMIN && iMat <=iMATANEOSMAX)
-	{
-		/* Check if the ANEOS library has the right version. */
-		if (ANEOS_VERSION_MAJOR != 1) {
-			fprintf(stderr, "EOSinitMaterial: ANEOS library has the wrong version (%s)\n", ANEOS_VERSION_TEXT);
-			exit(1);
-		}
-		material->matType = EOSANEOS;
-		material->ANEOSmaterial = ANEOSinitMaterial(iMat, dKpcUnit, dMsolUnit);
-		material->rho0 = ANEOSgetRho0(material->ANEOSmaterial);
+    } else if (iMat>=iMATANEOSMIN && iMat <=iMATANEOSMAX)
+    {
+        /* Check if the ANEOS library has the right version. */
+        if (ANEOS_VERSION_MAJOR != 1) {
+            fprintf(stderr, "EOSinitMaterial: ANEOS library has the wrong version (%s)\n", ANEOS_VERSION_TEXT);
+            exit(1);
+        }
+        material->matType = EOSANEOS;
+        material->ANEOSmaterial = ANEOSinitMaterial(iMat, dKpcUnit, dMsolUnit);
+        material->rho0 = ANEOSgetRho0(material->ANEOSmaterial);
         // The entropy look up table is initialized in ANEOSinitMaterial
-		material->bEntropyTableInit = EOS_TRUE;
-		material->minSoundSpeed = ANEOSCofRhoT(material->ANEOSmaterial, material->rho0, 1e-4);
+        material->bEntropyTableInit = EOS_TRUE;
+        material->minSoundSpeed = ANEOSCofRhoT(material->ANEOSmaterial, material->rho0, 1e-4);
         // Currently not initialized
         strcpy(material->MatString, material->ANEOSmaterial->matName);
-	}
-	
-	return material;
+    }
+
+    return material;
 }
 
 /*
@@ -68,22 +68,22 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
  */
 void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data)
 {
-	switch(material->matType)
-	{
-		case EOSIDEALGAS:
-		// not implemented
-			break;
-		case EOSTILLOTSON:
-			tillInitLookup(material->tillmaterial, 1000, 1000, 1e-4, 200.0, 1200.0);
-			material->bEntropyTableInit = EOS_TRUE;
-			break;
-		case EOSANEOS:
-			// nothing to do
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            tillInitLookup(material->tillmaterial, 1000, 1000, 1e-4, 200.0, 1200.0);
+            material->bEntropyTableInit = EOS_TRUE;
+            break;
+        case EOSANEOS:
+            // nothing to do
             if (material->bEntropyTableInit != EOS_TRUE) material->bEntropyTableInit = EOS_TRUE;
-			break;
-		default:
-		assert(0);
-	}
+            break;
+        default:
+            assert(0);
+    }
 }
 
 /*
@@ -91,22 +91,22 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
  */
 void EOSfinalizeMaterial(EOSMATERIAL *material)
 {
-	switch(material->matType)
-	{
-		case EOSIDEALGAS:
-		// not implemented
-			break;
-		case EOSTILLOTSON:
-			tillFinalizeMaterial(material->tillmaterial);
-			break;
-		case EOSANEOS:
-			ANEOSfinalizeMaterial(material->ANEOSmaterial);
-			break;
-		default:
-		assert(0);
-	}
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            tillFinalizeMaterial(material->tillmaterial);
+            break;
+        case EOSANEOS:
+            ANEOSfinalizeMaterial(material->ANEOSmaterial);
+            break;
+        default:
+            assert(0);
+    }
 
-	free(material);
+    free(material);
 }
 
 /*
@@ -114,20 +114,20 @@ void EOSfinalizeMaterial(EOSMATERIAL *material)
  */
 int EOSPrintMat(EOSMATERIAL *material)
 {
-	switch(material->matType)
-	{
-		case EOSIDEALGAS:
-		    // not implemented
-			break;
-		case EOSTILLOTSON:
-			tillPrintMat(material->tillmaterial);
-			break;
-		case EOSANEOS:
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            tillPrintMat(material->tillmaterial);
+            break;
+        case EOSANEOS:
             // not implemented yet
-			break;
-		default:
-	        assert(0);
-	}
+            break;
+        default:
+            assert(0);
+    }
     return EOS_SUCCESS;
 }
 
@@ -136,24 +136,24 @@ int EOSPrintMat(EOSMATERIAL *material)
  */
 double EOSPofRhoU(EOSMATERIAL *material, double rho, double u)
 {
-	double P = 0;
-	
-	switch(material->matType)
-	{
-		case EOSIDEALGAS:
-		// not implemented
-			break;
-		case EOSTILLOTSON:
-			P = tillPressure(material->tillmaterial, rho, u);
-			break;
-		case EOSANEOS:
-			P = ANEOSPofRhoU(material->ANEOSmaterial, rho, u);
-			break;
-		default:
-		assert(0);
-	}
-	
-	return P;
+    double P = 0;
+
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            P = tillPressure(material->tillmaterial, rho, u);
+            break;
+        case EOSANEOS:
+            P = ANEOSPofRhoU(material->ANEOSmaterial, rho, u);
+            break;
+        default:
+            assert(0);
+    }
+
+    return P;
 }
 
 /*
@@ -161,25 +161,25 @@ double EOSPofRhoU(EOSMATERIAL *material, double rho, double u)
  */
 double EOSCofRhoU(EOSMATERIAL *material, double rho, double u)
 {
-	double c = 0;
-	double P = 0;
-	
-	switch(material->matType)
-	{
-		case EOSIDEALGAS:
-		// not implemented
-			break;
-		case EOSTILLOTSON:
-			P = tillPressureSound(material->tillmaterial, rho, u, &c);
-			break;
-		case EOSANEOS:
-			c = ANEOSCofRhoU(material->ANEOSmaterial, rho, u);
-			break;
-		default:
-		assert(0);
-	}
-	
-	return c;
+    double c = 0;
+    double P = 0;
+
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            P = tillPressureSound(material->tillmaterial, rho, u, &c);
+            break;
+        case EOSANEOS:
+            c = ANEOSCofRhoU(material->ANEOSmaterial, rho, u);
+            break;
+        default:
+            assert(0);
+    }
+
+    return c;
 }
 
 /*
@@ -189,27 +189,27 @@ double EOSCofRhoU(EOSMATERIAL *material, double rho, double u)
  */
 double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c)
 {
-	double P = 0;
-	double T = 0;
-	
-	switch(material->matType)
-	{
-		case EOSIDEALGAS:
-		// not implemented
-			break;
-		case EOSTILLOTSON:
-			P = tillPressureSound(material->tillmaterial, rho, u, c);
-			break;
-		case EOSANEOS:
-			T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);
-			P = ANEOSPofRhoT(material->ANEOSmaterial, rho, T);
-			*c = ANEOSCofRhoT(material->ANEOSmaterial, rho, T);
-			break;
-		default:
-		assert(0);
-	}
-	
-	return P;
+    double P = 0;
+    double T = 0;
+
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            P = tillPressureSound(material->tillmaterial, rho, u, c);
+            break;
+        case EOSANEOS:
+            T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);
+            P = ANEOSPofRhoT(material->ANEOSmaterial, rho, T);
+            *c = ANEOSCofRhoT(material->ANEOSmaterial, rho, T);
+            break;
+        default:
+            assert(0);
+    }
+
+    return P;
 }
 
 /*
@@ -217,23 +217,23 @@ double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c)
  */
 double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
 {
-	double u2;
-	switch(material->matType)
-	{
-		case EOSIDEALGAS:
-		// not implemented
-			break;
-		case EOSTILLOTSON:
-			u2 = tillLookupU(material->tillmaterial, rho1, u1, rho2, 0); // last argument is actually a particle number
-			break;
-		case EOSANEOS:
-			u2 = ANEOSisentropicU(material->ANEOSmaterial, rho1, u1, rho2);
-			break;
-		default:
-		assert(0);
-	}
+    double u2;
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            u2 = tillLookupU(material->tillmaterial, rho1, u1, rho2, 0); // last argument is actually a particle number
+            break;
+        case EOSANEOS:
+            u2 = ANEOSisentropicU(material->ANEOSmaterial, rho1, u1, rho2);
+            break;
+        default:
+            assert(0);
+    }
 
-	return u2;
+    return u2;
 }
 
 /*
@@ -241,23 +241,23 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
  */
 double EOSTofRhoU(EOSMATERIAL *material, double rho, double u)
 {
-	double T;
-	switch(material->matType)
-	{
-		case EOSIDEALGAS:
-		// not implemented
-			break;
-		case EOSTILLOTSON:
-			T = tillTempRhoU(material->tillmaterial, rho, u);
-			break;
-		case EOSANEOS:
-			T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);
-			break;
-		default:
-		assert(0);
-	}
+    double T;
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            T = tillTempRhoU(material->tillmaterial, rho, u);
+            break;
+        case EOSANEOS:
+            T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);
+            break;
+        default:
+            assert(0);
+    }
 
-	return T;
+    return T;
 }
 
 /*
@@ -265,23 +265,23 @@ double EOSTofRhoU(EOSMATERIAL *material, double rho, double u)
  */
 double EOSUofRhoT(EOSMATERIAL *material, double rho, double T)
 {
-	double u;
-	switch(material->matType)
-	{
-		case EOSIDEALGAS:
-		// not implemented
-			break;
-		case EOSTILLOTSON:
-			u = tillURhoTemp(material->tillmaterial, rho, T);
-			break;
-		case EOSANEOS:
-			u = ANEOSUofRhoT(material->ANEOSmaterial, rho, T);
-			break;
-		default:
-		assert(0);
-	}
+    double u;
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            u = tillURhoTemp(material->tillmaterial, rho, T);
+            break;
+        case EOSANEOS:
+            u = ANEOSUofRhoT(material->ANEOSmaterial, rho, T);
+            break;
+        default:
+            assert(0);
+    }
 
-	return u;
+    return u;
 }
 
 /*
@@ -289,23 +289,23 @@ double EOSUofRhoT(EOSMATERIAL *material, double rho, double T)
  */
 double EOSRhoofPT(EOSMATERIAL *material, double p, double T)
 {
-	double rho;
-	switch(material->matType)
-	{
-		case EOSIDEALGAS:
-		// not implemented
-			break;
-		case EOSTILLOTSON:
-			rho = tillRhoPTemp(material->tillmaterial, p, T);
-			break;
-		case EOSANEOS:
-			rho = ANEOSRhoofPT(material->ANEOSmaterial, p, T);
-			break;
-		default:
-		assert(0);
-	}
+    double rho;
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            rho = tillRhoPTemp(material->tillmaterial, p, T);
+            break;
+        case EOSANEOS:
+            rho = ANEOSRhoofPT(material->ANEOSmaterial, p, T);
+            break;
+        default:
+            assert(0);
+    }
 
-	return rho;
+    return rho;
 }
 
 /*
@@ -313,23 +313,23 @@ double EOSRhoofPT(EOSMATERIAL *material, double p, double T)
  */
 double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
 {
-	double rho = 0;
-	switch(material->matType)
-	{
-		case EOSIDEALGAS:
-		// not implemented
-			break;
-		case EOSTILLOTSON:
-			// not implemented
-			break;
-		case EOSANEOS:
-			rho = ANEOSRhoofUT(material->ANEOSmaterial, u, T);
-			break;
-		default:
-		assert(0);
-	}
+    double rho = 0;
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            // not implemented
+            break;
+        case EOSANEOS:
+            rho = ANEOSRhoofUT(material->ANEOSmaterial, u, T);
+            break;
+        default:
+            assert(0);
+    }
 
-	return rho;
+    return rho;
 }
 
 /*
@@ -337,8 +337,8 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
  */
 int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u)
 {
-	double ucold = EOSUCold(material, rho);
-	return (u < ucold);
+    double ucold = EOSUCold(material, rho);
+    return (u < ucold);
 }
 
 /*
@@ -347,32 +347,32 @@ int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u)
  */
 int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
 {
-	int iret = EOS_FAIL;
-	switch(material->matType)
-	{
-		case EOSIDEALGAS:
-			iret = EOS_SUCCESS;
-			break;
-		case EOSTILLOTSON:
-			if (tillIsInTable(material->tillmaterial, rho, u) == TILL_LOOKUP_SUCCESS)
-			{
-				iret = EOS_SUCCESS;
-			} else {
-				printf("iret %d\n", tillIsInTable(material->tillmaterial, rho, u));
-				printf("rho %.15e\n", rho);
-			}
-			break;
-		case EOSANEOS:
-			if (ANEOSTofRhoU(material->ANEOSmaterial, rho, u) > -1e30)
-			{
-				iret = EOS_SUCCESS;
-			}
-			break;
-		default:
-		assert(0);
-	}
-	
-	return iret;
+    int iret = EOS_FAIL;
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            iret = EOS_SUCCESS;
+            break;
+        case EOSTILLOTSON:
+            if (tillIsInTable(material->tillmaterial, rho, u) == TILL_LOOKUP_SUCCESS)
+            {
+                iret = EOS_SUCCESS;
+            } else {
+                printf("iret %d\n", tillIsInTable(material->tillmaterial, rho, u));
+                printf("rho %.15e\n", rho);
+            }
+            break;
+        case EOSANEOS:
+            if (ANEOSTofRhoU(material->ANEOSmaterial, rho, u) > -1e30)
+            {
+                iret = EOS_SUCCESS;
+            }
+            break;
+        default:
+            assert(0);
+    }
+
+    return iret;
 }
 
 
@@ -381,23 +381,23 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
  */
 double EOSdPdRho(EOSMATERIAL *material, double rho, double u)
 {
-	double dPdRho;
-	switch(material->matType)
-	{
-		case EOSIDEALGAS:
-		// not implemented
-			break;
-		case EOSTILLOTSON:
-			dPdRho = tilldPdrho(material->tillmaterial, rho, u);
-			break;
-		case EOSANEOS:
-			dPdRho = ANEOSdPdRhoofRhoU(material->ANEOSmaterial, rho, u);
-			break;
-		default:
-		assert(0);
-	}
+    double dPdRho;
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            dPdRho = tilldPdrho(material->tillmaterial, rho, u);
+            break;
+        case EOSANEOS:
+            dPdRho = ANEOSdPdRhoofRhoU(material->ANEOSmaterial, rho, u);
+            break;
+        default:
+            assert(0);
+    }
 
-	return dPdRho;
+    return dPdRho;
 }
 
 /*
@@ -405,23 +405,23 @@ double EOSdPdRho(EOSMATERIAL *material, double rho, double u)
  */
 double EOSdPdU(EOSMATERIAL *material, double rho, double u)
 {
-	double dPdU;
-	switch(material->matType)
-	{
-		case EOSIDEALGAS:
-		// not implemented
-			break;
-		case EOSTILLOTSON:
-			dPdU = tilldPdu(material->tillmaterial, rho, u);
-			break;
-		case EOSANEOS:
-			dPdU = ANEOSdPdUofRhoU(material->ANEOSmaterial, rho, u);
-			break;
-		default:
-		assert(0);
-	}
+    double dPdU;
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            dPdU = tilldPdu(material->tillmaterial, rho, u);
+            break;
+        case EOSANEOS:
+            dPdU = ANEOSdPdUofRhoU(material->ANEOSmaterial, rho, u);
+            break;
+        default:
+            assert(0);
+    }
 
-	return dPdU;
+    return dPdU;
 }
 
 /*
@@ -429,23 +429,23 @@ double EOSdPdU(EOSMATERIAL *material, double rho, double u)
  */
 double EOSdUdRho(EOSMATERIAL *material, double rho, double u)
 {
-	double dUdRho;
-	switch(material->matType)
-	{
-		case EOSIDEALGAS:
-		// not implemented
-			break;
-		case EOSTILLOTSON:
-			dUdRho = tilldudrho(material->tillmaterial, rho, u);
-			break;
-		case EOSANEOS:
-			dUdRho = ANEOSdUdRhoofRhoU(material->ANEOSmaterial, rho, u);
-			break;
-		default:
-		assert(0);
-	}
+    double dUdRho;
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            dUdRho = tilldudrho(material->tillmaterial, rho, u);
+            break;
+        case EOSANEOS:
+            dUdRho = ANEOSdUdRhoofRhoU(material->ANEOSmaterial, rho, u);
+            break;
+        default:
+            assert(0);
+    }
 
-	return dUdRho;
+    return dUdRho;
 }
 
 /*
@@ -454,41 +454,41 @@ double EOSdUdRho(EOSMATERIAL *material, double rho, double u)
 double EOSUCold(EOSMATERIAL *material, double rho)
 {
     double ucold;
-	switch(material->matType)
-	{
-		case EOSIDEALGAS:
-		// not implemented
-			break;
-		case EOSTILLOTSON:
-			ucold = tillColdULookup(material->tillmaterial, rho);
-			break;
-		case EOSANEOS:
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            ucold = tillColdULookup(material->tillmaterial, rho);
+            break;
+        case EOSANEOS:
             // For ANEOS temperatures below T_min cause problems
-			ucold = ANEOSUofRhoT(material->ANEOSmaterial, rho, material->ANEOSmaterial->TAxis[0]);
-			break;
-		default:
-		    assert(0);
-	}
+            ucold = ANEOSUofRhoT(material->ANEOSmaterial, rho, material->ANEOSmaterial->TAxis[0]);
+            break;
+        default:
+            assert(0);
+    }
 
-	return ucold;
+    return ucold;
 }
 
 void EOSprintMat(EOSMATERIAL *material)
 {
-	switch(material->matType)
-	{
-		case EOSIDEALGAS:
-		// not implemented
-			break;
-		case EOSTILLOTSON:
-			tillPrintMat(material->tillmaterial);
-			break;
-		case EOSANEOS:
-			ANEOSprintMat(material->ANEOSmaterial);
-			break;
-		default:
-		    assert(0);
-	}
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            tillPrintMat(material->tillmaterial);
+            break;
+        case EOSANEOS:
+            ANEOSprintMat(material->ANEOSmaterial);
+            break;
+        default:
+            assert(0);
+    }
 }
 
 /*
@@ -503,9 +503,9 @@ void EOSprintMat(EOSMATERIAL *material)
  * Returns 0 if successful or -1 if not.
  */
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,
- double *prho2, double *pu2)
+        double *prho2, double *pu2)
 {
-	double P, T;
+    double P, T;
     double a, ua, Pa, b, ub, Pb, c, uc, Pc;
     int iRet;
 
@@ -513,19 +513,19 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
     Pc = 0.0;
 
     /* Calculate P and T in material 1. */
-	P = EOSPofRhoU(material1, rho1, u1);
-	T = EOSTofRhoU(material1, rho1, u1);
+    P = EOSPofRhoU(material1, rho1, u1);
+    T = EOSTofRhoU(material1, rho1, u1);
 
     /*
      * We use rho1 as an upper limit for rho2 assuming that the denser component is in the inner shell.
      */
     a = 90; // hard coded maximum
-	ua = EOSUofRhoT(material2, a, T);
-	Pa = EOSPofRhoU(material2, a, ua);
+    ua = EOSUofRhoT(material2, a, T);
+    Pa = EOSPofRhoU(material2, a, ua);
 
-	b = 1e-8; // hard coded minimum
-	ub = EOSUofRhoT(material2, b, T);
-	Pb = EOSPofRhoU(material2, b, ub);
+    b = 1e-8; // hard coded minimum
+    ub = EOSUofRhoT(material2, b, T);
+    Pb = EOSPofRhoU(material2, b, ub);
 
     /*
      * Assert that the root is bracketed by (a, b).
@@ -540,8 +540,8 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
      */
     while (2*(Pa-Pb)/(Pa+Pb) > 1e-10) {
         c = 0.5*(a + b);
-		uc = EOSUofRhoT(material2, c, T);
-		Pc = EOSPofRhoU(material2, c, uc);
+        uc = EOSUofRhoT(material2, c, T);
+        Pc = EOSPofRhoU(material2, c, uc);
 
         if (Pc < P) {
             b = c;
@@ -578,9 +578,9 @@ double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P
 
     // Check if there is indeed a material interface.
     if (material1->iMat == material2->iMat)
-	{
+    {
         return 1.0;
-	}
+    }
     /*
      * In the low density region a density correction can be problematic (dPdrho not monotonic,
      * interpretation of mixed phases in the Tillotson EOS difficult), so the correction factor
@@ -592,8 +592,8 @@ double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P
         return 1.0;
     }
 
-	rho1 = EOSRhoofPT(material1, P, T);
-	rho2 = EOSRhoofPT(material2, P, T);
+    rho1 = EOSRhoofPT(material1, P, T);
+    rho2 = EOSRhoofPT(material2, P, T);
 
 
     // If the density is unphysical return 1 so the density is not corrected.
