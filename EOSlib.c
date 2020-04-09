@@ -314,7 +314,7 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
  */
 int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u)
 {
-	double ucold = EOSUofRhoT(material, rho, 1e-4);
+	double ucold = EOSUCold(material, rho);
 	return (u < ucold);
 }
 
@@ -441,7 +441,7 @@ double EOSUCold(EOSMATERIAL *material, double rho)
 			break;
 		case EOSANEOS:
             // For ANEOS temperatures below T_min cause problems
-			ucold = ANEOSUofRhoT(material->ANEOSmaterial, rho, 1e-4);
+			ucold = ANEOSUofRhoT(material->ANEOSmaterial, rho, material->ANEOSmaterial->TAxis[0]);
 			break;
 		default:
 		    assert(0);
