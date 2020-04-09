@@ -28,10 +28,10 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
     material->iMat = iMat;
     material->bEntropyTableInit = EOS_FALSE;
 
-    if (iMat == iMATIDEALGAS)
+    if (iMat == MAT_IDEALGAS)
     {
         // not implemented
-    } else if (iMat>=iMATTILLOTSONMIN && iMat<=iMATTILLOTSONMAX)
+    } else if (iMat>=MAT_TILLOTSON_MIN && iMat<=MAT_TILLOTSON_MAX)
     {
         /* Check if the Tillotson library has the right version. */
         if (TILL_VERSION_MAJOR != 3 || TILL_VERSION_MINOR < 4) {
@@ -43,7 +43,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->rho0 = material->tillmaterial->rho0;
         material->minSoundSpeed = sqrt(material->tillmaterial->A/material->tillmaterial->rho0);
         tilliMatString(material->tillmaterial, material->MatString);
-    } else if (iMat>=iMATANEOSMIN && iMat <=iMATANEOSMAX)
+    } else if (iMat>=MAT_ANEOS_MIN && iMat <=MAT_ANEOS_MAX)
     {
         /* Check if the ANEOS library has the right version. */
         if (ANEOS_VERSION_MAJOR != 1) {
