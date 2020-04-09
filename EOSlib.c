@@ -13,6 +13,7 @@
 #include <math.h>
 #include <string.h>
 #include "EOSlib.h"
+#include <string.h>
 
 /*
  * Initialization of the material structures
@@ -56,7 +57,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 		material->bEntropyTableInit = EOS_TRUE;
 		material->minSoundSpeed = ANEOSCofRhoT(material->ANEOSmaterial, material->rho0, 1e-4);
         // Currently not initialized
-        strcpy(material->MatString, "ANEOS: Unknown material");
+        strcpy(material->MatString, material->ANEOSmaterial->matName);
 	}
 	
 	return material;
@@ -336,7 +337,7 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
  */
 int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u)
 {
-	double ucold = EOSUofRhoT(material, rho, 1e-4);
+	double ucold = EOSUCold(material, rho);
 	return (u < ucold);
 }
 
@@ -463,13 +464,31 @@ double EOSUCold(EOSMATERIAL *material, double rho)
 			break;
 		case EOSANEOS:
             // For ANEOS temperatures below T_min cause problems
-			ucold = ANEOSUofRhoT(material->ANEOSmaterial, rho, 1e-4);
+			ucold = ANEOSUofRhoT(material->ANEOSmaterial, rho, material->ANEOSmaterial->TAxis[0]);
 			break;
 		default:
 		    assert(0);
 	}
 
 	return ucold;
+}
+
+void EOSprintMat(EOSMATERIAL *material)
+{
+	switch(material->matType)
+	{
+		case EOSIDEALGAS:
+		// not implemented
+			break;
+		case EOSTILLOTSON:
+			tillPrintMat(material->tillmaterial);
+			break;
+		case EOSANEOS:
+			ANEOSprintMat(material->ANEOSmaterial);
+			break;
+		default:
+		    assert(0);
+	}
 }
 
 /*
