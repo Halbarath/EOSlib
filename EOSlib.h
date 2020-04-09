@@ -44,6 +44,7 @@ typedef struct EOSmaterial
 	double rho0; // reference density
 	int bEntropyTableInit; // flag to signal if the entropy table is initialized
 	double minSoundSpeed; // sound speed at reference values
+    char MatString[256];
 	TILLMATERIAL *tillmaterial; // Pointer to tillotson material
 	ANEOSMATERIAL *ANEOSmaterial; // Pointer to ANEOS material
 	
