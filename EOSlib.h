@@ -57,7 +57,6 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
 void EOSfinalizeMaterial(EOSMATERIAL *material);
 
 // Access functions
-int EOSPrintMat(EOSMATERIAL *material);
 
 // Main functions
 double EOSPofRhoU(EOSMATERIAL *material, double rho, double u);
@@ -81,7 +80,7 @@ double EOSdPdU(EOSMATERIAL *material, double rho, double u);
 double EOSdUdRho(EOSMATERIAL *material, double rho, double u);
 
 double EOSUCold(EOSMATERIAL *material, double rho);
-void EOSprintMat(EOSMATERIAL *material, FILE *fp);
+void EOSPrintMat(EOSMATERIAL *material, FILE *fp);
 
 // Boundary condition solver
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,

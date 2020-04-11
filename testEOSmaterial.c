@@ -124,8 +124,8 @@ int main(int argc, char *argv[])
 	printf("cold u = %g\n",EOSUCold(material2, rho));
 
 	// Test printing
-	EOSprintMat(material1,stderr);
-	EOSprintMat(material2,stderr);
+	EOSPrintMat(material1,stderr);
+	EOSPrintMat(material2,stderr);
 
 	// Finalize
 	EOSfinalizeMaterial(material1);
