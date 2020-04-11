@@ -95,14 +95,14 @@ int main(int argc, char *argv[])
 	// Test solveBC
 	double rhosolved;
 	double usolved;
-	int ret = EOSSolveBC(material1, material2, rho, u, &rhosolved, &usolved);
+	int ret = EOSSolveBC(material2, material1, rho, u, &rhosolved, &usolved);
 	printf("returnvalue %d\n", ret);
 	printf("rhosolved %.15e\n", rhosolved);
 	printf("usolved %.15e\n", usolved);
-	P1 = EOSPofRhoU(material1, rho, u);
-	P2 = EOSPofRhoU(material2, rhosolved, usolved);
-	T1 = EOSTofRhoU(material1, rho, u);
-	T2 = EOSTofRhoU(material2, rhosolved, usolved);
+	P1 = EOSPofRhoU(material2, rho, u);
+	P2 = EOSPofRhoU(material1, rhosolved, usolved);
+	T1 = EOSTofRhoU(material2, rho, u);
+	T2 = EOSTofRhoU(material1, rhosolved, usolved);
 	printf("T: original %.15e, solved %.15e\n", T1, T2);
 	printf("P: original %.15e, solved %.15e\n", P1, P2);
 
@@ -124,8 +124,8 @@ int main(int argc, char *argv[])
 	printf("cold u = %g\n",EOSUCold(material2, rho));
 
 	// Test printing
-	EOSprintMat(material1);
-	EOSprintMat(material2);
+	EOSprintMat(material1,stderr);
+	EOSprintMat(material2,stderr);
 
 	// Finalize
 	EOSfinalizeMaterial(material1);
