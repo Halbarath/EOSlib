@@ -55,6 +55,7 @@ typedef struct EOSmaterial
 EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const void * additional_data);
 void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data);
 void EOSfinalizeMaterial(EOSMATERIAL *material);
+void EOSPrintMat(EOSMATERIAL *material, FILE *fp);
 
 // Access functions
 
@@ -80,7 +81,6 @@ double EOSdPdU(EOSMATERIAL *material, double rho, double u);
 double EOSdUdRho(EOSMATERIAL *material, double rho, double u);
 
 double EOSUCold(EOSMATERIAL *material, double rho);
-void EOSPrintMat(EOSMATERIAL *material, FILE *fp);
 
 // Boundary condition solver
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,

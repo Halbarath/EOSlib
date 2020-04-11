@@ -505,7 +505,7 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
     ua = EOSUofRhoT(material2, a, T);
     Pa = EOSPofRhoU(material2, a, ua);
 
-    b = 1e-8; // hard coded minimum
+    b = 1e-3; // hard coded minimum
     ub = EOSUofRhoT(material2, b, T);
     Pb = EOSPofRhoU(material2, b, ub);
 
