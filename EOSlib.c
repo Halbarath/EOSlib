@@ -123,7 +123,7 @@ void EOSPrintMat(EOSMATERIAL *material, FILE *fp)
             tillPrintMat(material->tillmaterial, fp);
             break;
         case EOSANEOS:
-            ANEOSprintMat(material->ANEOSmaterial, fp);
+            ANEOSPrintMat(material->ANEOSmaterial, fp);
             break;
         default:
             assert(0);
