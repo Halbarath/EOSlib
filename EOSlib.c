@@ -110,6 +110,27 @@ void EOSfinalizeMaterial(EOSMATERIAL *material)
 }
 
 /*
+ * Print material data, e.g., EOS coefficients or the size of the EOS table.
+ */
+void EOSPrintMat(EOSMATERIAL *material, FILE *fp)
+{
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            tillPrintMat(material->tillmaterial, fp);
+            break;
+        case EOSANEOS:
+            ANEOSprintMat(material->ANEOSmaterial, fp);
+            break;
+        default:
+            assert(0);
+    }
+}
+
+/*
  * Calculates the pressure P(rho,u) for a material
  */
 double EOSPofRhoU(EOSMATERIAL *material, double rho, double u)
@@ -451,23 +472,6 @@ double EOSUCold(EOSMATERIAL *material, double rho)
     return ucold;
 }
 
-void EOSPrintMat(EOSMATERIAL *material, FILE *fp)
-{
-    switch(material->matType)
-    {
-        case EOSIDEALGAS:
-            // not implemented
-            break;
-        case EOSTILLOTSON:
-            tillPrintMat(material->tillmaterial, fp);
-            break;
-        case EOSANEOS:
-            ANEOSPrintMat(material->ANEOSmaterial, fp);
-            break;
-        default:
-            assert(0);
-    }
-}
 
 /*
  * Given rho1, u1 (material 1) solve for rho2, u2 (material 2) at the interface between two material.
@@ -501,7 +505,7 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
     ua = EOSUofRhoT(material2, a, T);
     Pa = EOSPofRhoU(material2, a, ua);
 
-    b = 1e-3; // hard coded minimum
+    b = 1e-8; // hard coded minimum
     ub = EOSUofRhoT(material2, b, T);
     Pb = EOSPofRhoU(material2, b, ub);
 
