@@ -25,11 +25,11 @@
 #define EOSIDEALGAS  0
 #define EOSTILLOTSON 1
 #define EOSANEOS     2
-#define iMATIDEALGAS 0
-#define iMATTILLOTSONMIN 1
-#define iMATTILLOTSONMAX 50
-#define iMATANEOSMIN 51
-#define iMATANEOSMAX 100
+#define MAT_IDEALGAS 0
+#define MAT_TILLOTSON_MIN 1
+#define MAT_TILLOTSON_MAX 50
+#define MAT_ANEOS_MIN 51
+#define MAT_ANEOS_MAX 100
 
 #define EOS_TRUE 1
 #define EOS_FALSE 0
@@ -44,6 +44,7 @@ typedef struct EOSmaterial
 	double rho0; // reference density
 	int bEntropyTableInit; // flag to signal if the entropy table is initialized
 	double minSoundSpeed; // sound speed at reference values
+    char MatString[256];
 	TILLMATERIAL *tillmaterial; // Pointer to tillotson material
 	ANEOSMATERIAL *ANEOSmaterial; // Pointer to ANEOS material
 	
@@ -56,6 +57,7 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
 void EOSfinalizeMaterial(EOSMATERIAL *material);
 
 // Access functions
+int EOSPrintMat(EOSMATERIAL *material);
 
 // Main functions
 double EOSPofRhoU(EOSMATERIAL *material, double rho, double u);
@@ -77,6 +79,9 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u);
 double EOSdPdRho(EOSMATERIAL *material, double rho, double u);
 double EOSdPdU(EOSMATERIAL *material, double rho, double u);
 double EOSdUdRho(EOSMATERIAL *material, double rho, double u);
+
+double EOSUCold(EOSMATERIAL *material, double rho);
+void EOSprintMat(EOSMATERIAL *material, FILE *fp);
 
 // Boundary condition solver
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,
