@@ -473,7 +473,7 @@ double EOSUCold(EOSMATERIAL *material, double rho)
     return ucold;
 }
 
-void EOSprintMat(EOSMATERIAL *material)
+void EOSprintMat(EOSMATERIAL *material, FILE *fp)
 {
     switch(material->matType)
     {
@@ -481,10 +481,10 @@ void EOSprintMat(EOSMATERIAL *material)
             // not implemented
             break;
         case EOSTILLOTSON:
-            tillPrintMat(material->tillmaterial);
+            tillPrintMat(material->tillmaterial, fp);
             break;
         case EOSANEOS:
-            ANEOSprintMat(material->ANEOSmaterial);
+            ANEOSprintMat(material->ANEOSmaterial, fp);
             break;
         default:
             assert(0);

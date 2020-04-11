@@ -81,7 +81,7 @@ double EOSdPdU(EOSMATERIAL *material, double rho, double u);
 double EOSdUdRho(EOSMATERIAL *material, double rho, double u);
 
 double EOSUCold(EOSMATERIAL *material, double rho);
-void EOSprintMat(EOSMATERIAL *material);
+void EOSprintMat(EOSMATERIAL *material, FILE *fp);
 
 // Boundary condition solver
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,
