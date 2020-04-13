@@ -7,7 +7,7 @@ execs = testEOSmaterial calcTemperature calcColdcurveEnergy
 # GNU Science library (uncomment if not needed)
 GSL_LIB = -lgsl -lgslcblas
 
-CFLAGS ?= -O3 -std=c99
+CFLAGS ?= -O3 -Wall -std=c99
 
 FFLAGS ?= $(CFLAGS)
 LIBS ?= -lm $(GSL_LIB)

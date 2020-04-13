@@ -161,7 +161,6 @@ double EOSPofRhoU(EOSMATERIAL *material, double rho, double u)
 double EOSCofRhoU(EOSMATERIAL *material, double rho, double u)
 {
     double c = 0;
-    double P = 0;
 
     switch(material->matType)
     {
@@ -169,7 +168,7 @@ double EOSCofRhoU(EOSMATERIAL *material, double rho, double u)
             // not implemented
             break;
         case EOSTILLOTSON:
-            P = tillPressureSound(material->tillmaterial, rho, u, &c);
+            tillPressureSound(material->tillmaterial, rho, u, &c);
             break;
         case EOSANEOS:
             c = ANEOSCofRhoU(material->ANEOSmaterial, rho, u);
@@ -216,7 +215,7 @@ double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c)
  */
 double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
 {
-    double u2;
+    double u2 = 0;
     switch(material->matType)
     {
         case EOSIDEALGAS:
@@ -240,7 +239,7 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
  */
 double EOSTofRhoU(EOSMATERIAL *material, double rho, double u)
 {
-    double T;
+    double T = 0;
     switch(material->matType)
     {
         case EOSIDEALGAS:
@@ -264,7 +263,7 @@ double EOSTofRhoU(EOSMATERIAL *material, double rho, double u)
  */
 double EOSUofRhoT(EOSMATERIAL *material, double rho, double T)
 {
-    double u;
+    double u = 0;
     switch(material->matType)
     {
         case EOSIDEALGAS:
@@ -288,7 +287,7 @@ double EOSUofRhoT(EOSMATERIAL *material, double rho, double T)
  */
 double EOSRhoofPT(EOSMATERIAL *material, double p, double T)
 {
-    double rho;
+    double rho = 0;
     switch(material->matType)
     {
         case EOSIDEALGAS:
@@ -380,7 +379,7 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
  */
 double EOSdPdRho(EOSMATERIAL *material, double rho, double u)
 {
-    double dPdRho;
+    double dPdRho = 0;
     switch(material->matType)
     {
         case EOSIDEALGAS:
@@ -404,7 +403,7 @@ double EOSdPdRho(EOSMATERIAL *material, double rho, double u)
  */
 double EOSdPdU(EOSMATERIAL *material, double rho, double u)
 {
-    double dPdU;
+    double dPdU = 0;
     switch(material->matType)
     {
         case EOSIDEALGAS:
@@ -428,7 +427,7 @@ double EOSdPdU(EOSMATERIAL *material, double rho, double u)
  */
 double EOSdUdRho(EOSMATERIAL *material, double rho, double u)
 {
-    double dUdRho;
+    double dUdRho = 0;
     switch(material->matType)
     {
         case EOSIDEALGAS:
@@ -452,7 +451,7 @@ double EOSdUdRho(EOSMATERIAL *material, double rho, double u)
  */
 double EOSUCold(EOSMATERIAL *material, double rho)
 {
-    double ucold;
+    double ucold = 0;
     switch(material->matType)
     {
         case EOSIDEALGAS:
@@ -488,7 +487,7 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
         double *prho2, double *pu2)
 {
     double P, T;
-    double a, ua, Pa, b, ub, Pb, c, uc, Pc;
+    double a, ua, Pa, b, ub, Pb, c = 0, uc = 0, Pc;
     int iRet;
 
     iRet = -1;
