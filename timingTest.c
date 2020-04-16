@@ -31,24 +31,20 @@ int main(int argc, char *argv[])
 	// Initialization
 	EOSMATERIAL *material;
 
-	material = EOSinitMaterial(55, dKpcUnit, dMsolUnit, 0);
+    material = EOSinitMaterial(2, dKpcUnit, dMsolUnit, 0);
     EOSinitIsentropicLookup(material, 0);
     
-    for (int i = 0; i < 100000; i++)
+    for (int i = 0; i < 1000000; i++)
     {
-        //double T = pow(10.0,(double)rand()/RAND_MAX*3.0 + 3.0);
-		//double rho = 1/CodeUnitstoCGSforRho*pow(10.0,(double)rand()/RAND_MAX*0.5 + 1.0);
-        double T = pow(10.0,(double)rand()/RAND_MAX*9.0 - 3.5);
-		double rho = 1/CodeUnitstoCGSforRho*pow(10.0,(double)rand()/RAND_MAX*4.0 - 2.5);
+        double T = pow(10.0,(double)rand()/RAND_MAX*9.8 - 3.9);
+        double rho = 1/CodeUnitstoCGSforRho*pow(10.0,(double)rand()/RAND_MAX*5.7 - 3.9);
         double u = EOSUofRhoT(material, rho, T);
         double T1 = EOSTofRhoU(material, rho, u);
-        double P = EOSPofRhoU(material, rho, u);
-        double c = EOSCofRhoU(material, rho, u);
-        P = EOSPCofRhoU(material, rho, u, &c);
+        double c;
+        double P = EOSPCofRhoU(material, rho, u, &c);
         double u2 = EOSIsentropic(material, rho, u, rho*0.999999);
-        //double rho2 = EOSRhoofPT(material, P, T);
-        //double rho3 = EOSRhoofUT(material, u, T);
-        //double dpdrho = EOSdPdRho(material, rho, u);
+        double rho2 = EOSRhoofPT(material, P, T);
+        double dpdrho = EOSdPdRho(material, rho, u);
         double dpdu = EOSdPdU(material, rho, u);
         double dudrho = EOSdUdRho(material, rho, u);
         double ucold = EOSUCold(material, rho);
