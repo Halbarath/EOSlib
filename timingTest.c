@@ -31,11 +31,13 @@ int main(int argc, char *argv[])
 	// Initialization
 	EOSMATERIAL *material;
 
-    material = EOSinitMaterial(2, dKpcUnit, dMsolUnit, 0);
+    material = EOSinitMaterial(55, dKpcUnit, dMsolUnit, 0);
     EOSinitIsentropicLookup(material, 0);
     
     for (int i = 0; i < 1000000; i++)
     {
+        //double T = pow(10.0,(double)rand()/RAND_MAX*3.0 + 3.0);
+		//double rho = 1/CodeUnitstoCGSforRho*pow(10.0,(double)rand()/RAND_MAX*0.5 + 1.0);
         double T = pow(10.0,(double)rand()/RAND_MAX*9.8 - 3.9);
         double rho = 1/CodeUnitstoCGSforRho*pow(10.0,(double)rand()/RAND_MAX*5.7 - 3.9);
         double u = EOSUofRhoT(material, rho, T);
