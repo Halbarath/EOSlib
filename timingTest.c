@@ -38,14 +38,18 @@ int main(int argc, char *argv[])
     {
         //double T = pow(10.0,(double)rand()/RAND_MAX*3.0 + 3.0);
 		//double rho = 1/CodeUnitstoCGSforRho*pow(10.0,(double)rand()/RAND_MAX*0.5 + 1.0);
+
         double T = pow(10.0,(double)rand()/RAND_MAX*9.8 - 3.9);
         double rho = 1/CodeUnitstoCGSforRho*pow(10.0,(double)rand()/RAND_MAX*5.7 - 3.9);
+
         double u = EOSUofRhoT(material, rho, T);
         double T1 = EOSTofRhoU(material, rho, u);
         double c;
         double P = EOSPCofRhoU(material, rho, u, &c);
         double u2 = EOSIsentropic(material, rho, u, rho*0.999999);
+        if (P>=1e-3) {
         double rho2 = EOSRhoofPT(material, P, T);
+        }
         double dpdrho = EOSdPdRho(material, rho, u);
         double dpdu = EOSdPdU(material, rho, u);
         double dudrho = EOSdUdRho(material, rho, u);
