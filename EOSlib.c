@@ -447,6 +447,54 @@ double EOSdUdRho(EOSMATERIAL *material, double rho, double u)
 }
 
 /*
+ * Calculates the derivative dPdrho(rho,T) for a material
+ */
+double EOSdPdRhoatT(EOSMATERIAL *material, double rho, double T)
+{
+    double dPdRho = 0;
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            // not implemented
+            break;
+        case EOSANEOS:
+            dPdRho = ANEOSdPdRhoofRhoT(material->ANEOSmaterial, rho, T);
+            break;
+        default:
+            assert(0);
+    }
+
+    return dPdRho;
+}
+
+/*
+ * Calculates the derivative dPdT(rho,T) for a material
+ */
+double EOSdPdT(EOSMATERIAL *material, double rho, double T)
+{
+    double dPdT = 0;
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            // not implemented
+            break;
+        case EOSANEOS:
+            dPdT = ANEOSdPdTofRhoT(material->ANEOSmaterial, rho, T);
+            break;
+        default:
+            assert(0);
+    }
+
+    return dPdT;
+}
+
+/*
  * Calculate the cold part of the internal energy, i.e., u(rho, T=0).
  */
 double EOSUCold(EOSMATERIAL *material, double rho)

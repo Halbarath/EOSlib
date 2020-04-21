@@ -52,6 +52,8 @@ int main(int argc, char *argv[])
         }
         double dpdrho = EOSdPdRho(material, rho, u);
         double dpdu = EOSdPdU(material, rho, u);
+        double dpdrhoatT = EOSdPdRhoatT(material, rho, T);
+        double dpdT = EOSdPdT(material, rho, T);
         double dudrho = EOSdUdRho(material, rho, u);
         double ucold = EOSUCold(material, rho);
     }
