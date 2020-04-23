@@ -55,7 +55,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->rho0 = ANEOSgetRho0(material->ANEOSmaterial);
         // The entropy look up table is initialized in ANEOSinitMaterial
         material->bEntropyTableInit = EOS_TRUE;
-        material->minSoundSpeed = ANEOSCofRhoT(material->ANEOSmaterial, material->rho0, 1e-4);
+        material->minSoundSpeed = ANEOSCofRhoT(material->ANEOSmaterial, material->rho0, material->ANEOSmaterial->TAxis[0]);
         // Currently not initialized
         strcpy(material->MatString, material->ANEOSmaterial->matName);
     }
