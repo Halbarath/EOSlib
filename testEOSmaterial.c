@@ -128,11 +128,11 @@ int main(int argc, char *argv[])
 	EOSPrintMat(material2,stderr);
 
     // Test isInTable
-    printf("Test neg density mat1: %d\n",EOSIsInTable(material1,-1,u1));
-    printf("Test neg density mat2: %d\n",EOSIsInTable(material2,-1,u1));
+    printf("Test neg density mat1: %d\n",EOSIsInTable(material1,2.7e-4,u1));
+    printf("Test neg density mat2: %d\n",EOSIsInTable(material2,0.9e-4,u1));
 
-    printf("Test large density mat1: %d\n",EOSIsInTable(material1,10000,u1));
-    printf("Test large density mat2: %d\n",EOSIsInTable(material2,10000,u1));
+    printf("Test large density mat1: %d\n",EOSIsInTable(material1,275,u1));
+    printf("Test large density mat2: %d\n",EOSIsInTable(material2,200,u1));
 
     printf("Test small u mat1: %d\n",EOSIsInTable(material1,rho,EOSUCold(material1,rho)*0.9999));
     printf("Test small u mat2: %d\n",EOSIsInTable(material2,rho,EOSUCold(material2,rho)*0.9999));
