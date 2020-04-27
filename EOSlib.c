@@ -352,19 +352,31 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
             iret = EOS_SUCCESS;
             break;
         case EOSTILLOTSON:
-            if (tillIsInTable(material->tillmaterial, rho, u) == TILL_LOOKUP_SUCCESS)
-            {
-                iret = EOS_SUCCESS;
-            } else {
-                printf("iret %d\n", tillIsInTable(material->tillmaterial, rho, u));
-                printf("rho %.15e\n", rho);
-            }
+            iret = tillIsInTable(material->tillmaterial, rho, u);
+            if (iret == TILL_LOOKUP_SUCCESS) return EOS_SUCCESS;
+            if (iret == TILL_LOOKUP_OUTSIDE_RHOMIN) return EOS_OUTSIDE_RHOMIN;
+            if (iret == TILL_LOOKUP_OUTSIDE_RHOMAX) return EOS_OUTSIDE_RHOMAX;
+            if (iret == TILL_LOOKUP_OUTSIDE_VMIN) return EOS_OUTSIDE_VMIN;
+            if (iret == TILL_LOOKUP_OUTSIDE_VMAX) return EOS_OUTSIDE_VMAX;
             break;
         case EOSANEOS:
-            if (ANEOSTofRhoU(material->ANEOSmaterial, rho, u) > -1e30)
+            if (rho < material->ANEOSmaterial->rhoAxis[0]/material->ANEOSmaterial->CodeUnitstoCGSforRho)
             {
-                iret = EOS_SUCCESS;
+                return EOS_OUTSIDE_RHOMIN;
             }
+            if (rho >= material->ANEOSmaterial->rhoAxis[material->ANEOSmaterial->nRho-1]/material->ANEOSmaterial->CodeUnitstoCGSforRho)
+            {
+                return EOS_OUTSIDE_RHOMAX;
+            }
+            if (u < ANEOSUofRhoT(material->ANEOSmaterial, rho, material->ANEOSmaterial->TAxis[0]))
+            {
+                return EOS_OUTSIDE_VMIN;
+            }
+            if (u > ANEOSUofRhoT(material->ANEOSmaterial, rho, material->ANEOSmaterial->TAxis[material->ANEOSmaterial->nT-1]*0.9999))
+            {
+                return EOS_OUTSIDE_VMAX;
+            }
+            return EOS_SUCCESS;
             break;
         default:
             assert(0);

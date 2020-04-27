@@ -34,8 +34,12 @@
 #define EOS_TRUE 1
 #define EOS_FALSE 0
 
-#define EOS_SUCCESS 0
-#define EOS_FAIL 1
+#define EOS_SUCCESS 1
+#define EOS_FAIL 0
+#define EOS_OUTSIDE_RHOMIN -1
+#define EOS_OUTSIDE_RHOMAX -2
+#define EOS_OUTSIDE_VMIN -3
+#define EOS_OUTSIDE_VMAX -4
  
 typedef struct EOSmaterial
 {
