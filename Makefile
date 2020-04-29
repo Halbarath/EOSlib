@@ -2,7 +2,7 @@ objects = EOSlib.o ../ANEOSmaterial/ANEOSmaterial.o ../ANEOSmaterial/interpBilin
 
 defs = -DTILL_OUTPUT_ALL_WARNINGS -DTILL_VERBOSE
 
-execs = testEOSmaterial calcTemperature calcColdcurveEnergy timingTest
+execs = testEOSmaterial calcTemperature calcColdcurveEnergy timingTest writeColdCurve
 
 # GNU Science library (uncomment if not needed)
 GSL_LIB = -lgsl -lgslcblas
@@ -27,6 +27,9 @@ calcTemperature: calcTemperature.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 calcColdcurveEnergy: calcColdcurveEnergy.o $(objects)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+	
+writeColdCurve: writeColdCurve.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 clean:

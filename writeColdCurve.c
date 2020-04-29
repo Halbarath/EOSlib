@@ -5,13 +5,12 @@
 
 int main(int argc, char *argv[])
 {
-	if (argc != 3) {
-        fprintf(stderr,"Usage: calcColdcurveEnergy <iMat> <rho>\n");
+	if (argc != 2) {
+        fprintf(stderr,"Usage: calcColdcurveEnergy <iMat>\n");
         exit(1);
     }
 	
 	int iMat = atoi(argv[1]);
-	double rho = atof(argv[2]);
 	
 	double dKpcUnit = 2.06701e-13;
 	double dMsolUnit = 4.80438e-08;
@@ -28,9 +27,16 @@ int main(int argc, char *argv[])
 	material = EOSinitMaterial(iMat, dKpcUnit, dMsolUnit, 0);
 	EOSinitIsentropicLookup(material, 0);
 	
-	double u = EOSUCold(material, rho);
-	
-	fprintf(stdout, "Energy on cold curve: %.15e\n", u);
+    int nRho = 500;
+    double rhoMin = 1e-3;
+    double rhoMax = 100;
+
+	double deltaLogRho = (log(rhoMax)-log(rhoMin))/(nRho-1);
+	for (int i=0; i<nRho; i++)
+	{
+		double rho = exp(log(rhoMin)+i*deltaLogRho);
+        fprintf(stdout, "%.15e %.15e\n", rho, EOSUCold(material,rho));
+	}
 	
 	// Finalize
 	EOSfinalizeMaterial(material);
