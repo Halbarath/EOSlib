@@ -56,7 +56,6 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         // The entropy look up table is initialized in ANEOSinitMaterial
         material->bEntropyTableInit = EOS_TRUE;
         material->minSoundSpeed = ANEOSCofRhoT(material->ANEOSmaterial, material->rho0, material->ANEOSmaterial->TAxis[0]);
-        // Currently not initialized
         strcpy(material->MatString, material->ANEOSmaterial->matName);
     }
 
@@ -629,7 +628,9 @@ double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P
      */
 
     if (P < WOOLFSON_MIN_PRESSURE) {
+#ifdef EOSLIB_VERBOSE
         fprintf(stderr, "Warning: Pressure is close to zero so no density correction is done.\n");
+#endif
         return 1.0;
     }
 
