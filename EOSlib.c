@@ -563,7 +563,7 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
     ua = EOSUofRhoT(material2, a, T);
     Pa = EOSPofRhoU(material2, a, ua);
 
-    b = 1e-3; // hard coded minimum
+    b = 0.999*material2->rho0; // hard coded minimum
     ub = EOSUofRhoT(material2, b, T);
     Pb = EOSPofRhoU(material2, b, ub);
 
@@ -578,7 +578,7 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
     /*
      * Root bracketed by (a,b).
      */
-    while (2*(Pa-Pb)/(Pa+Pb) > 1e-10) {
+    while (2*(a-b)/(a+b) > 1e-10) {
         c = 0.5*(a + b);
         uc = EOSUofRhoT(material2, c, T);
         Pc = EOSPofRhoU(material2, c, uc);
