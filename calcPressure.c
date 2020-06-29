@@ -27,7 +27,6 @@ int main(int argc, char *argv[])
 	EOSMATERIAL *material;
 
 	material = EOSinitMaterial(iMat, dKpcUnit, dMsolUnit, 0);
-	EOSinitIsentropicLookup(material, 0);
 	
 	double P = EOSPofRhoU(material, rho, u);
 	
