@@ -637,6 +637,13 @@ double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P
     rho1 = EOSRhoofPT(material1, P, T);
     rho2 = EOSRhoofPT(material2, P, T);
 
+    /* 
+     * Limit correction in the expanded states because e.g. at phase transitions P(rho) is
+     * monotonic and f_ij can become huge.
+     */
+    if ((rho1 <= 0.8*material1->rho0) || (rho1 <= 0.8*material1->rho0)) {
+        return 1.0;
+    }
 
     // If the density is unphysical return 1 so the density is not corrected.
     if ((rho1 <= 0.0) || (rho2 <= 0.0))
@@ -646,5 +653,19 @@ double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P
         return -1.0;
     }
 
+#if 0
+    // CR 10.12.2020: Debugging why some f_ij > 1e3
+    if (rho1/rho2 > 1e3) {
+        fprintf(stderr, "\n");
+        fprintf(stderr, "EOSWoolfsonCoeff: ");
+        fprintf(stderr, "iMat1= %i ", material1->iMat);
+        fprintf(stderr, "iMat2= %i ", material2->iMat);
+        fprintf(stderr, "P= %g ", P);
+        fprintf(stderr, "T= %g ", T);
+        fprintf(stderr, "rho1= %g ", rho1);
+        fprintf(stderr, "rho2= %g ", rho2);
+        fprintf(stderr, "\n");
+    }
+#endif
     return (rho1/rho2);
 }
