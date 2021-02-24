@@ -641,7 +641,7 @@ double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P
      * Limit correction in the expanded states because e.g. at phase transitions P(rho) is
      * monotonic and f_ij can become huge.
      */
-    if ((rho1 <= 0.8*material1->rho0) || (rho1 <= 0.8*material1->rho0)) {
+    if ((rho1 <= 0.8*material1->rho0) || (rho2 <= 0.8*material2->rho0)) {
         return 1.0;
     }
 
