@@ -356,7 +356,8 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
             if (iret == TILL_LOOKUP_OUTSIDE_RHOMIN) return EOS_OUTSIDE_RHOMIN;
             if (iret == TILL_LOOKUP_OUTSIDE_RHOMAX) return EOS_OUTSIDE_RHOMAX;
             if (iret == TILL_LOOKUP_OUTSIDE_VMIN) return EOS_OUTSIDE_VMIN;
-            if (iret == TILL_LOOKUP_OUTSIDE_VMAX) return EOS_OUTSIDE_VMAX;
+            /* Allow particles to have v > v_max. */
+            if (iret == TILL_LOOKUP_OUTSIDE_VMAX) return EOS_SUCCESS;
             break;
         case EOSANEOS:
             if (rho < material->ANEOSmaterial->rhoAxis[0]/material->ANEOSmaterial->CodeUnitstoCGSforRho)
