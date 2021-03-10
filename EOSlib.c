@@ -31,6 +31,8 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
     if (iMat == MAT_IDEALGAS)
     {
         // not implemented
+        fprintf(stderr, "Material id %i not implemented yet.\n", iMat);
+        assert(0);
     } else if (iMat>=MAT_TILLOTSON_MIN && iMat<=MAT_TILLOTSON_MAX)
     {
         /* Check if the Tillotson library has the right version. */
@@ -71,6 +73,8 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
     {
         case EOSIDEALGAS:
             // not implemented
+            fprintf(stderr, "Material id %i not implemented yet.\n", iMat);
+            assert(0);
             break;
         case EOSTILLOTSON:
             tillInitLookup(material->tillmaterial, 1000, 1000, 1e-4, 200.0, 1200.0);
