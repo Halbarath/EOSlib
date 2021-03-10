@@ -73,7 +73,7 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
     {
         case EOSIDEALGAS:
             // not implemented
-            fprintf(stderr, "Material id %i not implemented yet.\n", iMat);
+            fprintf(stderr, "Material id %i not implemented yet.\n", material->iMat);
             assert(0);
             break;
         case EOSTILLOTSON:
