@@ -76,6 +76,8 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->bEntropyTableInit = EOS_TRUE;
         material->minSoundSpeed = ANEOSCofRhoT(material->ANEOSmaterial, material->rho0, material->ANEOSmaterial->TAxis[0]);
         strcpy(material->MatString, material->ANEOSmaterial->matName);
+    } else {
+        fprintf(stderr, "EOSinitMaterial: iMat %i does not exist.\n");
     }
 
     return material;
