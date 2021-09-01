@@ -82,6 +82,7 @@ void EOSPrintMat(EOSMATERIAL *material, FILE *fp);
 
 // Main functions
 double EOSPofRhoU(EOSMATERIAL *material, double rho, double u);
+double EOSPofRhoT(EOSMATERIAL *material, double rho, double T);
 double EOSCofRhoU(EOSMATERIAL *material, double rho, double u);
 double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c);
 double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2);
