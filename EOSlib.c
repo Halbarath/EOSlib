@@ -183,6 +183,32 @@ double EOSPofRhoU(EOSMATERIAL *material, double rho, double u)
 }
 
 /*
+ * Calculates the pressure P(rho,T) for a material
+ */
+double EOSPofRhoT(EOSMATERIAL *material, double rho, double T)
+{
+    double P = 0;
+
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            // not implemented
+            break;
+        case EOSTILLOTSON:
+            // not implemented
+            assert(0);
+            break;
+        case EOSANEOS:
+            P = ANEOSPofRhoT(material->ANEOSmaterial, rho, T);
+            break;
+        default:
+            assert(0);
+    }
+
+    return P;
+}
+
+/*
  * Calculates the sound speed c(rho,u) for a material
  */
 double EOSCofRhoU(EOSMATERIAL *material, double rho, double u)
