@@ -29,6 +29,7 @@
  
 #include "../tillotson/tillotson.h"
 #include "../ANEOSmaterial/ANEOSmaterial.h"
+#include "igeos.h"
 
 #define EOS_VERSION_TEXT    "1.0.0"
 #define EOS_VERSION_MAJOR   1
@@ -58,17 +59,25 @@
 #define EOS_OUTSIDE_VMIN -3
 #define EOS_OUTSIDE_VMAX -4
  
+// Pass additional parameters for some EOS
+struct igeosParam
+{ 
+    /* Constant for ideal gas EOS. */
+    double dConstGamma;
+    double dMeanMolMass;	
+};
+
 typedef struct EOSmaterial
 {
 	int iMat; // Material number
-	int matType; // Material type, 0: Tillotson, 1: ANEOS
+	int matType; // Material type, e.g., 0: ideal gas, 1: Tillotson, 2: ANEOS
 	double rho0; // reference density
 	int bEntropyTableInit; // flag to signal if the entropy table is initialized
 	double minSoundSpeed; // sound speed at reference values
     char MatString[256];
+	IGEOSMAT *igeosmaterial; // Pointer to ideal gas material
 	TILLMATERIAL *tillmaterial; // Pointer to tillotson material
-	ANEOSMATERIAL *ANEOSmaterial; // Pointer to ANEOS material
-	
+	ANEOSMATERIAL *ANEOSmaterial; // Pointer to ANEOS material	
 } EOSMATERIAL;
 
 // Initialization and finalization

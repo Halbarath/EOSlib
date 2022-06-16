@@ -1,4 +1,4 @@
-objects = EOSlib.o ../ANEOSmaterial/ANEOSmaterial.o ../ANEOSmaterial/interpBilinear.o ../tillotson/tillotson.o ../tillotson/tillinitlookup.o ../tillotson/tillsplint.o ../tillotson/interpol/brent.o
+objects = EOSlib.o igeos.o ../ANEOSmaterial/ANEOSmaterial.o ../ANEOSmaterial/interpBilinear.o ../tillotson/tillotson.o ../tillotson/tillinitlookup.o ../tillotson/tillsplint.o ../tillotson/interpol/brent.o
 
 defs = -DTILL_OUTPUT_ALL_WARNINGS -DTILL_VERBOSE -EOSLIB_VEROBSE
 
@@ -18,6 +18,9 @@ default:
 all: default
 
 testEOSmaterial: testEOSmaterial.o $(objects)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+testigeos: testigeos.o $(objects) 
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 timingTest: timingTest.o $(objects)

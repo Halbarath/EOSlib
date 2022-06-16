@@ -29,8 +29,8 @@
 #include <assert.h>
 #include <math.h>
 #include <string.h>
-#include "EOSlib.h"
 #include <string.h>
+#include "EOSlib.h"
 
 /*
  * Initialization of the material structures
@@ -48,16 +48,24 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
     if (iMat == MAT_IDEALGAS)
     {
         /* Check if the Tillotson library has the right version. */
-        if (TILL_VERSION_MAJOR != 3 || TILL_VERSION_MINOR < 4) {
-            fprintf(stderr, "EOSinitMaterial: Tillotson library has the wrong version (%s)\n", TILL_VERSION_TEXT);
+        if (IGEOS_VERSION_MAJOR != 1) {
+            fprintf(stderr, "EOSinitMaterial: Ideal gas EOS library has the wrong version (%s)\n", IGEOS_VERSION_TEXT);
             exit(1);
         }
+
+        assert(additional_data != NULL);
+
+        /* Pass additional parameter to the ideal gas EOS library. */
+        struct igeosParam *Param;
+        Param = (struct igeosParam *) additional_data;
+
         material->matType = EOSIDEALGAS;
-        material->tillmaterial = tillInitMaterial(iMat, dKpcUnit, dMsolUnit);
-        material->rho0 = material->tillmaterial->rho0;
+        material->igeosmaterial = igeosInitMat(iMat, Param->dConstGamma, Param->dMeanMolMass, dKpcUnit, dMsolUnit);
+        material->rho0 = material->igeosmaterial->rho0;
         material->minSoundSpeed = 0;
+        /* No entropy look up table required. */
         material->bEntropyTableInit = EOS_TRUE;
-        tilliMatString(material->tillmaterial, material->MatString);
+        strcpy(material->MatString, "IDEAL GAS");
     } else if (iMat>=MAT_TILLOTSON_MIN && iMat<=MAT_TILLOTSON_MAX)
     {
         /* Check if the Tillotson library has the right version. */
@@ -99,6 +107,7 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
     switch(material->matType)
     {
         case EOSIDEALGAS:
+            if (material->bEntropyTableInit != EOS_TRUE) material->bEntropyTableInit = EOS_TRUE;
             break;
         case EOSTILLOTSON:
             tillInitLookup(material->tillmaterial, 1000, 1000, 1e-4, 200.0, 1200.0);
@@ -121,7 +130,7 @@ void EOSfinalizeMaterial(EOSMATERIAL *material)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            tillFinalizeMaterial(material->tillmaterial);
+            igeosFinalizeMat(material->igeosmaterial);
             break;
         case EOSTILLOTSON:
             tillFinalizeMaterial(material->tillmaterial);
@@ -144,7 +153,7 @@ void EOSPrintMat(EOSMATERIAL *material, FILE *fp)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            tillPrintMat(material->tillmaterial, fp);
+            igeosPrintMat(material->igeosmaterial, fp);
             break;
         case EOSTILLOTSON:
             tillPrintMat(material->tillmaterial, fp);
@@ -167,7 +176,7 @@ double EOSPofRhoU(EOSMATERIAL *material, double rho, double u)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            P = eosPressure(material->tillmaterial, rho, u);
+            P = igeosPofRhoU(material->igeosmaterial, rho, u);
             break;
         case EOSTILLOTSON:
             P = tillPressure(material->tillmaterial, rho, u);
@@ -193,6 +202,7 @@ double EOSPofRhoT(EOSMATERIAL *material, double rho, double T)
     {
         case EOSIDEALGAS:
             // not implemented
+            assert(0);
             break;
         case EOSTILLOTSON:
             // not implemented
@@ -218,7 +228,7 @@ double EOSCofRhoU(EOSMATERIAL *material, double rho, double u)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            eosPressureSound(material->tillmaterial, rho, u, &c);
+            c = igeosCofRhoU(material->igeosmaterial, rho, u);
             break;
         case EOSTILLOTSON:
             tillPressureSound(material->tillmaterial, rho, u, &c);
@@ -246,7 +256,7 @@ double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            P = eosPressureSound(material->tillmaterial, rho, u, c);
+            P = igeosPCofRhoU(material->igeosmaterial, rho, u, c);
             break;
         case EOSTILLOTSON:
             P = tillPressureSound(material->tillmaterial, rho, u, c);
@@ -272,7 +282,7 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            u2 = eosLookupU(material->tillmaterial, rho1, u1, rho2, 0); // last argument is actually a particle number
+            u2 = igeosIsentropicU(material->igeosmaterial, rho1, u1, rho2);
             break;
         case EOSTILLOTSON:
             u2 = tillLookupU(material->tillmaterial, rho1, u1, rho2, 0); // last argument is actually a particle number
@@ -296,7 +306,7 @@ double EOSTofRhoU(EOSMATERIAL *material, double rho, double u)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            T = eosTempRhoU(material->tillmaterial, rho, u);
+            T = igeosTofRhoU(material->igeosmaterial, rho, u);
             break;
         case EOSTILLOTSON:
             T = tillTempRhoU(material->tillmaterial, rho, u);
@@ -320,7 +330,7 @@ double EOSUofRhoT(EOSMATERIAL *material, double rho, double T)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            u = eosURhoTemp(material->tillmaterial, rho, T);
+            u = igeosUofRhoT(material->igeosmaterial, rho, T);
             break;
         case EOSTILLOTSON:
             u = tillURhoTemp(material->tillmaterial, rho, T);
@@ -344,7 +354,7 @@ double EOSRhoofPT(EOSMATERIAL *material, double p, double T)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            rho = eosRhoPTemp(material->tillmaterial, p, T);
+            rho = igeosRhoofPT(material->igeosmaterial, p, T);
             break;
         case EOSTILLOTSON:
             rho = tillRhoPTemp(material->tillmaterial, p, T);
@@ -369,9 +379,11 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
     {
         case EOSIDEALGAS:
             // not implemented
+            assert(0);
             break;
         case EOSTILLOTSON:
             // not implemented
+            assert(0);
             break;
         case EOSANEOS:
             rho = ANEOSRhoofUT(material->ANEOSmaterial, u, T);
@@ -449,7 +461,7 @@ double EOSdPdRho(EOSMATERIAL *material, double rho, double u)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            dPdRho = eosdPdrho(material->tillmaterial, rho, u);
+            dPdRho = igeosdPdRho(material->igeosmaterial, rho, u);
             break;
         case EOSTILLOTSON:
             dPdRho = tilldPdrho(material->tillmaterial, rho, u);
@@ -473,7 +485,7 @@ double EOSdPdU(EOSMATERIAL *material, double rho, double u)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            dPdU = eosdPdu(material->tillmaterial, rho, u);
+            dPdU = igeosdPdU(material->igeosmaterial, rho, u);
             break;
         case EOSTILLOTSON:
             dPdU = tilldPdu(material->tillmaterial, rho, u);
@@ -497,7 +509,7 @@ double EOSdUdRho(EOSMATERIAL *material, double rho, double u)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            dUdRho = eosPressure(material->tillmaterial, rho, u) / (rho * rho);
+            dUdRho = igeosPofRhoU(material->igeosmaterial, rho, u) / (rho * rho);
             break;
         case EOSTILLOTSON:
             dUdRho = tilldudrho(material->tillmaterial, rho, u);
@@ -522,9 +534,11 @@ double EOSdPdRhoatT(EOSMATERIAL *material, double rho, double T)
     {
         case EOSIDEALGAS:
             // not implemented
+            assert(0);
             break;
         case EOSTILLOTSON:
             // not implemented
+            assert(0);
             break;
         case EOSANEOS:
             dPdRho = ANEOSdPdRhoofRhoT(material->ANEOSmaterial, rho, T);
@@ -546,9 +560,11 @@ double EOSdPdT(EOSMATERIAL *material, double rho, double T)
     {
         case EOSIDEALGAS:
             // not implemented
+            assert(0);
             break;
         case EOSTILLOTSON:
             // not implemented
+            assert(0);
             break;
         case EOSANEOS:
             dPdT = ANEOSdPdTofRhoT(material->ANEOSmaterial, rho, T);
@@ -569,7 +585,7 @@ double EOSUCold(EOSMATERIAL *material, double rho)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            // not implemented
+            // ucold = 0
             break;
         case EOSTILLOTSON:
             ucold = tillColdULookup(material->tillmaterial, rho);
