@@ -26,9 +26,13 @@
 
 #ifndef EOSLIB_HINCLUDED
 #define EOSLIB_HINCLUDED
- 
-#include "../tillotson/tillotson.h"
-#include "../ANEOSmaterial/ANEOSmaterial.h"
+
+#ifdef HAVE_TILLOTSON_H
+    #include <tillotson.h>
+#endif
+#ifdef HAVE_ANEOSMATERIAL_H
+    #include <ANEOSmaterial.h>
+#endif
 
 #define EOS_VERSION_TEXT    "1.0.0"
 #define EOS_VERSION_MAJOR   1
@@ -66,11 +70,18 @@ typedef struct EOSmaterial
 	int bEntropyTableInit; // flag to signal if the entropy table is initialized
 	double minSoundSpeed; // sound speed at reference values
     char MatString[256];
+#ifdef HAVE_TILLOTSON_H
 	TILLMATERIAL *tillmaterial; // Pointer to tillotson material
+#endif
+#ifdef HAVE_ANEOSMATERIAL_H
 	ANEOSMATERIAL *ANEOSmaterial; // Pointer to ANEOS material
+#endif
 	
 } EOSMATERIAL;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 // Initialization and finalization
 
 EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const void * additional_data);
@@ -113,4 +124,7 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
  
 // Woolfson correction
 double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P, double T);
+#ifdef __cplusplus
+}
+#endif
 #endif
