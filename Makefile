@@ -7,7 +7,10 @@ execs = testEOSmaterial calcTemperature calcColdcurveEnergy timingTest writeCold
 # GNU Science library (uncomment if not needed)
 GSL_LIB = -lgsl -lgslcblas
 
-CFLAGS ?= -O3 -Wall -std=c99
+# Enable the use of the external libraries
+INCLUDES = -DHAVE_ANEOSMATERIAL_H -DHAVE_TILLOTSON_H -I../ANEOSmaterial -I../tillotson
+
+CFLAGS ?= -O3 -Wall -std=c99 $(INCLUDES)
 
 FFLAGS ?= $(CFLAGS)
 LIBS ?= -lm $(GSL_LIB)

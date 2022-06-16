@@ -47,7 +47,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 
     if (iMat == MAT_IDEALGAS)
     {
-        /* Check if the Tillotson library has the right version. */
+        /* Check if the igeos library has the right version. */
         if (IGEOS_VERSION_MAJOR != 1) {
             fprintf(stderr, "EOSinitMaterial: Ideal gas EOS library has the wrong version (%s)\n", IGEOS_VERSION_TEXT);
             exit(1);
@@ -68,6 +68,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         strcpy(material->MatString, "IDEAL GAS");
     } else if (iMat>=MAT_TILLOTSON_MIN && iMat<=MAT_TILLOTSON_MAX)
     {
+#ifdef HAVE_TILLOTSON_H
         /* Check if the Tillotson library has the right version. */
         if (TILL_VERSION_MAJOR != 3 || TILL_VERSION_MINOR < 4) {
             fprintf(stderr, "EOSinitMaterial: Tillotson library has the wrong version (%s)\n", TILL_VERSION_TEXT);
@@ -78,8 +79,13 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->rho0 = material->tillmaterial->rho0;
         material->minSoundSpeed = sqrt(material->tillmaterial->A/material->tillmaterial->rho0);
         tilliMatString(material->tillmaterial, material->MatString);
+#else
+        fprintf(stderr,"Tried to initialize a Tillotson material, but the Tillotson library is absent.\n");
+        assert(0);
+#endif
     } else if (iMat>=MAT_ANEOS_MIN && iMat <=MAT_ANEOS_MAX)
     {
+#ifdef HAVE_ANEOSMATERIAL_H
         /* Check if the ANEOS library has the right version. */
         if (ANEOS_VERSION_MAJOR != 1) {
             fprintf(stderr, "EOSinitMaterial: ANEOS library has the wrong version (%s)\n", ANEOS_VERSION_TEXT);
@@ -92,6 +98,10 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->bEntropyTableInit = EOS_TRUE;
         material->minSoundSpeed = ANEOSCofRhoT(material->ANEOSmaterial, material->rho0, material->ANEOSmaterial->TAxis[0]);
         strcpy(material->MatString, material->ANEOSmaterial->matName);
+#else
+        fprintf(stderr,"Tried to initialize an ANEOSmaterial material, but the ANEOSmaterial library is absent.\n");
+        assert(0);
+#endif
     } else {
         fprintf(stderr, "EOSinitMaterial: iMat %i does not exist.\n",iMat);
     }
@@ -110,12 +120,16 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
             if (material->bEntropyTableInit != EOS_TRUE) material->bEntropyTableInit = EOS_TRUE;
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             tillInitLookup(material->tillmaterial, 1000, 1000, 1e-4, 200.0, 1200.0);
             material->bEntropyTableInit = EOS_TRUE;
+#endif
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             // nothing to do
             if (material->bEntropyTableInit != EOS_TRUE) material->bEntropyTableInit = EOS_TRUE;
+#endif
             break;
         default:
             assert(0);
@@ -133,10 +147,14 @@ void EOSfinalizeMaterial(EOSMATERIAL *material)
             igeosFinalizeMat(material->igeosmaterial);
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             tillFinalizeMaterial(material->tillmaterial);
+#endif
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             ANEOSfinalizeMaterial(material->ANEOSmaterial);
+#endif
             break;
         default:
             assert(0);
@@ -156,10 +174,14 @@ void EOSPrintMat(EOSMATERIAL *material, FILE *fp)
             igeosPrintMat(material->igeosmaterial, fp);
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             tillPrintMat(material->tillmaterial, fp);
+#endif
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             ANEOSPrintMat(material->ANEOSmaterial, fp);
+#endif
             break;
         default:
             assert(0);
@@ -179,10 +201,14 @@ double EOSPofRhoU(EOSMATERIAL *material, double rho, double u)
             P = igeosPofRhoU(material->igeosmaterial, rho, u);
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             P = tillPressure(material->tillmaterial, rho, u);
+#endif
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             P = ANEOSPofRhoU(material->ANEOSmaterial, rho, u);
+#endif
             break;
         default:
             assert(0);
@@ -205,11 +231,15 @@ double EOSPofRhoT(EOSMATERIAL *material, double rho, double T)
             assert(0);
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             // not implemented
+#endif
             assert(0);
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             P = ANEOSPofRhoT(material->ANEOSmaterial, rho, T);
+#endif
             break;
         default:
             assert(0);
@@ -231,10 +261,14 @@ double EOSCofRhoU(EOSMATERIAL *material, double rho, double u)
             c = igeosCofRhoU(material->igeosmaterial, rho, u);
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             tillPressureSound(material->tillmaterial, rho, u, &c);
+#endif
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             c = ANEOSCofRhoU(material->ANEOSmaterial, rho, u);
+#endif
             break;
         default:
             assert(0);
@@ -259,12 +293,16 @@ double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c)
             P = igeosPCofRhoU(material->igeosmaterial, rho, u, c);
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             P = tillPressureSound(material->tillmaterial, rho, u, c);
+#endif
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);
             P = ANEOSPofRhoT(material->ANEOSmaterial, rho, T);
             *c = ANEOSCofRhoT(material->ANEOSmaterial, rho, T);
+#endif
             break;
         default:
             assert(0);
@@ -285,10 +323,14 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
             u2 = igeosIsentropicU(material->igeosmaterial, rho1, u1, rho2);
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             u2 = tillLookupU(material->tillmaterial, rho1, u1, rho2, 0); // last argument is actually a particle number
+#endif
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             u2 = ANEOSisentropicU(material->ANEOSmaterial, rho1, u1, rho2);
+#endif
             break;
         default:
             assert(0);
@@ -309,10 +351,14 @@ double EOSTofRhoU(EOSMATERIAL *material, double rho, double u)
             T = igeosTofRhoU(material->igeosmaterial, rho, u);
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             T = tillTempRhoU(material->tillmaterial, rho, u);
+#endif
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);
+#endif
             break;
         default:
             assert(0);
@@ -333,10 +379,14 @@ double EOSUofRhoT(EOSMATERIAL *material, double rho, double T)
             u = igeosUofRhoT(material->igeosmaterial, rho, T);
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             u = tillURhoTemp(material->tillmaterial, rho, T);
+#endif
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             u = ANEOSUofRhoT(material->ANEOSmaterial, rho, T);
+#endif
             break;
         default:
             assert(0);
@@ -357,10 +407,14 @@ double EOSRhoofPT(EOSMATERIAL *material, double p, double T)
             rho = igeosRhoofPT(material->igeosmaterial, p, T);
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             rho = tillRhoPTemp(material->tillmaterial, p, T);
+#endif
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             rho = ANEOSRhoofPT(material->ANEOSmaterial, p, T);
+#endif
             break;
         default:
             assert(0);
@@ -382,11 +436,15 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
             assert(0);
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             // not implemented
             assert(0);
+#endif
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             rho = ANEOSRhoofUT(material->ANEOSmaterial, u, T);
+#endif
             break;
         default:
             assert(0);
@@ -417,6 +475,7 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
             iret = EOS_SUCCESS;
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             iret = tillIsInTable(material->tillmaterial, rho, u);
             if (iret == TILL_LOOKUP_SUCCESS) return EOS_SUCCESS;
             if (iret == TILL_LOOKUP_OUTSIDE_RHOMIN) return EOS_OUTSIDE_RHOMIN;
@@ -424,8 +483,10 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
             if (iret == TILL_LOOKUP_OUTSIDE_VMIN) return EOS_OUTSIDE_VMIN;
             /* Allow particles to have v > v_max. */
             if (iret == TILL_LOOKUP_OUTSIDE_VMAX) return EOS_SUCCESS;
+#endif
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             if (rho < material->ANEOSmaterial->rhoAxis[0]/material->ANEOSmaterial->CodeUnitstoCGSforRho)
             {
                 return EOS_OUTSIDE_RHOMIN;
@@ -443,6 +504,7 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
                 return EOS_OUTSIDE_VMAX;
             }
             return EOS_SUCCESS;
+#endif
             break;
         default:
             assert(0);
@@ -464,10 +526,14 @@ double EOSdPdRho(EOSMATERIAL *material, double rho, double u)
             dPdRho = igeosdPdRho(material->igeosmaterial, rho, u);
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             dPdRho = tilldPdrho(material->tillmaterial, rho, u);
+#endif
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             dPdRho = ANEOSdPdRhoofRhoU(material->ANEOSmaterial, rho, u);
+#endif
             break;
         default:
             assert(0);
@@ -488,10 +554,14 @@ double EOSdPdU(EOSMATERIAL *material, double rho, double u)
             dPdU = igeosdPdU(material->igeosmaterial, rho, u);
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             dPdU = tilldPdu(material->tillmaterial, rho, u);
+#endif
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             dPdU = ANEOSdPdUofRhoU(material->ANEOSmaterial, rho, u);
+#endif
             break;
         default:
             assert(0);
@@ -512,10 +582,14 @@ double EOSdUdRho(EOSMATERIAL *material, double rho, double u)
             dUdRho = igeosPofRhoU(material->igeosmaterial, rho, u) / (rho * rho);
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             dUdRho = tilldudrho(material->tillmaterial, rho, u);
+#endif
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             dUdRho = ANEOSdUdRhoofRhoU(material->ANEOSmaterial, rho, u);
+#endif
             break;
         default:
             assert(0);
@@ -537,11 +611,15 @@ double EOSdPdRhoatT(EOSMATERIAL *material, double rho, double T)
             assert(0);
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             // not implemented
             assert(0);
+#endif
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             dPdRho = ANEOSdPdRhoofRhoT(material->ANEOSmaterial, rho, T);
+#endif
             break;
         default:
             assert(0);
@@ -563,11 +641,15 @@ double EOSdPdT(EOSMATERIAL *material, double rho, double T)
             assert(0);
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             // not implemented
             assert(0);
+#endif
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             dPdT = ANEOSdPdTofRhoT(material->ANEOSmaterial, rho, T);
+#endif
             break;
         default:
             assert(0);
@@ -588,11 +670,15 @@ double EOSUCold(EOSMATERIAL *material, double rho)
             // ucold = 0
             break;
         case EOSTILLOTSON:
+#ifdef HAVE_TILLOTSON_H
             ucold = tillColdULookup(material->tillmaterial, rho);
+#endif
             break;
         case EOSANEOS:
+#ifdef HAVE_ANEOSMATERIAL_H
             // For ANEOS temperatures below T_min cause problems
             ucold = ANEOSUofRhoT(material->ANEOSmaterial, rho, material->ANEOSmaterial->TAxis[0]);
+#endif
             break;
         default:
             assert(0);
