@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
         param.dMeanMolMass = 1.0;
         material = EOSinitMaterial(iMat, dKpcUnit, dMsolUnit, &param);
     } else {
-        material = EOSinitMaterial(iMat, dKpcUnit, dMsolUnit, 0);
+        material = EOSinitMaterial(iMat, dKpcUnit, dMsolUnit, NULL);
     }
         
 	EOSinitIsentropicLookup(material, 0);

@@ -87,8 +87,15 @@ int main(int argc, char *argv[])
 	
 	// Initialization
 	EOSMATERIAL *material;
+    if (iMat == EOSIDEALGAS) {
+        struct igeosParam param;
+        param.dConstGamma = 5.0/3.0;
+        param.dMeanMolMass = 1.0;
+        material = EOSinitMaterial(iMat, dKpcUnit, dMsolUnit, &param);
+    } else {
+        material = EOSinitMaterial(iMat, dKpcUnit, dMsolUnit, NULL);
+    }
 
-	material = EOSinitMaterial(iMat, dKpcUnit, dMsolUnit, 0);
 	EOSinitIsentropicLookup(material, 0);
 		
     double cmin = material->minSoundSpeed;

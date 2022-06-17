@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
         //double T = pow(10.0,(double)rand()/RAND_MAX*3.0 + 3.0);
 		//double rho = 1/CodeUnitstoCGSforRho*pow(10.0,(double)rand()/RAND_MAX*0.5 + 1.0);
 
-        double T = pow(10.0,(double)rand()/RAND_MAX*9.8 - 3.9);
+        double T = pow(10.0,(double)rand()/RAND_MAX*5.99);
         double rho = 1/CodeUnitstoCGSforRho*pow(10.0,(double)rand()/RAND_MAX*5.7 - 3.9);
 
         double u = EOSUofRhoT(material, rho, T);

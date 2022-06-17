@@ -43,7 +43,14 @@ int main(int argc, char *argv[])
 	// Initialization
 	EOSMATERIAL *material;
 
-	material = EOSinitMaterial(iMat, dKpcUnit, dMsolUnit, 0);
+    if (iMat == EOSIDEALGAS) {
+        struct igeosParam param;
+        param.dConstGamma = 5.0/3.0;
+        param.dMeanMolMass = 1.0;
+        material = EOSinitMaterial(iMat, dKpcUnit, dMsolUnit, &param);
+    } else {
+        material = EOSinitMaterial(iMat, dKpcUnit, dMsolUnit, NULL);
+    }
 	
 	double P = EOSPofRhoU(material, rho, u);
 	
