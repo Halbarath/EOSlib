@@ -1,4 +1,4 @@
-objects = EOSlib.o igeos.o ../ANEOSmaterial/ANEOSmaterial.o ../ANEOSmaterial/interpBilinear.o ../tillotson/tillotson.o ../tillotson/tillinitlookup.o ../tillotson/tillsplint.o ../tillotson/interpol/brent.o
+objects = EOSlib.o igeos.o ../ANEOSmaterial/ANEOSmaterial.o ../ANEOSmaterial/interpBilinear.o ../tillotson/tillotson.o ../tillotson/tillinitlookup.o ../tillotson/tillsplint.o ../tillotson/interpol/brent.o ../reos3/reos3.o
 
 defs = -DTILL_OUTPUT_ALL_WARNINGS -DTILL_VERBOSE -EOSLIB_VEROBSE
 
@@ -8,7 +8,7 @@ execs = testEOSmaterial calcTemperature calcColdcurveEnergy timingTest writeCold
 GSL_LIB = -lgsl -lgslcblas
 
 # Enable the use of the external libraries
-INCLUDES = -DHAVE_ANEOSMATERIAL_H -DHAVE_TILLOTSON_H -I../ANEOSmaterial -I../tillotson
+INCLUDES = -DHAVE_ANEOSMATERIAL_H -DHAVE_TILLOTSON_H -DHAVE_REOS3_H -I../ANEOSmaterial -I../tillotson -I../reos3
 
 CFLAGS ?= -O3 -Wall -std=c99 $(INCLUDES)
 

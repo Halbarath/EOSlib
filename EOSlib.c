@@ -102,6 +102,24 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         fprintf(stderr,"Tried to initialize an ANEOSmaterial material, but the ANEOSmaterial library is absent.\n");
         assert(0);
 #endif
+    } else if ((iMat >= MAT_REOS3_MIN) && (iMat <= MAT_REOS3_MAX)) {
+#ifdef HAVE_REOS3_H
+        /* Check if the REOS3 library has the right version. */
+        if (REOS3_VERSION_MAJOR != 1) {
+            fprintf(stderr, "EOSinitMaterial: REOS3 library has the wrong version (%s)\n", REOS3_VERSION_TEXT);
+            exit(1);
+        }
+        material->matType = EOSREOS3;
+        material->reos3material = reos3InitMaterial(iMat, dKpcUnit, dMsolUnit, TRUE);
+        material->rho0 = material->reos3material->rho0;
+        // So far we do not have entropy for REOS3. 
+        material->bEntropyTableInit = EOS_FALSE;
+        // How do we define a minimum sound speed and reference density for H and He?
+        material->minSoundSpeed = 0.0;
+#else
+        fprintf(stderr,"Tried to initialize an reos3 material, but the reos3 library is absent.\n");
+        assert(0);
+#endif
     } else {
         fprintf(stderr, "EOSinitMaterial: iMat %i does not exist.\n",iMat);
     }

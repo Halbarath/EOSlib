@@ -33,6 +33,9 @@
 #ifdef HAVE_ANEOSMATERIAL_H
     #include <ANEOSmaterial.h>
 #endif
+#ifdef HAVE_REOS3_H
+    #include <reos3.h>
+#endif
 
 #include "igeos.h"
 
@@ -48,11 +51,15 @@
 #define EOSIDEALGAS  0
 #define EOSTILLOTSON 1
 #define EOSANEOS     2
+#define EOSREOS3     3
+
 #define MAT_IDEALGAS 0
 #define MAT_TILLOTSON_MIN 1
 #define MAT_TILLOTSON_MAX 50
 #define MAT_ANEOS_MIN 51
 #define MAT_ANEOS_MAX 100
+#define MAT_REOS3_MIN 101
+#define MAT_REOS3_MAX 105
 
 #define EOS_TRUE 1
 #define EOS_FALSE 0
@@ -86,6 +93,9 @@ typedef struct EOSmaterial
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
 	ANEOSMATERIAL *ANEOSmaterial; // Pointer to ANEOS material
+#endif
+#ifdef HAVE_REOS3_H
+	REOS3MAT *reos3material; // Pointer to REOS3 material
 #endif
 } EOSMATERIAL;
 
