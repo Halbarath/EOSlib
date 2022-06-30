@@ -116,6 +116,7 @@ double EOSPofRhoU(EOSMATERIAL *material, double rho, double u);
 double EOSPofRhoT(EOSMATERIAL *material, double rho, double T);
 double EOSCofRhoU(EOSMATERIAL *material, double rho, double u);
 double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c);
+double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, double *T);
 double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2);
 
 // Inverse functions

@@ -378,6 +378,49 @@ double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c)
 }
 
 /*
+ * Calculates the pressure P(rho,u), the sound speed c(rho,u) and the temperature T(rho,u) for a material
+ * This should be used wherever all three values are are needed for the same rho and u
+ * as it is faster for some material models (esp. ANEOS)
+ */
+double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, double *T)
+{
+    double P = 0;
+
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            P = igeosPCofRhoU(material->igeosmaterial, rho, u, c);
+            *T = igeosTofRhoU(material->igeosmaterial, rho, u);
+            break;
+#ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
+            P = tillPressureSound(material->tillmaterial, rho, u, c);
+            *T = tillTempRhoU(material->tillmaterial, rho, u);
+            break;
+#endif
+#ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
+            *T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);
+            P = ANEOSPofRhoT(material->ANEOSmaterial, rho, *T);
+            *c = ANEOSCofRhoT(material->ANEOSmaterial, rho, *T);
+            break;
+#endif
+#ifdef HAVE_REOS3_H
+        case EOSREOS3:
+            *T = reos3TofRhoU(material->reos3material, rho, u);
+            P = reos3PofRhoT(material->reos3material, rho, *T);
+            *c = reos3CsofRhoT(material->reos3material, rho, *T);
+            break;
+#endif
+        default:
+            fprintf(stderr, "EOSPCTofRhoU was called for the unknown material %d.\n",material->iMat);
+            assert(0);
+    }
+
+    return P;
+}
+
+/*
  * Calculates the internal energy u2(rho1, u1, rho2) after an isentropic evolution for a material
  */
 double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
