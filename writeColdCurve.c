@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
 	
 	// Initialization
 	EOSMATERIAL *material;
-    if (iMat == EOSIDEALGAS) {
+    if (iMat == MAT_IDEALGAS) {
         struct igeosParam param;
         param.dConstGamma = 5.0/3.0;
         param.dMeanMolMass = 1.0;
