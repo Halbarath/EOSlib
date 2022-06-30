@@ -137,26 +137,27 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
         case EOSIDEALGAS:
             if (material->bEntropyTableInit != EOS_TRUE) material->bEntropyTableInit = EOS_TRUE;
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             tillInitLookup(material->tillmaterial, 1000, 1000, 1e-4, 200.0, 1200.0);
             material->bEntropyTableInit = EOS_TRUE;
-#endif
             break;
-        case EOSANEOS:
+#endif
 #ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
             // nothing to do
             if (material->bEntropyTableInit != EOS_TRUE) material->bEntropyTableInit = EOS_TRUE;
-#endif
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             // Fail because not implemented yet
             fprintf(stderr, "REOS3: Warning entropy lookup table not implemented yet.\n");
             //assert(0);
-#endif
             break;
+#endif
         default:
+            fprintf(stderr, "EOSinitIsentropicLookup was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 }
@@ -171,22 +172,23 @@ void EOSfinalizeMaterial(EOSMATERIAL *material)
         case EOSIDEALGAS:
             igeosFinalizeMat(material->igeosmaterial);
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             tillFinalizeMaterial(material->tillmaterial);
-#endif
             break;
-        case EOSANEOS:
+#endif
 #ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
             ANEOSfinalizeMaterial(material->ANEOSmaterial);
-#endif
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             reos3FinalizeMaterial(material->reos3material);
-#endif
             break;
+#endif
         default:
+            fprintf(stderr, "EOSfinalizeMaterial was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 
@@ -203,23 +205,24 @@ void EOSPrintMat(EOSMATERIAL *material, FILE *fp)
         case EOSIDEALGAS:
             igeosPrintMat(material->igeosmaterial, fp);
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             tillPrintMat(material->tillmaterial, fp);
-#endif
             break;
-        case EOSANEOS:
+#endif
 #ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
             ANEOSPrintMat(material->ANEOSmaterial, fp);
-#endif
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             // Not implemented yet.
             reos3PrintMat(material->reos3material, fp);
-#endif
             break;
+#endif
         default:
+            fprintf(stderr, "EOSPrintMat was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 }
@@ -236,22 +239,23 @@ double EOSPofRhoU(EOSMATERIAL *material, double rho, double u)
         case EOSIDEALGAS:
             P = igeosPofRhoU(material->igeosmaterial, rho, u);
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             P = tillPressure(material->tillmaterial, rho, u);
-#endif
             break;
-        case EOSANEOS:
+#endif
 #ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
             P = ANEOSPofRhoU(material->ANEOSmaterial, rho, u);
-#endif
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             P = reos3PofRhoU(material->reos3material, rho, u);
             break;
 #endif
         default:
+            fprintf(stderr, "EOSPofRhoU was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 
@@ -271,24 +275,25 @@ double EOSPofRhoT(EOSMATERIAL *material, double rho, double T)
             // not implemented
             assert(0);
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             // not implemented
-#endif
             assert(0);
             break;
-        case EOSANEOS:
-#ifdef HAVE_ANEOSMATERIAL_H
-            P = ANEOSPofRhoT(material->ANEOSmaterial, rho, T);
 #endif
+#ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
+            P = ANEOSPofRhoT(material->ANEOSmaterial, rho, T);
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             // Not implemented yet.
             assert(0);
-#endif
             break;
+#endif
         default:
+            fprintf(stderr, "EOSPofRhoT was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 
@@ -307,22 +312,23 @@ double EOSCofRhoU(EOSMATERIAL *material, double rho, double u)
         case EOSIDEALGAS:
             c = igeosCofRhoU(material->igeosmaterial, rho, u);
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             tillPressureSound(material->tillmaterial, rho, u, &c);
-#endif
             break;
-        case EOSANEOS:
+#endif
 #ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
             c = ANEOSCofRhoU(material->ANEOSmaterial, rho, u);
-#endif
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             c = reos3CsofRhoU(material->reos3material, rho, u);
-#endif
             break;
+#endif
         default:
+            fprintf(stderr, "EOSCofRhoU was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 
@@ -344,26 +350,27 @@ double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c)
         case EOSIDEALGAS:
             P = igeosPCofRhoU(material->igeosmaterial, rho, u, c);
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             P = tillPressureSound(material->tillmaterial, rho, u, c);
-#endif
             break;
-        case EOSANEOS:
+#endif
 #ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
             T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);
             P = ANEOSPofRhoT(material->ANEOSmaterial, rho, T);
             *c = ANEOSCofRhoT(material->ANEOSmaterial, rho, T);
-#endif
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             T = reos3TofRhoU(material->reos3material, rho, u);
             P = reos3PofRhoT(material->reos3material, rho, T);
             *c = reos3CsofRhoT(material->reos3material, rho, T);
-#endif
             break;
+#endif
         default:
+            fprintf(stderr, "EOSPCofRhoU was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 
@@ -381,24 +388,25 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
         case EOSIDEALGAS:
             u2 = igeosIsentropicU(material->igeosmaterial, rho1, u1, rho2);
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             u2 = tillLookupU(material->tillmaterial, rho1, u1, rho2, 0); // last argument is actually a particle number
-#endif
             break;
-        case EOSANEOS:
+#endif
 #ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
             u2 = ANEOSisentropicU(material->ANEOSmaterial, rho1, u1, rho2);
-#endif
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             // Not implemented yet
             //u2 = reos3IsentropicU(material->reos3material, rho1, u1, rho2);
             assert(0);
-#endif
             break;
+#endif
         default:
+            fprintf(stderr, "EOSIsentropic was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 
@@ -416,22 +424,23 @@ double EOSTofRhoU(EOSMATERIAL *material, double rho, double u)
         case EOSIDEALGAS:
             T = igeosTofRhoU(material->igeosmaterial, rho, u);
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             T = tillTempRhoU(material->tillmaterial, rho, u);
-#endif
             break;
-        case EOSANEOS:
+#endif
 #ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
             T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);
-#endif
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             T = reos3TofRhoU(material->reos3material, rho, u);
-#endif
             break;
+#endif
         default:
+            fprintf(stderr, "EOSTofRhoU was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 
@@ -449,22 +458,23 @@ double EOSUofRhoT(EOSMATERIAL *material, double rho, double T)
         case EOSIDEALGAS:
             u = igeosUofRhoT(material->igeosmaterial, rho, T);
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             u = tillURhoTemp(material->tillmaterial, rho, T);
-#endif
             break;
-        case EOSANEOS:
+#endif
 #ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
             u = ANEOSUofRhoT(material->ANEOSmaterial, rho, T);
-#endif
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             u = reos3UofRhoT(material->reos3material, rho, T);
-#endif
             break;
+#endif
         default:
+            fprintf(stderr, "EOSUofRhoT was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 
@@ -482,22 +492,23 @@ double EOSRhoofPT(EOSMATERIAL *material, double p, double T)
         case EOSIDEALGAS:
             rho = igeosRhoofPT(material->igeosmaterial, p, T);
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             rho = tillRhoPTemp(material->tillmaterial, p, T);
-#endif
             break;
-        case EOSANEOS:
+#endif
 #ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
             rho = ANEOSRhoofPT(material->ANEOSmaterial, p, T);
-#endif
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             rho = reos3RhoofPT(material->reos3material, p, T);
-#endif
             break;
+#endif
         default:
+            fprintf(stderr, "EOSRhoofPT was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 
@@ -516,24 +527,25 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
             // not implemented
             assert(0);
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             // not implemented
             assert(0);
-#endif
             break;
-        case EOSANEOS:
+#endif
 #ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
             rho = ANEOSRhoofUT(material->ANEOSmaterial, u, T);
-#endif
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             // Not implemented, return rho=0.
             assert(0);
-#endif
             break;
+#endif
         default:
+            fprintf(stderr, "EOSRhoofUT was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 
@@ -561,8 +573,8 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
         case EOSIDEALGAS:
             iret = EOS_SUCCESS;
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             iret = tillIsInTable(material->tillmaterial, rho, u);
             if (iret == TILL_LOOKUP_SUCCESS) return EOS_SUCCESS;
             if (iret == TILL_LOOKUP_OUTSIDE_RHOMIN) return EOS_OUTSIDE_RHOMIN;
@@ -570,10 +582,10 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
             if (iret == TILL_LOOKUP_OUTSIDE_VMIN) return EOS_OUTSIDE_VMIN;
             /* Allow particles to have v > v_max. */
             if (iret == TILL_LOOKUP_OUTSIDE_VMAX) return EOS_SUCCESS;
-#endif
             break;
-        case EOSANEOS:
+#endif
 #ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
             if (rho < material->ANEOSmaterial->rhoAxis[0]/material->ANEOSmaterial->CodeUnitstoCGSforRho)
             {
                 return EOS_OUTSIDE_RHOMIN;
@@ -591,19 +603,20 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
                 return EOS_OUTSIDE_VMAX;
             }
             return EOS_SUCCESS;
-#endif
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             iret = reos3IsInEOSTable(material->reos3material, rho, u);
             if (iret == REOS3_SUCCESS) return EOS_SUCCESS;
             if (iret == REOS3_OUTSIDE_RHOMIN) return EOS_OUTSIDE_RHOMIN;
             if (iret == REOS3_OUTSIDE_RHOMAX) return EOS_OUTSIDE_RHOMAX;
             if (iret == REOS3_OUTSIDE_TMIN) return EOS_OUTSIDE_VMIN;
             if (iret == REOS3_OUTSIDE_TMAX) return EOS_OUTSIDE_VMAX;
-#endif
             break;
+#endif
         default:
+            fprintf(stderr, "EOSIsInTable was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 
@@ -622,22 +635,23 @@ double EOSdPdRho(EOSMATERIAL *material, double rho, double u)
         case EOSIDEALGAS:
             dPdRho = igeosdPdRho(material->igeosmaterial, rho, u);
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             dPdRho = tilldPdrho(material->tillmaterial, rho, u);
-#endif
             break;
-        case EOSANEOS:
+#endif
 #ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
             dPdRho = ANEOSdPdRhoofRhoU(material->ANEOSmaterial, rho, u);
-#endif
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             dPdRho = reos3dPdRhoofRhoU(material->reos3material, rho, u);
-#endif
             break;
+#endif
         default:
+            fprintf(stderr, "EOSdPdRho was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 
@@ -655,22 +669,23 @@ double EOSdPdU(EOSMATERIAL *material, double rho, double u)
         case EOSIDEALGAS:
             dPdU = igeosdPdU(material->igeosmaterial, rho, u);
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             dPdU = tilldPdu(material->tillmaterial, rho, u);
-#endif
             break;
-        case EOSANEOS:
+#endif
 #ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
             dPdU = ANEOSdPdUofRhoU(material->ANEOSmaterial, rho, u);
-#endif
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             dPdU = reos3dPdUofRhoU(material->reos3material, rho, u);
-#endif
             break;
+#endif
         default:
+            fprintf(stderr, "EOSdPdU was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 
@@ -688,22 +703,23 @@ double EOSdUdRho(EOSMATERIAL *material, double rho, double u)
         case EOSIDEALGAS:
             dUdRho = igeosPofRhoU(material->igeosmaterial, rho, u) / (rho * rho);
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             dUdRho = tilldudrho(material->tillmaterial, rho, u);
-#endif
             break;
-        case EOSANEOS:
+#endif
 #ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
             dUdRho = ANEOSdUdRhoofRhoU(material->ANEOSmaterial, rho, u);
-#endif
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             dUdRho = reos3dUdRhoofRhoU(material->reos3material, rho, u);
-#endif
             break;
+#endif
         default:
+            fprintf(stderr, "EOSdUdRho was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 
@@ -722,23 +738,24 @@ double EOSdPdRhoatT(EOSMATERIAL *material, double rho, double T)
             // not implemented
             assert(0);
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             // not implemented
             assert(0);
-#endif
             break;
-        case EOSANEOS:
+#endif
 #ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
             dPdRho = ANEOSdPdRhoofRhoT(material->ANEOSmaterial, rho, T);
-#endif
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             dPdRho = reos3dPdRhoofRhoT(material->reos3material, rho, T);
-#endif
             break;
+#endif
         default:
+            fprintf(stderr, "EOSdPdRhoatT was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 
@@ -757,23 +774,24 @@ double EOSdPdT(EOSMATERIAL *material, double rho, double T)
             // not implemented
             assert(0);
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             // not implemented
             assert(0);
-#endif
             break;
-        case EOSANEOS:
+#endif
 #ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
             dPdT = ANEOSdPdTofRhoT(material->ANEOSmaterial, rho, T);
-#endif
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             dPdT = reos3dPdTofRhoT(material->reos3material, rho, T);
-#endif
             break;
+#endif
         default:
+            fprintf(stderr, "EOSdPdT was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 
@@ -791,24 +809,25 @@ double EOSUCold(EOSMATERIAL *material, double rho)
         case EOSIDEALGAS:
             // ucold = 0
             break;
-        case EOSTILLOTSON:
 #ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
             ucold = tillColdULookup(material->tillmaterial, rho);
-#endif
             break;
-        case EOSANEOS:
+#endif
 #ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
             // For ANEOS temperatures below T_min cause problems
             ucold = ANEOSUofRhoT(material->ANEOSmaterial, rho, material->ANEOSmaterial->TAxis[0]);
-#endif
             break;
-        case EOSREOS3:
+#endif
 #ifdef HAVE_REOS3_H
+        case EOSREOS3:
             // For REOS3 temperatures below T_min cause problems
             ucold = reos3UofRhoT(material->reos3material, rho, material->reos3material->TAxis[0]);
-#endif
             break;
+#endif
         default:
+            fprintf(stderr, "EOSUCold was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
 
