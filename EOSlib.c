@@ -102,6 +102,24 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         fprintf(stderr,"Tried to initialize an ANEOSmaterial material, but the ANEOSmaterial library is absent.\n");
         assert(0);
 #endif
+    } else if ((iMat >= MAT_REOS3_MIN) && (iMat <= MAT_REOS3_MAX)) {
+#ifdef HAVE_REOS3_H
+        /* Check if the REOS3 library has the right version. */
+        if (REOS3_VERSION_MAJOR != 1) {
+            fprintf(stderr, "EOSinitMaterial: REOS3 library has the wrong version (%s)\n", REOS3_VERSION_TEXT);
+            exit(1);
+        }
+        material->matType = EOSREOS3;
+        material->reos3material = reos3InitMaterial(iMat, dKpcUnit, dMsolUnit, TRUE);
+        material->rho0 = material->reos3material->rho0;
+        // So far we do not have entropy for REOS3. 
+        material->bEntropyTableInit = EOS_FALSE;
+        // How do we define a minimum sound speed and reference density for H and He?
+        material->minSoundSpeed = 0.0;
+#else
+        fprintf(stderr,"Tried to initialize an reos3 material, but the reos3 library is absent.\n");
+        assert(0);
+#endif
     } else {
         fprintf(stderr, "EOSinitMaterial: iMat %i does not exist.\n",iMat);
     }
@@ -131,6 +149,13 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
             if (material->bEntropyTableInit != EOS_TRUE) material->bEntropyTableInit = EOS_TRUE;
 #endif
             break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            // Fail because not implemented yet
+            fprintf(stderr, "REOS3: Warning entropy lookup table not implemented yet.\n");
+            //assert(0);
+#endif
+            break;
         default:
             assert(0);
     }
@@ -154,6 +179,11 @@ void EOSfinalizeMaterial(EOSMATERIAL *material)
         case EOSANEOS:
 #ifdef HAVE_ANEOSMATERIAL_H
             ANEOSfinalizeMaterial(material->ANEOSmaterial);
+#endif
+            break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            reos3FinalizeMaterial(material->reos3material);
 #endif
             break;
         default:
@@ -183,6 +213,12 @@ void EOSPrintMat(EOSMATERIAL *material, FILE *fp)
             ANEOSPrintMat(material->ANEOSmaterial, fp);
 #endif
             break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            // Not implemented yet.
+            reos3PrintMat(material->reos3material, fp);
+#endif
+            break;
         default:
             assert(0);
     }
@@ -210,6 +246,11 @@ double EOSPofRhoU(EOSMATERIAL *material, double rho, double u)
             P = ANEOSPofRhoU(material->ANEOSmaterial, rho, u);
 #endif
             break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            P = reos3PofRhoU(material->reos3material, rho, u);
+            break;
+#endif
         default:
             assert(0);
     }
@@ -241,6 +282,12 @@ double EOSPofRhoT(EOSMATERIAL *material, double rho, double T)
             P = ANEOSPofRhoT(material->ANEOSmaterial, rho, T);
 #endif
             break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            // Not implemented yet.
+            assert(0);
+#endif
+            break;
         default:
             assert(0);
     }
@@ -268,6 +315,11 @@ double EOSCofRhoU(EOSMATERIAL *material, double rho, double u)
         case EOSANEOS:
 #ifdef HAVE_ANEOSMATERIAL_H
             c = ANEOSCofRhoU(material->ANEOSmaterial, rho, u);
+#endif
+            break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            c = reos3CsofRhoU(material->reos3material, rho, u);
 #endif
             break;
         default:
@@ -304,6 +356,13 @@ double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c)
             *c = ANEOSCofRhoT(material->ANEOSmaterial, rho, T);
 #endif
             break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            T = reos3TofRhoU(material->reos3material, rho, u);
+            P = reos3PofRhoT(material->reos3material, rho, T);
+            *c = reos3CsofRhoT(material->reos3material, rho, T);
+#endif
+            break;
         default:
             assert(0);
     }
@@ -330,6 +389,13 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
         case EOSANEOS:
 #ifdef HAVE_ANEOSMATERIAL_H
             u2 = ANEOSisentropicU(material->ANEOSmaterial, rho1, u1, rho2);
+#endif
+            break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            // Not implemented yet
+            //u2 = reos3IsentropicU(material->reos3material, rho1, u1, rho2);
+            assert(0);
 #endif
             break;
         default:
@@ -360,6 +426,11 @@ double EOSTofRhoU(EOSMATERIAL *material, double rho, double u)
             T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);
 #endif
             break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            T = reos3TofRhoU(material->reos3material, rho, u);
+#endif
+            break;
         default:
             assert(0);
     }
@@ -386,6 +457,11 @@ double EOSUofRhoT(EOSMATERIAL *material, double rho, double T)
         case EOSANEOS:
 #ifdef HAVE_ANEOSMATERIAL_H
             u = ANEOSUofRhoT(material->ANEOSmaterial, rho, T);
+#endif
+            break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            u = reos3UofRhoT(material->reos3material, rho, T);
 #endif
             break;
         default:
@@ -416,6 +492,11 @@ double EOSRhoofPT(EOSMATERIAL *material, double p, double T)
             rho = ANEOSRhoofPT(material->ANEOSmaterial, p, T);
 #endif
             break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            rho = reos3RhoofPT(material->reos3material, p, T);
+#endif
+            break;
         default:
             assert(0);
     }
@@ -444,6 +525,12 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
         case EOSANEOS:
 #ifdef HAVE_ANEOSMATERIAL_H
             rho = ANEOSRhoofUT(material->ANEOSmaterial, u, T);
+#endif
+            break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            // Not implemented, return rho=0.
+            assert(0);
 #endif
             break;
         default:
@@ -506,6 +593,16 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
             return EOS_SUCCESS;
 #endif
             break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            iret = reos3IsInEOSTable(material->reos3material, rho, u);
+            if (iret == REOS3_SUCCESS) return EOS_SUCCESS;
+            if (iret == REOS3_OUTSIDE_RHOMIN) return EOS_OUTSIDE_RHOMIN;
+            if (iret == REOS3_OUTSIDE_RHOMAX) return EOS_OUTSIDE_RHOMAX;
+            if (iret == REOS3_OUTSIDE_TMIN) return EOS_OUTSIDE_VMIN;
+            if (iret == REOS3_OUTSIDE_TMAX) return EOS_OUTSIDE_VMAX;
+#endif
+            break;
         default:
             assert(0);
     }
@@ -533,6 +630,11 @@ double EOSdPdRho(EOSMATERIAL *material, double rho, double u)
         case EOSANEOS:
 #ifdef HAVE_ANEOSMATERIAL_H
             dPdRho = ANEOSdPdRhoofRhoU(material->ANEOSmaterial, rho, u);
+#endif
+            break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            dPdRho = reos3dPdRhoofRhoU(material->reos3material, rho, u);
 #endif
             break;
         default:
@@ -563,6 +665,11 @@ double EOSdPdU(EOSMATERIAL *material, double rho, double u)
             dPdU = ANEOSdPdUofRhoU(material->ANEOSmaterial, rho, u);
 #endif
             break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            dPdU = reos3dPdUofRhoU(material->reos3material, rho, u);
+#endif
+            break;
         default:
             assert(0);
     }
@@ -589,6 +696,11 @@ double EOSdUdRho(EOSMATERIAL *material, double rho, double u)
         case EOSANEOS:
 #ifdef HAVE_ANEOSMATERIAL_H
             dUdRho = ANEOSdUdRhoofRhoU(material->ANEOSmaterial, rho, u);
+#endif
+            break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            dUdRho = reos3dUdRhoofRhoU(material->reos3material, rho, u);
 #endif
             break;
         default:
@@ -621,6 +733,11 @@ double EOSdPdRhoatT(EOSMATERIAL *material, double rho, double T)
             dPdRho = ANEOSdPdRhoofRhoT(material->ANEOSmaterial, rho, T);
 #endif
             break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            dPdRho = reos3dPdRhoofRhoT(material->reos3material, rho, T);
+#endif
+            break;
         default:
             assert(0);
     }
@@ -651,6 +768,11 @@ double EOSdPdT(EOSMATERIAL *material, double rho, double T)
             dPdT = ANEOSdPdTofRhoT(material->ANEOSmaterial, rho, T);
 #endif
             break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            dPdT = reos3dPdTofRhoT(material->reos3material, rho, T);
+#endif
+            break;
         default:
             assert(0);
     }
@@ -678,6 +800,12 @@ double EOSUCold(EOSMATERIAL *material, double rho)
 #ifdef HAVE_ANEOSMATERIAL_H
             // For ANEOS temperatures below T_min cause problems
             ucold = ANEOSUofRhoT(material->ANEOSmaterial, rho, material->ANEOSmaterial->TAxis[0]);
+#endif
+            break;
+        case EOSREOS3:
+#ifdef HAVE_REOS3_H
+            // For REOS3 temperatures below T_min cause problems
+            ucold = reos3UofRhoT(material->reos3material, rho, material->reos3material->TAxis[0]);
 #endif
             break;
         default:
