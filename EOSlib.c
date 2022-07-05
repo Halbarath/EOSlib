@@ -650,7 +650,7 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            iret = reos3IsInEOSTable(material->reos3material, rho, u);
+            iret = reos3IsInExtrapLimit(material->reos3material, rho, u);
             if (iret == REOS3_SUCCESS) return EOS_SUCCESS;
             if (iret == REOS3_OUTSIDE_RHOMIN) return EOS_OUTSIDE_RHOMIN;
             if (iret == REOS3_OUTSIDE_RHOMAX) return EOS_OUTSIDE_RHOMAX;
