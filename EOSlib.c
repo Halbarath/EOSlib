@@ -276,8 +276,7 @@ double EOSPofRhoT(EOSMATERIAL *material, double rho, double T)
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            double u = tillURhoTemp(material->tillmaterial, rho, T);
-            P = tillPressure(material->tillmaterial, rho, u);
+            P = tillPressure(material->tillmaterial, rho, tillURhoTemp(material->tillmaterial, rho, T));
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
