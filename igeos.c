@@ -89,8 +89,7 @@ double igeosPofRhoU(IGEOSMAT *Mat, double rho, double u) {
 
 /* Calculate P(rho, T). */
 double igeosPofRhoT(IGEOSMAT *Mat, double rho, double T) {
-    assert(0);
-    return 0;
+    return (Mat->dConstGamma-1.0)*rho*Mat->cv*T;
 }
 
 /* Calculate cs(rho, u). */

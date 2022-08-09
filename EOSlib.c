@@ -272,13 +272,12 @@ double EOSPofRhoT(EOSMATERIAL *material, double rho, double T)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            // not implemented
-            assert(0);
+            P = igeosPofRhoT(material->igeosmaterial, rho, T);
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            // not implemented
-            assert(0);
+            double u = tillURhoTemp(material->tillmaterial, rho, T);
+            P = tillPressure(material->tillmaterial, rho, u);
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
@@ -288,8 +287,7 @@ double EOSPofRhoT(EOSMATERIAL *material, double rho, double T)
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            // Not implemented yet.
-            assert(0);
+            reos3PofRhoT(material->reos3material, rho, T);
             break;
 #endif
         default:
