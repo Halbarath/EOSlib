@@ -1,6 +1,6 @@
 objects = EOSlib.o igeos.o ../ANEOSmaterial/ANEOSmaterial.o ../ANEOSmaterial/interpBilinear.o ../tillotson/tillotson.o ../tillotson/tillinitlookup.o ../tillotson/tillsplint.o ../tillotson/interpol/brent.o ../reos3/reos3.o ../scvh/scvheos.o
 
-defs = -DTILL_OUTPUT_ALL_WARNINGS -DTILL_VERBOSE -EOSLIB_VEROBSE
+defs = -DTILL_OUTPUT_ALL_WARNINGS -DTILL_VERBOSE -EOSLIB_VERBOSE
 
 execs = testEOSmaterial calcTemperature calcColdcurveEnergy timingTest writeColdCurve calcPressure calcSoundSpeed
 
