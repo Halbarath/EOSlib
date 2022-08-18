@@ -122,6 +122,23 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         fprintf(stderr,"Tried to initialize an reos3 material, but the reos3 library is absent.\n");
         assert(0);
 #endif
+    } else if ((iMat >= MAT_SCVHEOS_MIN) && (iMat <= MAT_SCVHEOS_MAX)) {
+#ifdef HAVE_SCVHEOS_H
+        /* Check if the SCVHEOS library has the right version. */
+        if (SCVHEOS_VERSION_MAJOR != 1) {
+            fprintf(stderr, "EOSinitMaterial: SCvH EOS library has the wrong version (%s)\n", SCVHEOS_VERSION_TEXT);
+            exit(1);
+        }
+        material->matType = EOSSCVHEOS;
+        material->scvheosmaterial = scvheosInitMaterial(iMat, dKpcUnit, dMsolUnit);
+        material->rho0 = material->scvheosmaterial->rho0;
+        material->bEntropyTableInit = EOS_TRUE;
+        // How do we define a minimum sound speed and reference density for H and He?
+        material->minSoundSpeed = 0.0;
+#else
+        fprintf(stderr,"Tried to initialize an SCvH EOS material, but the SCvH EOS library is absent.\n");
+        assert(0);
+#endif
     } else {
         fprintf(stderr, "EOSinitMaterial: iMat %i does not exist.\n",iMat);
     }
@@ -158,6 +175,12 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
             // Fail because not implemented yet
             fprintf(stderr, "REOS3: Warning entropy lookup table not implemented yet.\n");
             //assert(0);
+            break;
+#endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            // nothing to do
+            if (material->bEntropyTableInit != EOS_TRUE) material->bEntropyTableInit = EOS_TRUE;
             break;
 #endif
         default:
