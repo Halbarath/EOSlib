@@ -37,6 +37,8 @@
  * iMat: Material number
  * dKpcUnit, dMsolUnit: Unit conversion factors
  * additional_data: void pointer that can be used to give additional options, not used at the moment
+ *
+ * Required: all
  */
 EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const void * additional_data)
 {
@@ -129,6 +131,8 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 
 /*
  * Initialize the lookup tables needed for the isentropoic evolution
+ *
+ * Required: pkdgrav3 (ISPH), gasoline (ISPH), fix initial conditions
  */
 void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data)
 {
@@ -164,6 +168,8 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
 
 /*
  * Finalization of the material structures
+ *
+ * Required: all
  */
 void EOSfinalizeMaterial(EOSMATERIAL *material)
 {
@@ -197,6 +203,8 @@ void EOSfinalizeMaterial(EOSMATERIAL *material)
 
 /*
  * Print material data, e.g., EOS coefficients or the size of the EOS table.
+ *
+ * Required: ballic*
  */
 void EOSPrintMat(EOSMATERIAL *material, FILE *fp)
 {
@@ -229,6 +237,8 @@ void EOSPrintMat(EOSMATERIAL *material, FILE *fp)
 
 /*
  * Calculates the pressure P(rho,u) for a material
+ *
+ * Required: all
  */
 double EOSPofRhoU(EOSMATERIAL *material, double rho, double u)
 {
@@ -264,6 +274,8 @@ double EOSPofRhoU(EOSMATERIAL *material, double rho, double u)
 
 /*
  * Calculates the pressure P(rho,T) for a material
+ *
+ * Required: pkdgrav3 (interface correction), tipsytools/tipsyprofile
  */
 double EOSPofRhoT(EOSMATERIAL *material, double rho, double T)
 {
@@ -299,6 +311,8 @@ double EOSPofRhoT(EOSMATERIAL *material, double rho, double T)
 
 /*
  * Calculates the sound speed c(rho,u) for a material
+ *
+ * Required: tipsytools
  */
 double EOSCofRhoU(EOSMATERIAL *material, double rho, double u)
 {
@@ -336,6 +350,8 @@ double EOSCofRhoU(EOSMATERIAL *material, double rho, double u)
  * Calculates the pressure P(rho,u) and the sound speed c(rho,u) for a material
  * This should be used wherever both the pressure and the sound speed are needed for the same rho and u
  * as it is faster for some material models (esp. ANEOS)
+ *
+ * Required: gasoline
  */
 double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c)
 {
@@ -378,6 +394,8 @@ double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c)
  * Calculates the pressure P(rho,u), the sound speed c(rho,u) and the temperature T(rho,u) for a material
  * This should be used wherever all three values are are needed for the same rho and u
  * as it is faster for some material models (esp. ANEOS)
+ *
+ * Required: pkdgrav3
  */
 double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, double *T)
 {
@@ -419,6 +437,8 @@ double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, doub
 
 /*
  * Calculates the internal energy u2(rho1, u1, rho2) after an isentropic evolution for a material
+ *
+ * Required: pkdgrav3 (ISPH), gasoline (ISPH), fix initial conditions
  */
 double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
 {
@@ -455,6 +475,8 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
 
 /*
  * Calculates the temperature T(rho,u) for a material
+ *
+ * Required: all
  */
 double EOSTofRhoU(EOSMATERIAL *material, double rho, double u)
 {
@@ -489,6 +511,8 @@ double EOSTofRhoU(EOSMATERIAL *material, double rho, double u)
 
 /*
  * Calculates the internal energy u(rho,T) for a material
+ *
+ * Required: pkdgrav3, tipsytools
  */
 double EOSUofRhoT(EOSMATERIAL *material, double rho, double T)
 {
@@ -523,6 +547,8 @@ double EOSUofRhoT(EOSMATERIAL *material, double rho, double T)
 
 /*
  * Calculates the density rho(p,T) for a material
+ *
+ * Required: internal, interface correction (gasoline,pkdgrav3)
  */
 double EOSRhoofPT(EOSMATERIAL *material, double p, double T)
 {
@@ -557,6 +583,8 @@ double EOSRhoofPT(EOSMATERIAL *material, double p, double T)
 
 /*
  * Calculates the density rho(u,T) for a material
+ *
+ * Require: none
  */
 double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
 {
@@ -594,6 +622,8 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
 
 /*
  * Tests if the given combination is below the cold curve, returns EOS_TRUE if so and EOS_FALSE if not
+ *
+ * Required: ballic
  */
 int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u)
 {
@@ -604,6 +634,8 @@ int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u)
 /*
  * Tests if the given combination is inside the lookup tables
  * returns EOS_SUCCESS if so, EOS_FAIL if not
+ *
+ * Required: ballic, gasoline, tipsytools
  */
 int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
 {
@@ -666,6 +698,8 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
 
 /*
  * Calculates the derivative dPdrho(rho,u) for a material
+ *
+ * Required: ballic
  */
 double EOSdPdRho(EOSMATERIAL *material, double rho, double u)
 {
@@ -700,6 +734,8 @@ double EOSdPdRho(EOSMATERIAL *material, double rho, double u)
 
 /*
  * Calculates the derivative dPdu(rho,u) for a material
+ *
+ * Required: ballic
  */
 double EOSdPdU(EOSMATERIAL *material, double rho, double u)
 {
@@ -734,6 +770,8 @@ double EOSdPdU(EOSMATERIAL *material, double rho, double u)
 
 /*
  * Calculates the derivative dudrho(rho,u) for a material
+ *
+ * Required: ballic
  */
 double EOSdUdRho(EOSMATERIAL *material, double rho, double u)
 {
@@ -768,8 +806,10 @@ double EOSdUdRho(EOSMATERIAL *material, double rho, double u)
 
 /*
  * Calculates the derivative dPdrho(rho,T) for a material
+ *
+ * Required: none yet, maybe in future version of ballic
  */
-double EOSdPdRhoatT(EOSMATERIAL *material, double rho, double T)
+double EOSdPdRhoofRhoT(EOSMATERIAL *material, double rho, double T)
 {
     double dPdRho = 0;
     switch(material->matType)
@@ -804,6 +844,8 @@ double EOSdPdRhoatT(EOSMATERIAL *material, double rho, double T)
 
 /*
  * Calculates the derivative dPdT(rho,T) for a material
+ *
+ * Required: none yet, maybe in future version of ballic
  */
 double EOSdPdT(EOSMATERIAL *material, double rho, double T)
 {
@@ -840,6 +882,8 @@ double EOSdPdT(EOSMATERIAL *material, double rho, double T)
 
 /*
  * Calculate the cold part of the internal energy, i.e., u(rho, T=0).
+ *
+ * Required: internal
  */
 double EOSUCold(EOSMATERIAL *material, double rho)
 {
