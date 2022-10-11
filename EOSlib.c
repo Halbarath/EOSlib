@@ -298,7 +298,7 @@ double EOSPofRhoT(EOSMATERIAL *material, double rho, double T)
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            reos3PofRhoT(material->reos3material, rho, T);
+            P = reos3PofRhoT(material->reos3material, rho, T);
             break;
 #endif
         default:
