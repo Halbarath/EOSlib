@@ -345,6 +345,11 @@ double EOSPofRhoT(EOSMATERIAL *material, double rho, double T)
             scvheosPofRhoT(material->scvheosmaterial, rho, T);
             break;
 #endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            scvheosPofRhoT(material->scvheosmaterial, rho, T);
+            break;
+#endif
         default:
             fprintf(stderr, "EOSPofRhoT was called for the unknown material %d.\n",material->iMat);
             assert(0);
