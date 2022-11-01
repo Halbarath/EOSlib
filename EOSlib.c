@@ -474,6 +474,86 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
 }
 
 /*
+ * Calculates the entropy S(rho, u) for a material
+ *
+ * Required: none
+ */
+double EOSSofRhoU(EOSMATERIAL *material, double rho, double u)
+{
+    double S = 0;
+
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            fprintf(stderr, "EOSSofRhoU not implemented for material %d\n",material->iMat);
+            assert(0);
+            break;
+#ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
+            fprintf(stderr, "EOSSofRhoU not implemented for material %d\n",material->iMat);
+            assert(0);
+            break;
+#endif
+#ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
+            S = ANEOSSofRhoU(material->ANEOSmaterial, rho, u);
+            break;
+#endif
+#ifdef HAVE_REOS3_H
+        case EOSREOS3:
+            fprintf(stderr, "EOSSofRhoU not implemented for material %d\n",material->iMat);
+            assert(0);
+            break;
+#endif
+        default:
+            fprintf(stderr, "EOSSofRhoU was called for the unknown material %d.\n",material->iMat);
+            assert(0);
+    }
+
+    return S;
+}
+
+/*
+ * Calculates the entropy S(rho, T) for a material
+ *
+ * Required: none
+ */
+double EOSSofRhoT(EOSMATERIAL *material, double rho, double T)
+{
+    double S = 0;
+
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            fprintf(stderr, "EOSSofRhoT not implemented for material %d\n",material->iMat);
+            assert(0);
+            break;
+#ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
+            fprintf(stderr, "EOSSofRhoT not implemented for material %d\n",material->iMat);
+            assert(0);
+            break;
+#endif
+#ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
+            S = ANEOSSofRhoT(material->ANEOSmaterial, rho, T);
+            break;
+#endif
+#ifdef HAVE_REOS3_H
+        case EOSREOS3:
+            fprintf(stderr, "EOSSofRhoT not implemented for material %d\n",material->iMat);
+            assert(0);
+            break;
+#endif
+        default:
+            fprintf(stderr, "EOSSofRhoU was called for the unknown material %d.\n",material->iMat);
+            assert(0);
+    }
+
+    return S;
+}
+
+/*
  * Calculates the temperature T(rho,u) for a material
  *
  * Required: all
