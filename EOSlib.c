@@ -136,6 +136,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->scvheosmaterial = scvheosInitMaterial(iMat, dKpcUnit, dMsolUnit);
         material->rho0 = material->scvheosmaterial->rho0;
         material->bEntropyTableInit = EOS_TRUE;
+        material->bEntropy = EOS_TRUE;
         // How do we define a minimum sound speed and reference density for H and He?
         material->minSoundSpeed = 0.0;
 #else
@@ -343,11 +344,6 @@ double EOSPofRhoT(EOSMATERIAL *material, double rho, double T)
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
             P = reos3PofRhoT(material->reos3material, rho, T);
-            break;
-#endif
-#ifdef HAVE_SCVHEOS_H
-        case EOSSCVHEOS:
-            scvheosPofRhoT(material->scvheosmaterial, rho, T);
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
@@ -585,6 +581,12 @@ double EOSSofRhoU(EOSMATERIAL *material, double rho, double u)
             assert(0);
             break;
 #endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            double T = scvheosTofRhoU(material->scvheosmaterial, rho, u);
+            S = scvheosSofRhoT(material->scvheosmaterial, rho, T);
+            break;
+#endif
         default:
             fprintf(stderr, "EOSSofRhoU was called for the unknown material %d.\n",material->iMat);
             assert(0);
@@ -625,6 +627,11 @@ double EOSSofRhoT(EOSMATERIAL *material, double rho, double T)
         case EOSREOS3:
             fprintf(stderr, "EOSSofRhoT not implemented for material %d\n",material->iMat);
             assert(0);
+            break;
+#endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            scvheosSofRhoT(material->scvheosmaterial, rho, T);
             break;
 #endif
         default:
