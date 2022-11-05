@@ -46,6 +46,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
     material = (EOSMATERIAL *) calloc(1, sizeof(EOSMATERIAL));
     material->iMat = iMat;
     material->bEntropyTableInit = EOS_FALSE;
+    material->bEntropy = EOS_FALSE;
 
     if (iMat == MAT_IDEALGAS)
     {
@@ -67,6 +68,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->minSoundSpeed = 0;
         /* No entropy look up table required. */
         material->bEntropyTableInit = EOS_TRUE;
+        material->bEntropy = EOS_TRUE;
         strcpy(material->MatString, "IDEAL GAS");
     } else if (iMat>=MAT_TILLOTSON_MIN && iMat<=MAT_TILLOTSON_MAX)
     {
@@ -98,6 +100,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->rho0 = ANEOSgetRho0(material->ANEOSmaterial);
         // The entropy look up table is initialized in ANEOSinitMaterial
         material->bEntropyTableInit = EOS_TRUE;
+        material->bEntropy = EOS_TRUE;
         material->minSoundSpeed = ANEOSCofRhoT(material->ANEOSmaterial, material->rho0, material->ANEOSmaterial->TAxis[0]);
         strcpy(material->MatString, material->ANEOSmaterial->matName);
 #else
@@ -126,6 +129,8 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         fprintf(stderr, "EOSinitMaterial: iMat %i does not exist.\n",iMat);
     }
 
+    /* Make sure that the flags are sent consistently. */
+    if (material->bEntropy) assert(material->bEntropyTableInit);
     return material;
 }
 
@@ -481,6 +486,8 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
 double EOSSofRhoU(EOSMATERIAL *material, double rho, double u)
 {
     double S = 0;
+    
+    if (!material->bEntropy) return -1e-50;
 
     switch(material->matType)
     {
@@ -521,6 +528,8 @@ double EOSSofRhoU(EOSMATERIAL *material, double rho, double u)
 double EOSSofRhoT(EOSMATERIAL *material, double rho, double T)
 {
     double S = 0;
+
+    if (!material->bEntropy) return -1e-50;
 
     switch(material->matType)
     {

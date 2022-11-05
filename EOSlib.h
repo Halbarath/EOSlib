@@ -85,6 +85,7 @@ typedef struct EOSmaterial
 	int matType; // Material type, e.g., 0: ideal gas, 1: Tillotson, 2: ANEOS
 	double rho0; // reference density
 	int bEntropyTableInit; // flag to signal if the entropy table is initialized
+    int bEntropy; // flag to signal if the eos has entropy available
 	double minSoundSpeed; // sound speed at reference values
     char MatString[256];
     IGEOSMAT *igeosmaterial; // Pointer to ideal gas material
