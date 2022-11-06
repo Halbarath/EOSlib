@@ -556,7 +556,7 @@ double EOSSofRhoU(EOSMATERIAL *material, double rho, double u)
 {
     double S = 0;
     
-    if (!material->bEntropy) return -1e-50;
+    if (!material->bEntropy) return -1e50;
 
     switch(material->matType)
     {
