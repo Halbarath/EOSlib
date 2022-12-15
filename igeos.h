@@ -52,7 +52,7 @@ double igeosIsentropicU(IGEOSMAT *Mat, double rho1, double u1, double rho2);
 double igeosTofRhoU(IGEOSMAT *Mat, double rho, double u);
 double igeosUofRhoT(IGEOSMAT *Mat, double rho, double T);
 double igeosRhoofPT(IGEOSMAT *Mat, double P, double T);
-double igeosRhoofUT(IGEOSMAT *Mat, double P, double T);
+double igeosRhoofUT(IGEOSMAT *Mat, double U, double T);
 double igeosdPdRho(IGEOSMAT *Mat, double rho, double u);
 double igeosdPdU(IGEOSMAT *Mat, double rho, double u);
 

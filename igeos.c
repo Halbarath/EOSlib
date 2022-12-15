@@ -120,12 +120,12 @@ double igeosUofRhoT(IGEOSMAT *Mat, double rho, double T) {
 
 /* Calculate rho(P, T). */
 double igeosRhoofPT(IGEOSMAT *Mat, double P, double T) {
-    assert(0);
-    return 0;
+    return P / ((Mat->dConstGamma - 1.0) * Mat->cv * T);
 }
 
 /* Calculate rho(U, T). */
-double igeosRhoofUT(IGEOSMAT *Mat, double P, double T) {
+double igeosRhoofUT(IGEOSMAT *Mat, double U, double T) {
+    // This is undefined, as cv is constant (both u(rho,T) and T(rho,u) do not use rho)
     assert(0);
     return 0;
 }
