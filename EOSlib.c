@@ -125,6 +125,24 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         fprintf(stderr,"Tried to initialize an reos3 material, but the reos3 library is absent.\n");
         assert(0);
 #endif
+    } else if ((iMat >= MAT_SCVHEOS_MIN) && (iMat <= MAT_SCVHEOS_MAX)) {
+#ifdef HAVE_SCVHEOS_H
+        /* Check if the SCVHEOS library has the right version. */
+        if (SCVHEOS_VERSION_MAJOR != 1) {
+            fprintf(stderr, "EOSinitMaterial: SCvH EOS library has the wrong version (%s)\n", SCVHEOS_VERSION_TEXT);
+            exit(1);
+        }
+        material->matType = EOSSCVHEOS;
+        material->scvheosmaterial = scvheosInitMaterial(iMat, dKpcUnit, dMsolUnit);
+        material->rho0 = material->scvheosmaterial->rho0;
+        material->bEntropyTableInit = EOS_TRUE;
+        material->bEntropy = EOS_TRUE;
+        // How do we define a minimum sound speed and reference density for H and He?
+        material->minSoundSpeed = 0.0;
+#else
+        fprintf(stderr,"Tried to initialize an SCvH EOS material, but the SCvH EOS library is absent.\n");
+        assert(0);
+#endif
     } else {
         fprintf(stderr, "EOSinitMaterial: iMat %i does not exist.\n",iMat);
     }
@@ -165,6 +183,12 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
             //assert(0);
             break;
 #endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            // nothing to do
+            if (material->bEntropyTableInit != EOS_TRUE) material->bEntropyTableInit = EOS_TRUE;
+            break;
+#endif
         default:
             fprintf(stderr, "EOSinitIsentropicLookup was called for the unknown material %d.\n",material->iMat);
             assert(0);
@@ -196,6 +220,11 @@ void EOSfinalizeMaterial(EOSMATERIAL *material)
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
             reos3FinalizeMaterial(material->reos3material);
+            break;
+#endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            scvheosFinalizeMaterial(material->scvheosmaterial);
             break;
 #endif
         default:
@@ -234,6 +263,12 @@ void EOSPrintMat(EOSMATERIAL *material, FILE *fp)
             reos3PrintMat(material->reos3material, fp);
             break;
 #endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            // Not implemented yet.
+            scvheosPrintMat(material->scvheosmaterial, fp);
+            break;
+#endif
         default:
             fprintf(stderr, "EOSPrintMat was called for the unknown material %d.\n",material->iMat);
             assert(0);
@@ -267,6 +302,11 @@ double EOSPofRhoU(EOSMATERIAL *material, double rho, double u)
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
             P = reos3PofRhoU(material->reos3material, rho, u);
+            break;
+#endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            P = scvheosPofRhoU(material->scvheosmaterial, rho, u);
             break;
 #endif
         default:
@@ -306,6 +346,11 @@ double EOSPofRhoT(EOSMATERIAL *material, double rho, double T)
             P = reos3PofRhoT(material->reos3material, rho, T);
             break;
 #endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            scvheosPofRhoT(material->scvheosmaterial, rho, T);
+            break;
+#endif
         default:
             fprintf(stderr, "EOSPofRhoT was called for the unknown material %d.\n",material->iMat);
             assert(0);
@@ -341,6 +386,11 @@ double EOSCofRhoU(EOSMATERIAL *material, double rho, double u)
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
             c = reos3CsofRhoU(material->reos3material, rho, u);
+            break;
+#endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            c = scvheosCsofRhoU(material->scvheosmaterial, rho, u);
             break;
 #endif
         default:
@@ -385,6 +435,13 @@ double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c)
             T = reos3TofRhoU(material->reos3material, rho, u);
             P = reos3PofRhoT(material->reos3material, rho, T);
             *c = reos3CsofRhoT(material->reos3material, rho, T);
+            break;
+#endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            T = scvheosTofRhoU(material->scvheosmaterial, rho, u);
+            P = scvheosPofRhoT(material->scvheosmaterial, rho, T);
+            *c = scvheosCsofRhoT(material->scvheosmaterial, rho, T);
             break;
 #endif
         default:
@@ -432,6 +489,13 @@ double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, doub
             *c = reos3CsofRhoT(material->reos3material, rho, *T);
             break;
 #endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            *T = scvheosTofRhoU(material->scvheosmaterial, rho, u);
+            P = scvheosPofRhoT(material->scvheosmaterial, rho, *T);
+            *c = scvheosCsofRhoT(material->scvheosmaterial, rho, *T);
+            break;
+#endif
         default:
             fprintf(stderr, "EOSPCTofRhoU was called for the unknown material %d.\n",material->iMat);
             assert(0);
@@ -468,6 +532,11 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
             // Not implemented yet
             //u2 = reos3IsentropicU(material->reos3material, rho1, u1, rho2);
             assert(0);
+            break;
+#endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            u2 = scvheosIsentropicU(material->scvheosmaterial, rho1, u1, rho2);
             break;
 #endif
         default:
@@ -512,6 +581,12 @@ double EOSSofRhoU(EOSMATERIAL *material, double rho, double u)
             assert(0);
             break;
 #endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            double T = scvheosTofRhoU(material->scvheosmaterial, rho, u);
+            S = scvheosSofRhoT(material->scvheosmaterial, rho, T);
+            break;
+#endif
         default:
             fprintf(stderr, "EOSSofRhoU was called for the unknown material %d.\n",material->iMat);
             assert(0);
@@ -554,6 +629,11 @@ double EOSSofRhoT(EOSMATERIAL *material, double rho, double T)
             assert(0);
             break;
 #endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            scvheosSofRhoT(material->scvheosmaterial, rho, T);
+            break;
+#endif
         default:
             fprintf(stderr, "EOSSofRhoU was called for the unknown material %d.\n",material->iMat);
             assert(0);
@@ -588,6 +668,11 @@ double EOSTofRhoU(EOSMATERIAL *material, double rho, double u)
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
             T = reos3TofRhoU(material->reos3material, rho, u);
+            break;
+#endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            T = scvheosTofRhoU(material->scvheosmaterial, rho, u);
             break;
 #endif
         default:
@@ -626,6 +711,11 @@ double EOSUofRhoT(EOSMATERIAL *material, double rho, double T)
             u = reos3UofRhoT(material->reos3material, rho, T);
             break;
 #endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            u = scvheosUofRhoT(material->scvheosmaterial, rho, T);
+            break;
+#endif
         default:
             fprintf(stderr, "EOSUofRhoT was called for the unknown material %d.\n",material->iMat);
             assert(0);
@@ -660,6 +750,11 @@ double EOSRhoofPT(EOSMATERIAL *material, double p, double T)
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
             rho = reos3RhoofPT(material->reos3material, p, T);
+            break;
+#endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            rho = scvheosRhoofPT(material->scvheosmaterial, p, T);
             break;
 #endif
         default:
@@ -697,6 +792,12 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
+            // Not implemented, return rho=0.
+            assert(0);
+            break;
+#endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
             // Not implemented, return rho=0.
             assert(0);
             break;
@@ -776,6 +877,16 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
             if (iret == REOS3_OUTSIDE_TMAX) return EOS_OUTSIDE_VMAX;
             break;
 #endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            iret = scvheosIsInExtrapLimit(material->scvheosmaterial, rho, u);
+            if (iret == SCVHEOS_SUCCESS) return EOS_SUCCESS;
+            if (iret == SCVHEOS_OUTSIDE_RHOMIN) return EOS_OUTSIDE_RHOMIN;
+            if (iret == SCVHEOS_OUTSIDE_RHOMAX) return EOS_OUTSIDE_RHOMAX;
+            if (iret == SCVHEOS_OUTSIDE_TMIN) return EOS_OUTSIDE_VMIN;
+            if (iret == SCVHEOS_OUTSIDE_TMAX) return EOS_OUTSIDE_VMAX;
+            break;
+#endif
         default:
             fprintf(stderr, "EOSIsInTable was called for the unknown material %d.\n",material->iMat);
             assert(0);
@@ -811,6 +922,11 @@ double EOSdPdRho(EOSMATERIAL *material, double rho, double u)
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
             dPdRho = reos3dPdRhoofRhoU(material->reos3material, rho, u);
+            break;
+#endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            dPdRho = scvheosdPdRhoofRhoU(material->scvheosmaterial, rho, u);
             break;
 #endif
         default:
@@ -849,6 +965,11 @@ double EOSdPdU(EOSMATERIAL *material, double rho, double u)
             dPdU = reos3dPdUofRhoU(material->reos3material, rho, u);
             break;
 #endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            dPdU = scvheosdPdUofRhoU(material->scvheosmaterial, rho, u);
+            break;
+#endif
         default:
             fprintf(stderr, "EOSdPdU was called for the unknown material %d.\n",material->iMat);
             assert(0);
@@ -883,6 +1004,11 @@ double EOSdUdRho(EOSMATERIAL *material, double rho, double u)
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
             dUdRho = reos3dUdRhoofRhoU(material->reos3material, rho, u);
+            break;
+#endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            dUdRho = scvheosPofRhoU(material->scvheosmaterial, rho, u) / (rho * rho);
             break;
 #endif
         default:
@@ -923,6 +1049,11 @@ double EOSdPdRhoofRhoT(EOSMATERIAL *material, double rho, double T)
             dPdRho = reos3dPdRhoofRhoT(material->reos3material, rho, T);
             break;
 #endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            dPdRho = scvheosdPdRhoofRhoT(material->scvheosmaterial, rho, T);
+            break;
+#endif
         default:
             fprintf(stderr, "EOSdPdRhoatT was called for the unknown material %d.\n",material->iMat);
             assert(0);
@@ -961,6 +1092,11 @@ double EOSdPdT(EOSMATERIAL *material, double rho, double T)
             dPdT = reos3dPdTofRhoT(material->reos3material, rho, T);
             break;
 #endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            dPdT = scvheosdPdTofRhoT(material->scvheosmaterial, rho, T);
+            break;
+#endif
         default:
             fprintf(stderr, "EOSdPdT was called for the unknown material %d.\n",material->iMat);
             assert(0);
@@ -977,6 +1113,8 @@ double EOSdPdT(EOSMATERIAL *material, double rho, double T)
 double EOSUCold(EOSMATERIAL *material, double rho)
 {
     double ucold = 0;
+    double logrho = log10(rho);
+
     switch(material->matType)
     {
         case EOSIDEALGAS:
@@ -997,6 +1135,13 @@ double EOSUCold(EOSMATERIAL *material, double rho)
         case EOSREOS3:
             // For REOS3 temperatures below T_min cause problems
             ucold = reos3UofRhoT(material->reos3material, rho, material->reos3material->TAxis[0]);
+            break;
+#endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            // Limit temperatures to LogTMin
+            ucold = scvheosLogUofLogRhoLogT(material->scvheosmaterial, logrho, material->scvheosmaterial->LogTMin);
+            ucold = pow(material->scvheosmaterial->dLogBase, ucold);
             break;
 #endif
         default:
