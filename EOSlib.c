@@ -555,7 +555,9 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
 double EOSSofRhoU(EOSMATERIAL *material, double rho, double u)
 {
     double S = 0;
-    
+    /* Only used for SCvH EOS. */
+    double T = 0.0;
+
     if (!material->bEntropy) return -1e50;
 
     switch(material->matType)
@@ -583,7 +585,7 @@ double EOSSofRhoU(EOSMATERIAL *material, double rho, double u)
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
-            double T = scvheosTofRhoU(material->scvheosmaterial, rho, u);
+            T = scvheosTofRhoU(material->scvheosmaterial, rho, u);
             S = scvheosSofRhoT(material->scvheosmaterial, rho, T);
             break;
 #endif
