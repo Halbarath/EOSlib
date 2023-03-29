@@ -348,7 +348,7 @@ double EOSPofRhoT(EOSMATERIAL *material, double rho, double T)
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
-            scvheosPofRhoT(material->scvheosmaterial, rho, T);
+            P = scvheosPofRhoT(material->scvheosmaterial, rho, T);
             break;
 #endif
         default:
@@ -631,7 +631,7 @@ double EOSSofRhoT(EOSMATERIAL *material, double rho, double T)
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
-            scvheosSofRhoT(material->scvheosmaterial, rho, T);
+            S = scvheosSofRhoT(material->scvheosmaterial, rho, T);
             break;
 #endif
         default:
