@@ -1125,7 +1125,7 @@ double EOSGammaofRhoT(EOSMATERIAL *material, double rho, double T){
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            u = tillURhoTemp(material->tillmaterial, rho, T)
+            u = tillURhoTemp(material->tillmaterial, rho, T);
             tillPressureSound(material->tillmaterial, rho, u, c);
             break;
 #endif
