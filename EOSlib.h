@@ -150,6 +150,8 @@ double EOSdUdRho(EOSMATERIAL *material, double rho, double u);
 double EOSdPdRhoofRhoT(EOSMATERIAL *material, double rho, double T);
 double EOSdPdT(EOSMATERIAL *material, double rho, double T);
 
+double EOSGammaofRhoT(EOSMATERIAL *material, double rho, double T);
+
 double EOSUCold(EOSMATERIAL *material, double rho);
 
 // Boundary condition solver

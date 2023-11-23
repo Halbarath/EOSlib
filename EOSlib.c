@@ -1108,6 +1108,49 @@ double EOSdPdT(EOSMATERIAL *material, double rho, double T)
 }
 
 /*
+ * Calculate the shear modulus Gamma(rho,T)
+ * using a fixed guessed Poisson ratio nu
+ */
+double EOSGammaofRhoT(EOSMATERIAL *material, double rho, double T){
+    // We guess nu = 0.25 as "normal" materials have nu \in [0.2,0.3]
+    // and the difference in the resulting shear modulus is less then 25%
+    double nu = 0.25;
+    double c = 0.0;
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            double u = igeosUofRhoT(material->igeosmaterial, rho, T);
+            igeosPCofRhoU(material->igeosmaterial, rho, u, &c);
+            break;
+#ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
+            tillPressureSoundRhoT(material->tillmaterial, rho, T, c);
+            break;
+#endif
+#ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
+            c = ANEOSCofRhoT(material->ANEOSmaterial, rho, T);
+            break;
+#endif
+#ifdef HAVE_REOS3_H
+        case EOSREOS3:
+            c = reos3CsofRhoT(material->reos3material, rho, T);
+            break;
+#endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            c = scvheosCsofRhoT(material->scvheosmaterial, rho, T);
+            break;
+#endif
+        default:
+            fprintf(stderr, "EOSPCTofRhoU was called for the unknown material %d.\n",material->iMat);
+            assert(0);
+    }
+    double bulkModulus = rho * c * c;
+    return bulkModulus * 3.0 * (1.0 - 2.0 * nu) / (2.0 * (1.0 + nu));
+}
+
+/*
  * Calculate the cold part of the internal energy, i.e., u(rho, T=0).
  *
  * Required: internal
