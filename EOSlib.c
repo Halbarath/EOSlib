@@ -1116,15 +1116,17 @@ double EOSGammaofRhoT(EOSMATERIAL *material, double rho, double T){
     // and the difference in the resulting shear modulus is less then 25%
     double nu = 0.25;
     double c = 0.0;
+    double u = 0.0; // for those eos that do not have CofRhoT functions
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            double u = igeosUofRhoT(material->igeosmaterial, rho, T);
+            u = igeosUofRhoT(material->igeosmaterial, rho, T);
             igeosPCofRhoU(material->igeosmaterial, rho, u, &c);
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            tillPressureSoundRhoT(material->tillmaterial, rho, T, c);
+            u = tillURhoTemp(material->tillmaterial, rho, T)
+            tillPressureSound(material->tillmaterial, rho, u, c);
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
