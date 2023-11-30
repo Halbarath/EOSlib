@@ -44,6 +44,9 @@ calcColdcurveEnergy: calcColdcurveEnergy.o $(objects)
 writeColdCurve: writeColdCurve.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
+callEOSlibforMixing: callEOSlibforMixing.o $(objects)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+
 clean:
 	rm -f $(execs) $(objects)
 
