@@ -83,6 +83,9 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->rho0 = material->tillmaterial->rho0;
         material->minSoundSpeed = sqrt(material->tillmaterial->A/material->tillmaterial->rho0);
         tilliMatString(material->tillmaterial, material->MatString);
+        // Needed to convert internal energy to temperature
+        tillInitLookup(material->tillmaterial, 1000, 1000, 1e-4, 200.0, 1200.0);
+        material->bEntropyTableInit = EOS_TRUE;
 #else
         fprintf(stderr,"Tried to initialize a Tillotson material, but the Tillotson library is absent.\n");
         assert(0);
