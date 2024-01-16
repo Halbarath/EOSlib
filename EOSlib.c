@@ -564,12 +564,12 @@ double EOSSofRhoU(EOSMATERIAL *material, double rho, double u)
     {
         case EOSIDEALGAS:
             fprintf(stderr, "EOSSofRhoU not implemented for material %d\n",material->iMat);
-            assert(0);
+            return -1e50;
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
             fprintf(stderr, "EOSSofRhoU not implemented for material %d\n",material->iMat);
-            assert(0);
+            return -1e50;
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
