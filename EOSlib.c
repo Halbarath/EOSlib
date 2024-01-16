@@ -158,10 +158,11 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 /*
  * Initialize the lookup tables needed for the isentropoic evolution
  *
- * Required: pkdgrav3 (ISPH), gasoline (ISPH), fix initial conditions
+ * Required: pkdgrav3, gasoline (ISPH), fix initial conditions
  */
 void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data)
 {
+    if (material->bEntropyTableInit == EOS_TRUE) return;
     switch(material->matType)
     {
         case EOSIDEALGAS:
