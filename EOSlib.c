@@ -83,6 +83,9 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->rho0 = material->tillmaterial->rho0;
         material->minSoundSpeed = sqrt(material->tillmaterial->A/material->tillmaterial->rho0);
         tilliMatString(material->tillmaterial, material->MatString);
+        // Needed to convert internal energy to temperature
+        tillInitLookup(material->tillmaterial, 1000, 1000, 1e-4, 200.0, 1200.0);
+        material->bEntropyTableInit = EOS_TRUE;
 #else
         fprintf(stderr,"Tried to initialize a Tillotson material, but the Tillotson library is absent.\n");
         assert(0);
@@ -155,10 +158,11 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 /*
  * Initialize the lookup tables needed for the isentropoic evolution
  *
- * Required: pkdgrav3 (ISPH), gasoline (ISPH), fix initial conditions
+ * Required: pkdgrav3, gasoline (ISPH), fix initial conditions
  */
 void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data)
 {
+    if (material->bEntropyTableInit == EOS_TRUE) return;
     switch(material->matType)
     {
         case EOSIDEALGAS:
