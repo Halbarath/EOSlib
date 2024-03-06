@@ -1232,19 +1232,33 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
     /*
      * We use rho1 as an upper limit for rho2 assuming that the denser component is in the inner shell.
      */
-    a = 90; // hard coded maximum
+    a = rho1;
     ua = EOSUofRhoT(material2, a, T);
     Pa = EOSPofRhoU(material2, a, ua);
+
+    while (Pa < P) {
+        a *= 1.1;
+        ua = EOSUofRhoT(material2, a, T);
+        Pa = EOSPofRhoU(material2, a, ua);
+    }
 
     b = 0.999*material2->rho0; // hard coded minimum
     ub = EOSUofRhoT(material2, b, T);
     Pb = EOSPofRhoU(material2, b, ub);
+
+    while (Pb > P) {
+        b *= 0.9;
+        ub = EOSUofRhoT(material2, b, T);
+        Pb = EOSPofRhoU(material2, b, ub);
+    }
 
     /*
      * Assert that the root is bracketed by (a, b).
      */
     if (Pa < P || Pb > P)
     {
+        //CR: debug
+        fprintf(stderr, "P= %g T= %g: a= %g ua= %g Pa= %g b= %g ub= %g Pb= %g\n",P, T, a, ua, Pa, b, ub, Pb);
         return iRet;
     }
 
