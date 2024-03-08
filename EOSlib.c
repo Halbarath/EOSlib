@@ -649,6 +649,107 @@ double EOSSofRhoT(EOSMATERIAL *material, double rho, double T)
 }
 
 /*
+ * Check if EOS can do yield strength
+ */
+int EOSCanDoYield(EOSMATERIAL *material){
+    double canDoYield = 0;
+
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            canDoYield = 1;
+            break;
+#ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
+            canDoYield = 0; // Change this if/when yield is added to tillotson
+            break;
+#endif
+#ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
+            canDoYield = ANEOSYieldParameters(material->ANEOSmaterial, NULL, NULL, NULL, NULL);
+            break;
+#endif
+#ifdef HAVE_REOS3_H
+        case EOSREOS3:
+            canDoYield = 1;
+            break;
+#endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            canDoYield = 1;
+            break;
+#endif
+        default:
+            fprintf(stderr, "EOSCanDoYield was called for the unknown material %d.\n",material->iMat);
+            assert(0);
+    }
+
+    return canDoYield;
+}
+
+/*
+ * Calculate strength limiter
+ */
+double EOSYieldStrength(EOSMATERIAL *material, double rho, double u) {
+    double Y = 0.0;
+    int yieldStrengthModel;
+    double Y0; // Yield strength at 0 pressure
+    double YM; // Yield strength at infinite pressure
+    double mui; // coefficient of internal friction
+    double xi; // thermal softening parameter
+    double Tmelt;
+    double T;
+    double P;
+
+    switch(material->matType)
+    {
+        case EOSIDEALGAS:
+            yieldStrengthModel = 0; // No yield strength for gas type EOS
+            break;
+#ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
+            fprintf(stderr, "EOSYieldStrength not implemented for material %d\n",material->iMat);
+            assert(0);
+            break;
+#endif
+#ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
+            yieldStrengthModel = ANEOSYieldParameters(material->ANEOSmaterial, &Y0, &YM, &mui, &xi);
+            Tmelt = ANEOSTmeltofRho(material->ANEOSmaterial, rho);
+            T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);
+            printf("T = %g, Tmelt = %g\n",T,Tmelt);
+            P = ANEOSPofRhoT(material->ANEOSmaterial, rho, T);
+            break;
+#endif
+#ifdef HAVE_REOS3_H
+        case EOSREOS3:
+            yieldStrengthModel = 0; // No yield strength for gas type EOS
+            break;
+#endif
+#ifdef HAVE_SCVHEOS_H
+        case EOSSCVHEOS:
+            yieldStrengthModel = 0; // No yield strength for gas type EOS
+            break;
+#endif
+        default:
+            fprintf(stderr, "EOSCanDoYield was called for the unknown material %d.\n",material->iMat);
+            assert(0);
+    }
+
+    /*
+     * Here we distinguish between the different yield strength models
+     * 0: No yield strength
+     * 1: Drucker-Prager yield strength
+     * When adding more types, below statement has to be changed to either a switch case or an if tree
+     */
+    if (yieldStrengthModel) {
+        Y = (Y0 + mui * P / (1 + mui * P / (YM - Y0))) * fmax(tanh(xi * (Tmelt / T - 1.0)), 0.0);
+    }
+
+    return Y;
+}
+
+/*
  * Calculates the temperature T(rho,u) for a material
  *
  * Required: all
