@@ -717,7 +717,6 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u) {
             yieldStrengthModel = ANEOSYieldParameters(material->ANEOSmaterial, &Y0, &YM, &mui, &xi);
             Tmelt = ANEOSTmeltofRho(material->ANEOSmaterial, rho);
             T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);
-            printf("T = %g, Tmelt = %g\n",T,Tmelt);
             P = ANEOSPofRhoT(material->ANEOSmaterial, rho, T);
             break;
 #endif
