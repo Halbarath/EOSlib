@@ -649,34 +649,34 @@ double EOSSofRhoT(EOSMATERIAL *material, double rho, double T)
 }
 
 /*
- * Check if EOS can do yield strength
+ * Return yield model
  */
-int EOSCanDoYield(EOSMATERIAL *material){
-    double canDoYield = 0;
+int EOSYieldModel(EOSMATERIAL *material){
+    double yieldStrengthModel = 0;
 
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            canDoYield = 1;
+            yieldStrengthModel = 0;
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            canDoYield = 0; // Change this if/when yield is added to tillotson
+            yieldStrengthModel = -1; // Change this if/when yield is added to tillotson
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
         case EOSANEOS:
-            canDoYield = ANEOSYieldParameters(material->ANEOSmaterial, NULL, NULL, NULL, NULL);
+            yieldStrengthModel = ANEOSYieldParameters(material->ANEOSmaterial, NULL, NULL, NULL, NULL);
             break;
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            canDoYield = 1;
+            yieldStrengthModel = 0;
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
-            canDoYield = 1;
+            yieldStrengthModel = 0;
             break;
 #endif
         default:
@@ -684,7 +684,7 @@ int EOSCanDoYield(EOSMATERIAL *material){
             assert(0);
     }
 
-    return canDoYield;
+    return yieldStrengthModel;
 }
 
 /*
@@ -738,11 +738,12 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u) {
 
     /*
      * Here we distinguish between the different yield strength models
-     * 0: No yield strength
+     * -1: No yield stress
+     * 0: No limiter, so yield strength returned is irrelevant, because its not called.
      * 1: Drucker-Prager yield strength
      * When adding more types, below statement has to be changed to either a switch case or an if tree
      */
-    if (yieldStrengthModel) {
+    if (yieldStrengthModel > 0) {
         Y = (Y0 + mui * P / (1 + mui * P / (YM - Y0))) * fmax(tanh(xi * (Tmelt / T - 1.0)), 0.0);
     }
 
@@ -1225,8 +1226,8 @@ double EOSGammaofRhoT(EOSMATERIAL *material, double rho, double T){
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            u = igeosUofRhoT(material->igeosmaterial, rho, T);
-            igeosPCofRhoU(material->igeosmaterial, rho, u, &c);
+            // Gas does not have a shear modulus, so we set soundspeed to zero
+            c = 0.0;
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
@@ -1241,12 +1242,14 @@ double EOSGammaofRhoT(EOSMATERIAL *material, double rho, double T){
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            c = reos3CsofRhoT(material->reos3material, rho, T);
+            // Gas does not have a shear modulus, so we set soundspeed to zero
+            c = 0.0;
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
-            c = scvheosCsofRhoT(material->scvheosmaterial, rho, T);
+            // Gas does not have a shear modulus, so we set soundspeed to zero
+            c = 0.0;
             break;
 #endif
         default:

@@ -132,7 +132,7 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
 double EOSSofRhoU(EOSMATERIAL *material, double rho, double u);
 double EOSSofRhoT(EOSMATERIAL *material, double rho, double T);
 
-int EOSCanDoYield(EOSMATERIAL *material);
+int EOSYieldModel(EOSMATERIAL *material);
 double EOSYieldStrength(EOSMATERIAL *material, double rho, double u);
 
 // Inverse functions
