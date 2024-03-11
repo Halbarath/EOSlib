@@ -661,7 +661,7 @@ int EOSYieldModel(EOSMATERIAL *material){
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            yieldStrengthModel = -1; // Change this if/when yield is added to tillotson
+            yieldStrengthModel = -2; // Change this if/when yield is added to tillotson
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
