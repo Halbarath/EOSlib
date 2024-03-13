@@ -10,7 +10,7 @@ GSL_LIB = -lgsl -lgslcblas
 # Enable the use of the external libraries
 INCLUDES = -DHAVE_ANEOSMATERIAL_H -DHAVE_TILLOTSON_H -DHAVE_REOS3_H -DHAVE_SCVHEOS_H -I../ANEOSmaterial -I../tillotson -I../reos3 -I../scvh
 
-CFLAGS ?= -O3 -Wall -std=c99 $(INCLUDES)
+CFLAGS ?= -O3 -Wall $(INCLUDES)
 
 FFLAGS ?= $(CFLAGS)
 LIBS ?= -lm $(GSL_LIB)
