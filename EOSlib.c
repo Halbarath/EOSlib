@@ -1332,6 +1332,9 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
     P = EOSPofRhoU(material1, rho1, u1);
     T = EOSTofRhoU(material1, rho1, u1);
 
+    /* Add a temperature jump. */
+    T -= 1500.0;
+
     /*
      * We use rho1 as an upper limit for rho2 assuming that the denser component is in the inner shell.
      */
