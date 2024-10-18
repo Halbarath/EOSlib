@@ -1217,46 +1217,42 @@ double EOSdPdT(EOSMATERIAL *material, double rho, double T)
  * using a fixed guessed Poisson ratio nu
  */
 double EOSGammaofRhoT(EOSMATERIAL *material, double rho, double T){
-    // We guess nu = 0.25 as "normal" materials have nu \in [0.2,0.3]
-    // and the difference in the resulting shear modulus is less then 25%
-    double nu = 0.25;
-    double c = 0.0;
-    double u = 0.0; // for those eos that do not have CofRhoT functions
+    double Gamma = 0.0;
     switch(material->matType)
     {
         case EOSIDEALGAS:
             // Gas does not have a shear modulus, so we set soundspeed to zero
-            c = 0.0;
+            Gamma = 0.0;
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            u = tillURhoTemp(material->tillmaterial, rho, T);
-            tillPressureSound(material->tillmaterial, rho, u, &c);
+            // Tillotson has strength not implemented yet
+            fprintf(stderr, "EOSGammaofRhoT not implemented for material %d\n",material->iMat);
+            assert(0);
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
         case EOSANEOS:
-            c = ANEOSCofRhoT(material->ANEOSmaterial, rho, T);
+            Gamma = ANEOSGammaofRhoT(material->ANEOSmaterial, rho, T);
             break;
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
             // Gas does not have a shear modulus, so we set soundspeed to zero
-            c = 0.0;
+            Gamma = 0.0;
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
             // Gas does not have a shear modulus, so we set soundspeed to zero
-            c = 0.0;
+            Gamma = 0.0;
             break;
 #endif
         default:
-            fprintf(stderr, "EOSPCTofRhoU was called for the unknown material %d.\n",material->iMat);
+            fprintf(stderr, "EOSGammaofRhoT was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
-    double bulkModulus = rho * c * c;
-    return bulkModulus * 3.0 * (1.0 - 2.0 * nu) / (2.0 * (1.0 + nu));
+    return Gamma;
 }
 
 /*
