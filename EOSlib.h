@@ -42,8 +42,8 @@
 #ifdef HAVE_REOS3_H
     #include <reos3.h>
 #define REOS3_VERSION_MAJOR_REQUIRED 1
-#define REOS3_VERSION_MAJOR_REQUIRED 0
-#define REOS3_VERSION_MAJOR_REQUIRED 0
+#define REOS3_VERSION_MINOR_REQUIRED 0
+#define REOS3_VERSION_PATCH_REQUIRED 0
 #endif
 #ifdef HAVE_SCVHEOS_H
     #include <scvheos.h>
