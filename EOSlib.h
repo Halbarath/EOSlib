@@ -29,18 +29,33 @@
  
 #ifdef HAVE_TILLOTSON_H
     #include <tillotson.h>
+#define TILL_VERSION_MAJOR_REQUIRED 3
+#define TILL_VERSION_MINOR_REQUIRED 4
+#define TILL_VERSION_PATCH_REQUIRED 3
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
     #include <ANEOSmaterial.h>
+#define ANEOS_VERSION_MAJOR_REQUIRED 1
+#define ANEOS_VERSION_MINOR_REQUIRED 0
+#define ANEOS_VERSION_PATCH_REQUIRED 0
 #endif
 #ifdef HAVE_REOS3_H
     #include <reos3.h>
+#define REOS3_VERSION_MAJOR_REQUIRED 1
+#define REOS3_VERSION_MAJOR_REQUIRED 0
+#define REOS3_VERSION_MAJOR_REQUIRED 0
 #endif
 #ifdef HAVE_SCVHEOS_H
     #include <scvheos.h>
+#define SCVHEOS_VERSION_MAJOR_REQUIRED 1
+#define SCVHEOS_VERSION_MINOR_REQUIRED 0
+#define SCVHEOS_VERSION_PATCH_REQUIRED 0
 #endif
 
 #include "igeos.h"
+#define IGEOS_VERSION_MAJOR_REQUIRED 1
+#define IGEOS_VERSION_MINOR_REQUIRED 0
+#define IGEOS_VERSION_PATCH_REQUIRED 0
 
 #define EOS_VERSION_TEXT    "1.0.0"
 #define EOS_VERSION_MAJOR   1
@@ -119,6 +134,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data);
 void EOSfinalizeMaterial(EOSMATERIAL *material);
 void EOSPrintMat(EOSMATERIAL *material, FILE *fp);
+int EOSCheckVersions();
 
 // Access functions
 

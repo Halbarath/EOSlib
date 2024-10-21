@@ -48,14 +48,12 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
     material->bEntropyTableInit = EOS_FALSE;
     material->bEntropy = EOS_FALSE;
 
+    if (!EOSCheckVersions()) {
+        exit(1);
+    }
+
     if (iMat == MAT_IDEALGAS)
     {
-        /* Check if the igeos library has the right version. */
-        if ((IGEOS_VERSION_MAJOR * 10000 + IGEOS_VERSION_MINOR * 100 + IGEOS_VERSION_PATCH) < 10000) {
-            fprintf(stderr, "EOSinitMaterial: Ideal gas EOS library has an old version (%s). At least version 1.0.0 is needed.\n", IGEOS_VERSION_TEXT);
-            exit(1);
-        }
-
         assert(additional_data != NULL);
 
         /* Pass additional parameter to the ideal gas EOS library. */
@@ -73,11 +71,6 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
     } else if (iMat>=MAT_TILLOTSON_MIN && iMat<=MAT_TILLOTSON_MAX)
     {
 #ifdef HAVE_TILLOTSON_H
-        /* Check if the Tillotson library has the right version. */
-        if ((TILL_VERSION_MAJOR * 10000 + TILL_VERSION_MINOR * 100 + TILL_VERSION_PATCH) < 30403) {
-            fprintf(stderr, "EOSinitMaterial: Tillotson library has an old version (%s). At least version 3.4.3 is needed.\n", TILL_VERSION_TEXT);
-            exit(1);
-        }
         material->matType = EOSTILLOTSON;
         material->tillmaterial = tillInitMaterial(iMat, dKpcUnit, dMsolUnit);
         material->rho0 = material->tillmaterial->rho0;
@@ -93,11 +86,6 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
     } else if (iMat>=MAT_ANEOS_MIN && iMat <=MAT_ANEOS_MAX)
     {
 #ifdef HAVE_ANEOSMATERIAL_H
-        /* Check if the ANEOS library has the right version. */
-        if ((ANEOS_VERSION_MAJOR * 10000 + ANEOS_VERSION_MINOR * 100 + ANEOS_VERSION_PATCH) < 10000) {
-            fprintf(stderr, "EOSinitMaterial: ANEOS library has an old version (%s). At least version 1.0.0 is needed.\n", ANEOS_VERSION_TEXT);
-            exit(1);
-        }
         material->matType = EOSANEOS;
         material->ANEOSmaterial = ANEOSinitMaterial(iMat, dKpcUnit, dMsolUnit);
         material->rho0 = ANEOSgetRho0(material->ANEOSmaterial);
@@ -112,11 +100,6 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 #endif
     } else if ((iMat >= MAT_REOS3_MIN) && (iMat <= MAT_REOS3_MAX)) {
 #ifdef HAVE_REOS3_H
-        /* Check if the REOS3 library has the right version. */
-        if ((REOS3_VERSION_MAJOR * 10000 + REOS3_VERSION_MINOR * 100 + REOS3_VERSION_PATCH) < 10000) {
-            fprintf(stderr, "EOSinitMaterial: REOS3 library has an old version (%s). At least version 1.0.0 is needed.\n", REOS3_VERSION_TEXT);
-            exit(1);
-        }
         material->matType = EOSREOS3;
         material->reos3material = reos3InitMaterial(iMat, dKpcUnit, dMsolUnit, TRUE);
         material->rho0 = material->reos3material->rho0;
@@ -130,11 +113,6 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 #endif
     } else if ((iMat >= MAT_SCVHEOS_MIN) && (iMat <= MAT_SCVHEOS_MAX)) {
 #ifdef HAVE_SCVHEOS_H
-        /* Check if the SCVHEOS library has the right version. */
-        if ((SCVHEOS_VERSION_MAJOR * 10000 + SCVHEOS_VERSION_MINOR * 100 + SCVHEOS_VERSION_PATCH) < 10000) {
-            fprintf(stderr, "EOSinitMaterial: SCvH EOS library has an old version (%s). At least version 1.0.0 is needed.\n", SCVHEOS_VERSION_TEXT);
-            exit(1);
-        }
         material->matType = EOSSCVHEOS;
         material->scvheosmaterial = scvheosInitMaterial(iMat, dKpcUnit, dMsolUnit);
         material->rho0 = material->scvheosmaterial->rho0;
@@ -277,6 +255,46 @@ void EOSPrintMat(EOSMATERIAL *material, FILE *fp)
             fprintf(stderr, "EOSPrintMat was called for the unknown material %d.\n",material->iMat);
             assert(0);
     }
+}
+
+/*
+ * Check if all sublibraries have the correct version
+ */
+int EOSCheckVersions() {
+    int result = 1;
+    if ((IGEOS_VERSION_MAJOR * 10000 + IGEOS_VERSION_MINOR * 100 + IGEOS_VERSION_PATCH) < (IGEOS_VERSION_MAJOR_REQUIRED * 10000 + IGEOS_VERSION_MINOR_REQUIRED * 100 + IGEOS_VERSION_PATCH_REQUIRED)) {
+        fprintf(stderr, "EOSinitMaterial: Ideal gas EOS library has an old version (%s). At least version %d.%d.%d is needed.\n", IGEOS_VERSION_TEXT,IGEOS_VERSION_MAJOR_REQUIRED,IGEOS_VERSION_MINOR_REQUIRED,IGEOS_VERSION_PATCH_REQUIRED);
+        result = 0;
+    }
+#ifdef HAVE_TILLOTSON_H
+    /* Check if the Tillotson library has the right version. */
+    if ((TILL_VERSION_MAJOR * 10000 + TILL_VERSION_MINOR * 100 + TILL_VERSION_PATCH) < (TILL_VERSION_MAJOR_REQUIRED * 10000 + TILL_VERSION_MINOR_REQUIRED * 100 + TILL_VERSION_PATCH_REQUIRED)) {
+        fprintf(stderr, "EOSinitMaterial: Tillotson library has an old version (%s). At least version %d.%d.%d is needed.\n", TILL_VERSION_TEXT,TILL_VERSION_MAJOR_REQUIRED,TILL_VERSION_MINOR_REQUIRED,TILL_VERSION_PATCH_REQUIRED);
+        result = 0;
+    }
+#endif
+#ifdef HAVE_ANEOSMATERIAL_H
+    /* Check if the ANEOS library has the right version. */
+    if ((ANEOS_VERSION_MAJOR * 10000 + ANEOS_VERSION_MINOR * 100 + ANEOS_VERSION_PATCH) < (ANEOS_VERSION_MAJOR_REQUIRED * 10000 + ANEOS_VERSION_MINOR_REQUIRED * 100 + ANEOS_VERSION_PATCH_REQUIRED)) {
+        fprintf(stderr, "EOSinitMaterial: ANEOS library has an old version (%s). At least version %d.%d.%d is needed.\n", ANEOS_VERSION_TEXT,ANEOS_VERSION_MAJOR_REQUIRED,ANEOS_VERSION_MINOR_REQUIRED,ANEOS_VERSION_PATCH_REQUIRED);
+        result = 0;
+    }
+#endif
+#ifdef HAVE_REOS3_H
+    /* Check if the REOS3 library has the right version. */
+    if ((REOS3_VERSION_MAJOR * 10000 + REOS3_VERSION_MINOR * 100 + REOS3_VERSION_PATCH) < (REOS3_VERSION_MAJOR_REQUIRED * 10000 + REOS3_VERSION_MINOR_REQUIRED * 100 + REOS3_VERSION_PATCH_REQUIRED)) {
+        fprintf(stderr, "EOSinitMaterial: REOS3 library has an old version (%s). At least version %d.%d.%d is needed.\n", REOS3_VERSION_TEXT,REOS3_VERSION_MAJOR_REQUIRED,REOS3_VERSION_MINOR_REQUIRED,REOS3_VERSION_PATCH_REQUIRED);
+        result = 0;
+    }
+#endif
+#ifdef HAVE_SCVHEOS_H
+    /* Check if the SCVHEOS library has the right version. */
+    if ((SCVHEOS_VERSION_MAJOR * 10000 + SCVHEOS_VERSION_MINOR * 100 + SCVHEOS_VERSION_PATCH) < (SCVHEOS_VERSION_MAJOR_REQUIRED * 10000 + SCVHEOS_VERSION_MINOR_REQUIRED * 100 + SCVHEOS_VERSION_PATCH_REQUIRED)) {
+        fprintf(stderr, "EOSinitMaterial: SCvH EOS library has an old version (%s). At least version %d.%d.%d is needed.\n",SCVHEOS_VERSION_TEXT,SCVHEOS_VERSION_MAJOR_REQUIRED,SCVHEOS_VERSION_MINOR_REQUIRED,SCVHEOS_VERSION_PATCH_REQUIRED);
+        result = 0;
+    }
+#endif
+    return result;
 }
 
 /*
