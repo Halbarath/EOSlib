@@ -5,10 +5,10 @@
 #define IGEOS_HINCLUDED
 
 /* Version. */
-#define IGEOS_VERSION_TEXT    "1.0.0"
+#define IGEOS_VERSION_TEXT    "1.0.1"
 #define IGEOS_VERSION_MAJOR   1
 #define IGEOS_VERSION_MINOR   0
-#define IGEOS_VERSION_PATCH   0
+#define IGEOS_VERSION_PATCH   1
 
 /*
  * Error codes.
