@@ -175,7 +175,7 @@ double EOSUCold(EOSMATERIAL *material, double rho);
 
 // Boundary condition solver
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,
- double *prho2, double *pu2);
+ double *prho2, double *pu2, double Tjump);
  
 // Woolfson correction
 double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P, double T);

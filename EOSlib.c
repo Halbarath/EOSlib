@@ -1333,7 +1333,7 @@ double EOSUCold(EOSMATERIAL *material, double rho)
  * Returns 0 if successful or -1 if not.
  */
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,
-        double *prho2, double *pu2)
+        double *prho2, double *pu2, double Tjump)
 {
     double P, T;
     double a, ua, Pa, b, ub, Pb, c = 0, uc = 0, Pc;
@@ -1344,7 +1344,7 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
 
     /* Calculate P and T in material 1. */
     P = EOSPofRhoU(material1, rho1, u1);
-    T = EOSTofRhoU(material1, rho1, u1);
+    T = EOSTofRhoU(material1, rho1, u1) - Tjump;
 
     /*
      * We use rho1 as an upper limit for rho2 assuming that the denser component is in the inner shell.
