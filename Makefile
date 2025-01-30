@@ -28,11 +28,11 @@ testigeos: testigeos.o $(objects)
 
 timingTest: timingTest.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
-
-calcTemperature: calcTemperature.o $(objects)
-	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 	
 calcPressureRhoU: calcPressureRhoU.o $(objects)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+calcTempRhoU: calcTempRhoU.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 calcPressureRhoT: calcPressureRhoT.o $(objects)

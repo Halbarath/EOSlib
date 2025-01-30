@@ -23,7 +23,7 @@
 int main(int argc, char *argv[])
 {
 	if (argc != 4) {
-        fprintf(stderr,"Usage: calcTemperature <iMat> <rho> <u>\n");
+        fprintf(stderr,"Usage: calcTempRhoU <iMat> <rho> <u>\n");
         exit(1);
     }
 	
@@ -31,8 +31,8 @@ int main(int argc, char *argv[])
 	double rho = atof(argv[2]);
 	double u = atof(argv[3]);
 	
-	double dKpcUnit = 2.06701e-13;
-	double dMsolUnit = 4.80438e-08;
+	double dKpcUnit = 0.0;
+	double dMsolUnit = 0.0;
 	
 	// Version check
 	if (EOS_VERSION_MAJOR != 1) {
@@ -55,7 +55,7 @@ int main(int argc, char *argv[])
 	
 	double T = EOSTofRhoU(material, rho, u);
 	
-	fprintf(stdout, "Temperature: %.15e\n", T);
+	printf("rho=%15.7E u=%15.7E T=%15.7E (cgs)\n", rho, u, T);
 	
 	// Finalize
 	EOSfinalizeMaterial(material);
