@@ -31,8 +31,11 @@ int main(int argc, char *argv[])
 	double rho = atof(argv[2]);
 	double u = atof(argv[3]);
 	
-	double dKpcUnit = 2.06701e-13;
-	double dMsolUnit = 4.80438e-08;
+	//double dKpcUnit = 2.06701e-13;
+	//double dMsolUnit = 4.80438e-08;
+	/* Calculations are in cgs */
+	double dKpcUnit = 0;
+	double dMsolUnit = 0;
 	
 	// Version check
 	if (EOS_VERSION_MAJOR != 1) {
@@ -53,9 +56,9 @@ int main(int argc, char *argv[])
     }
 	
 	double P = EOSPofRhoU(material, rho, u);
-	
-	fprintf(stdout, "Pressure: %.15e\n", P);
-	
+
+	printf("rho=%15.7E u=%15.7E P=%15.7E (cgs)\n", rho, u, P);
+
 	// Finalize
 	EOSfinalizeMaterial(material);
 	return 0;
