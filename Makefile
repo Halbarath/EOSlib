@@ -37,6 +37,9 @@ calcPressureRhoU: calcPressureRhoU.o $(objects)
 
 calcPressureRhoT: calcPressureRhoT.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+calcEnergyRhoT: calcEnergyRhoT.o $(objects)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
     
 calcSoundSpeed: calcSoundSpeed.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
