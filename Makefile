@@ -32,7 +32,10 @@ timingTest: timingTest.o $(objects)
 calcTemperature: calcTemperature.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 	
-calcPressure: calcPressure.o $(objects)
+calcPressureRhoU: calcPressureRhoU.o $(objects)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+calcPressureRhoT: calcPressureRhoT.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
     
 calcSoundSpeed: calcSoundSpeed.o $(objects)
