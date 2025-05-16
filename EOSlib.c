@@ -713,7 +713,8 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u) {
     int yieldStrengthModel;
     double Y0; // Yield strength at 0 pressure
     double YM; // Yield strength at infinite pressure
-    double mui; // coefficient of internal friction
+    double mui; // coefficient of internal friction for intact material
+    double mud; // coefficient of internal friction for damaged material
     double xi; // thermal softening parameter
     double Tmelt;
     double T;
@@ -732,7 +733,7 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u) {
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
         case EOSANEOS:
-            yieldStrengthModel = ANEOSYieldParameters(material->ANEOSmaterial, &Y0, &YM, &mui, &xi);
+            yieldStrengthModel = ANEOSYieldParameters(material->ANEOSmaterial, &Y0, &YM, &mui, &mud, &xi);
             Tmelt = ANEOSTmeltofRho(material->ANEOSmaterial, rho);
             T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);
             P = ANEOSPofRhoT(material->ANEOSmaterial, rho, T);
@@ -756,12 +757,26 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u) {
     /*
      * Here we distinguish between the different yield strength models
      * -1: No yield stress
-     * 0: No limiter, so yield strength returned is irrelevant, because its not called.
-     * 1: Drucker-Prager yield strength
+     * 0: No limiter, so yield strength returned is irrelevant, because it is not called.
+     * 1: Pressure dependent yield strength model for intact material
+     * 2: Pressure dependent yield strength model for damaged material
      * When adding more types, below statement has to be changed to either a switch case or an if tree
      */
     if (yieldStrengthModel > 0) {
-        Y = (Y0 + mui * P / (1 + mui * P / (YM - Y0))) * fmax(tanh(xi * (Tmelt / T - 1.0)), 0.0);
+        Y = 0.0;
+        if (yieldStrengthModel == 1) {
+            Y = (Y0 + mui * P / (1 + mui * P / (YM - Y0)));
+        } else if (yieldStrengthModel == 2)
+        {
+            double Yi = (Y0 + mui * P / (1 + mui * P / (YM - Y0)));
+            double Yd = mud * P;
+            Y = fmin(Yi,Yd);
+        } else
+        {
+            fprintf(stderr, "YieldStrengthModel = %d not supported\n",yieldStrengthModel);
+            assert(0);
+        }
+        Y *= fmax(tanh(xi * (Tmelt / T - 1.0)), 0.0);
     }
 
     return Y;
