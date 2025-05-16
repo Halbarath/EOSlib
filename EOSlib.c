@@ -684,7 +684,7 @@ int EOSYieldModel(EOSMATERIAL *material){
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
         case EOSANEOS:
-            yieldStrengthModel = ANEOSYieldParameters(material->ANEOSmaterial, NULL, NULL, NULL, NULL);
+            yieldStrengthModel = ANEOSYieldParameters(material->ANEOSmaterial, NULL, NULL, NULL, NULL, NULL);
             break;
 #endif
 #ifdef HAVE_REOS3_H
@@ -768,6 +768,10 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u) {
             Y = (Y0 + mui * P / (1 + mui * P / (YM - Y0)));
         } else if (yieldStrengthModel == 2)
         {
+            if (mud < 0.0) {
+                fprintf(stderr, "YieldStrengthModel 2 requested, but mud not defined\n");
+                assert(0);
+            }
             double Yi = (Y0 + mui * P / (1 + mui * P / (YM - Y0)));
             double Yd = mud * P;
             Y = fmin(Yi,Yd);
