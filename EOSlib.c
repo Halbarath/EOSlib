@@ -44,6 +44,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 {
     EOSMATERIAL *material;
     material = (EOSMATERIAL *) calloc(1, sizeof(EOSMATERIAL));
+    assert(material != NULL);
     material->iMat = iMat;
     material->bEntropyTableInit = EOS_FALSE;
     material->bEntropy = EOS_FALSE;
@@ -144,7 +145,7 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            if (material->bEntropyTableInit != EOS_TRUE) material->bEntropyTableInit = EOS_TRUE;
+            // nothing to do, material->bEntropyTableInitis always EOS_TRUE
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
@@ -154,8 +155,7 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
         case EOSANEOS:
-            // nothing to do
-            if (material->bEntropyTableInit != EOS_TRUE) material->bEntropyTableInit = EOS_TRUE;
+            // nothing to do, material->bEntropyTableInitis always EOS_TRUE
             break;
 #endif
 #ifdef HAVE_REOS3_H
@@ -167,8 +167,7 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
-            // nothing to do
-            if (material->bEntropyTableInit != EOS_TRUE) material->bEntropyTableInit = EOS_TRUE;
+            // nothing to do, material->bEntropyTableInitis always EOS_TRUE
             break;
 #endif
         default:
