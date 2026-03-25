@@ -80,7 +80,7 @@
 #define MAT_REOS3_MIN 101
 #define MAT_REOS3_MAX 109
 #define MAT_SCVHEOS_MIN 110
-#define MAT_SCVHEOS_MAX 115
+#define MAT_SCVHEOS_MAX 130
 
 #define EOS_TRUE 1
 #define EOS_FALSE 0
