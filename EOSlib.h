@@ -105,6 +105,7 @@ typedef struct EOSmaterial
 	int iMat; // Material number
 	int matType; // Material type, e.g., 0: ideal gas, 1: Tillotson, 2: ANEOS
 	double rho0; // reference density
+	double rho0forInterfaceCorrection; // reference density for interface correction
 	int bEntropyTableInit; // flag to signal if the entropy table is initialized
     int bEntropy; // flag to signal if the eos has entropy available
 	double minSoundSpeed; // sound speed at reference values

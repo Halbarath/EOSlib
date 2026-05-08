@@ -64,6 +64,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->matType = EOSIDEALGAS;
         material->igeosmaterial = igeosInitMat(iMat, Param->dConstGamma, Param->dMeanMolMass, dKpcUnit, dMsolUnit);
         material->rho0 = material->igeosmaterial->rho0;
+        material->rho0forInterfaceCorrection = 0.0; // Gas has no cutoff
         material->minSoundSpeed = 0;
         /* No entropy look up table required. */
         material->bEntropyTableInit = EOS_TRUE;
@@ -75,6 +76,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->matType = EOSTILLOTSON;
         material->tillmaterial = tillInitMaterial(iMat, dKpcUnit, dMsolUnit);
         material->rho0 = material->tillmaterial->rho0;
+        material->rho0forInterfaceCorrection = material->rho0;
         material->minSoundSpeed = sqrt(material->tillmaterial->A/material->tillmaterial->rho0);
         tilliMatString(material->tillmaterial, material->MatString);
         // Needed to convert internal energy to temperature
@@ -90,6 +92,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->matType = EOSANEOS;
         material->ANEOSmaterial = ANEOSinitMaterial(iMat, dKpcUnit, dMsolUnit);
         material->rho0 = ANEOSgetRho0(material->ANEOSmaterial);
+        material->rho0forInterfaceCorrection = material->rho0;
         // The entropy look up table is initialized in ANEOSinitMaterial
         material->bEntropyTableInit = EOS_TRUE;
         material->bEntropy = EOS_TRUE;
@@ -104,6 +107,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->matType = EOSREOS3;
         material->reos3material = reos3InitMaterial(iMat, dKpcUnit, dMsolUnit, TRUE);
         material->rho0 = material->reos3material->rho0;
+        material->rho0forInterfaceCorrection = 0.0; // Gas has no cutoff
         // So far we do not have entropy for REOS3. 
         material->bEntropyTableInit = EOS_FALSE;
         // How do we define a minimum sound speed and reference density for H and He?
@@ -117,6 +121,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->matType = EOSSCVHEOS;
         material->scvheosmaterial = scvheosInitMaterial(iMat, dKpcUnit, dMsolUnit);
         material->rho0 = material->scvheosmaterial->rho0;
+        material->rho0forInterfaceCorrection = 0.0; // Gas has no cutoff
         material->bEntropyTableInit = EOS_TRUE;
         material->bEntropy = EOS_TRUE;
         // How do we define a minimum sound speed and reference density for H and He?
