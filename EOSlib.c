@@ -1546,7 +1546,7 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
  *
  * f_ij := rho_mat1(P, T)/rho_mat2(P, T)
  *
- * needed to correct the density at a material interface.
+ * needed to correct the density at a material interface in gasoline.
  */
 double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P, double T)
 {
