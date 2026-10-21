@@ -34,6 +34,7 @@
 #define EOS_UNKNOWN_MATERIAL(material) do { \
     fprintf(stderr, "%s was called for the unknown material %d.\n", __func__, (material)->iMat); \
     assert(0); \
+    exit(1); \
 } while (0)
 
 /*
@@ -87,6 +88,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 #else
         fprintf(stderr,"Tried to initialize a Tillotson material, but the Tillotson library is absent.\n");
         assert(0);
+        exit(1);
 #endif
     } else if (iMat>=MAT_ANEOS_MIN && iMat <=MAT_ANEOS_MAX)
     {
@@ -103,6 +105,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 #else
         fprintf(stderr,"Tried to initialize an ANEOSmaterial material, but the ANEOSmaterial library is absent.\n");
         assert(0);
+        exit(1);
 #endif
     } else if ((iMat >= MAT_REOS3_MIN) && (iMat <= MAT_REOS3_MAX)) {
 #ifdef HAVE_REOS3_H
@@ -117,6 +120,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 #else
         fprintf(stderr,"Tried to initialize an reos3 material, but the reos3 library is absent.\n");
         assert(0);
+        exit(1);
 #endif
     } else if ((iMat >= MAT_SCVHEOS_MIN) && (iMat <= MAT_SCVHEOS_MAX)) {
 #ifdef HAVE_SCVHEOS_H
@@ -131,10 +135,12 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 #else
         fprintf(stderr,"Tried to initialize an SCvH EOS material, but the SCvH EOS library is absent.\n");
         assert(0);
+        exit(1);
 #endif
     } else {
         fprintf(stderr, "EOSinitMaterial: iMat %i does not exist.\n",iMat);
         assert(0);
+        exit(1);
     }
 
     /* Make sure that the flags are sent consistently. */
@@ -545,6 +551,7 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
             // Not implemented yet
             //u2 = reos3IsentropicU(material->reos3material, rho1, u1, rho2);
             assert(0);
+            exit(1);
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
@@ -717,6 +724,7 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u) {
             fprintf(stderr, "EOSYieldStrength not implemented for material %d\n",material->iMat);
             yieldStrengthModel = -2;
             assert(0);
+            exit(1);
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
@@ -764,17 +772,20 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u) {
             if (mud < 0.0) {
                 fprintf(stderr, "EOSYieldStrength: yieldStrengthModel 2 requested, but mud not defined\n");
                 assert(0);
+                exit(1);
             }
             Y = fmin(Yi, mud * Peff);
         } else {
             fprintf(stderr, "EOSYieldStrength: yieldStrengthModel = %d not supported\n", yieldStrengthModel);
             assert(0);
+            exit(1);
         }
 
         /* Thermal softening (Ohnaka 1995), zero at and above the melt temperature. */
         if (!(T > 0.0) || !(Tmelt >= 0.0)) {
             fprintf(stderr, "EOSYieldStrength: invalid T= %g or Tmelt= %g for material %d (rho= %g u= %g).\n", T, Tmelt, material->iMat, rho, u);
             assert(0);
+            exit(1);
         }
         Y *= fmax(tanh(xi * (Tmelt / T - 1.0)), 0.0);
 
@@ -915,11 +926,13 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
         case EOSIDEALGAS:
             // not implemented
             assert(0);
+            exit(1);
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
             // not implemented
             assert(0);
+            exit(1);
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
@@ -931,12 +944,14 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
         case EOSREOS3:
             // Not implemented, return rho=0.
             assert(0);
+            exit(1);
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
             // Not implemented, return rho=0.
             assert(0);
+            exit(1);
             break;
 #endif
         default: EOS_UNKNOWN_MATERIAL(material);
@@ -1193,11 +1208,13 @@ double EOSdPdRhoofRhoT(EOSMATERIAL *material, double rho, double T)
         case EOSIDEALGAS:
             // not implemented
             assert(0);
+            exit(1);
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
             // not implemented
             assert(0);
+            exit(1);
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
@@ -1234,11 +1251,13 @@ double EOSdPdT(EOSMATERIAL *material, double rho, double T)
         case EOSIDEALGAS:
             // not implemented
             assert(0);
+            exit(1);
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
             // not implemented
             assert(0);
+            exit(1);
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
@@ -1279,6 +1298,7 @@ double EOSGammaofRhoT(EOSMATERIAL *material, double rho, double T){
             // Tillotson has strength not implemented yet
             fprintf(stderr, "EOSGammaofRhoT not implemented for material %d\n",material->iMat);
             assert(0);
+            exit(1);
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
