@@ -168,6 +168,11 @@ double EOSSofRhoT(EOSMATERIAL *material, double rho, double T);
 
 int EOSYieldModel(EOSMATERIAL *material);
 double EOSYieldStrength(EOSMATERIAL *material, double rho, double u);
+/*
+ * Same as EOSYieldStrength, but takes T and P the caller already has (e.g.
+ * from EOSPCTofRhoU) instead of re-deriving them from (rho, u).
+ */
+double EOSYieldStrengthofRhoTP(EOSMATERIAL *material, double rho, double T, double P);
 
 // Inverse functions
 double EOSTofRhoU(EOSMATERIAL *material, double rho, double u);

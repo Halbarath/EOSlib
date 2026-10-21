@@ -448,9 +448,7 @@ double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c)
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
         case EOSANEOS:
-            T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);
-            P = ANEOSPofRhoT(material->ANEOSmaterial, rho, T);
-            *c = ANEOSCofRhoT(material->ANEOSmaterial, rho, T);
+            P = ANEOSPCTofRhoU(material->ANEOSmaterial, rho, u, c, &T);
             break;
 #endif
 #ifdef HAVE_REOS3_H
@@ -498,9 +496,7 @@ double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, doub
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
         case EOSANEOS:
-            *T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);
-            P = ANEOSPofRhoT(material->ANEOSmaterial, rho, *T);
-            *c = ANEOSCofRhoT(material->ANEOSmaterial, rho, *T);
+            P = ANEOSPCTofRhoU(material->ANEOSmaterial, rho, u, c, T);
             break;
 #endif
 #ifdef HAVE_REOS3_H
@@ -700,9 +696,12 @@ int EOSYieldModel(EOSMATERIAL *material){
 }
 
 /*
- * Calculate strength limiter
+ * Strength limiter from (rho, T, P). The parameter gathering and the yield
+ * model are here; the two public entry points differ only in how T and P
+ * are obtained.
  */
-double EOSYieldStrength(EOSMATERIAL *material, double rho, double u) {
+static double EOSYieldStrengthCore(EOSMATERIAL *material, double rho, double T, double P)
+{
     double Y = 0.0;
     int yieldStrengthModel = 0;
     double Y0 = 0.0;    // Yield strength at 0 pressure
@@ -711,8 +710,6 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u) {
     double mud = -1.0;  // coefficient of internal friction for damaged material (-1: not defined)
     double xi = 0.0;    // thermal softening parameter
     double Tmelt = 0.0;
-    double T = 0.0;
-    double P = 0.0;
 
     switch(material->matType)
     {
@@ -732,8 +729,6 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u) {
             yieldStrengthModel = ANEOSYieldParameters(material->ANEOSmaterial, &Y0, &YM, &mui, &mud, &xi);
             if (yieldStrengthModel > 0) {
                 Tmelt = ANEOSTmeltofRho(material->ANEOSmaterial, rho);
-                T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);
-                P = ANEOSPofRhoT(material->ANEOSmaterial, rho, T);
             }
             break;
 #endif
@@ -783,7 +778,7 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u) {
 
         /* Thermal softening (Ohnaka 1995), zero at and above the melt temperature. */
         if (!(T > 0.0) || !(Tmelt >= 0.0)) {
-            fprintf(stderr, "EOSYieldStrength: invalid T= %g or Tmelt= %g for material %d (rho= %g u= %g).\n", T, Tmelt, material->iMat, rho, u);
+            fprintf(stderr, "EOSYieldStrength: invalid T= %g or Tmelt= %g for material %d (rho= %g P= %g).\n", T, Tmelt, material->iMat, rho, P);
             assert(0);
             exit(1);
         }
@@ -794,6 +789,28 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u) {
     }
 
     return Y;
+}
+
+/*
+ * Calculate strength limiter from (rho, u). Derives T and P with one fused
+ * lookup; prefer EOSYieldStrengthofRhoTP when the caller already has them.
+ */
+double EOSYieldStrength(EOSMATERIAL *material, double rho, double u)
+{
+    double T = 0.0, P = 0.0, c;
+
+    if (EOSYieldModel(material) > 0) {
+        P = EOSPCTofRhoU(material, rho, u, &c, &T);
+    }
+    return EOSYieldStrengthCore(material, rho, T, P);
+}
+
+/*
+ * Calculate strength limiter from (rho, T, P) supplied by the caller.
+ */
+double EOSYieldStrengthofRhoTP(EOSMATERIAL *material, double rho, double T, double P)
+{
+    return EOSYieldStrengthCore(material, rho, T, P);
 }
 
 /*
