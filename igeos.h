@@ -22,7 +22,7 @@ typedef struct igeosMat {
     /* Units. */
     double dKpcUnit;
     double dMsolUnit;
-    double dGasConst;
+    double dGasConst;      /* k_B/m_H in code units (specific energy per K) */
     double dErgPerGmUnit;
     double dGmPerCcUnit;
     double dSecUnit;

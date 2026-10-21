@@ -11,12 +11,12 @@
 #include "igeos.h"
 
 IGEOSMAT *igeosInitMat(int iMat, double dConstGamma, double dMeanMolMass, double dKpcUnit, double dMsolUnit) {
-    const double KBOLTZ = 1.38e-16;      /* bolzman constant in cgs */
+    /* Gasoline/pkdgrav3 unit constants. Must match the hydro code and the other EOS libraries exactly. */
+    const double KBOLTZ = 1.38e-16;      /* Boltzmann constant in cgs */
     const double MHYDR = 1.67e-24;       /* mass of hydrogen atom in grams */
     const double MSOLG = 1.99e33;        /* solar mass in grams */
     const double GCGS = 6.67e-8;         /* G in cgs */
     const double KPCCM = 3.085678e21;    /* kiloparsec in centimeters */
-    const double NA = 6.022e23;          /* Avogadro's number */
     IGEOSMAT *Mat;
 
     Mat = (IGEOSMAT *) calloc(1, sizeof(IGEOSMAT));
@@ -25,41 +25,37 @@ IGEOSMAT *igeosInitMat(int iMat, double dConstGamma, double dMeanMolMass, double
     Mat->iMat = iMat;
     assert(Mat->iMat == 0);
 
-	/* This two parameters define the unit system. */
+    /* These two parameters define the unit system. */
     Mat->dKpcUnit = dKpcUnit;
     Mat->dMsolUnit = dMsolUnit;
 
-	if (dKpcUnit <= 0.0 && dMsolUnit <= 0.0)
-	{
-		/* In this case units are not converted, so the code units are cgs. */
-		Mat->dGasConst = KBOLTZ;   // dGasConst is NOT KBOLZ !!!!!!!
-		Mat->dErgPerGmUnit = 1.0;
-		Mat->dGmPerCcUnit = 1.0;
-		Mat->dSecUnit = 1.0;
-	} else {
-		/* Convert kboltz/mhydrogen to system units, assuming that G == 1. */
-		Mat->dGasConst = Mat->dKpcUnit*KPCCM*KBOLTZ
-		/MHYDR/GCGS/Mat->dMsolUnit/MSOLG;
-		/* code energy per unit mass --> erg per g */
-		Mat->dErgPerGmUnit = GCGS*Mat->dMsolUnit*MSOLG/(Mat->dKpcUnit*KPCCM);
-		/* code density --> g per cc */
-		Mat->dGmPerCcUnit = (Mat->dMsolUnit*MSOLG)/pow(Mat->dKpcUnit*KPCCM,3.0);
-		/* code time --> seconds */
-		Mat->dSecUnit = sqrt(1/(Mat->dGmPerCcUnit*GCGS));
-	}
-        
+    if (dKpcUnit <= 0.0 && dMsolUnit <= 0.0)
+    {
+        /* Units are not converted, so the code units are cgs. */
+        Mat->dErgPerGmUnit = 1.0;
+        Mat->dGmPerCcUnit = 1.0;
+        Mat->dSecUnit = 1.0;
+    } else {
+        /* Conversion factors from code units to cgs, assuming G == 1 in code units. */
+        /* code energy per unit mass --> erg per g */
+        Mat->dErgPerGmUnit = GCGS*Mat->dMsolUnit*MSOLG/(Mat->dKpcUnit*KPCCM);
+        /* code density --> g per cc */
+        Mat->dGmPerCcUnit = (Mat->dMsolUnit*MSOLG)/pow(Mat->dKpcUnit*KPCCM,3.0);
+        /* code time --> seconds */
+        Mat->dSecUnit = sqrt(1/(Mat->dGmPerCcUnit*GCGS));
+    }
+
+    /* k_B/m_H in code units (specific energy per Kelvin); same convention as pkdgrav3. */
+    Mat->dGasConst = (KBOLTZ/MHYDR)/Mat->dErgPerGmUnit;
+
     Mat->dConstGamma = dConstGamma;
     Mat->dMeanMolMass = dMeanMolMass;
 
-    /* cv = kb/mp */
-    Mat->cv = KBOLTZ/((Mat->dConstGamma-1.0)*MHYDR*Mat->dMeanMolMass);
+    /* Specific heat at constant volume, cv = k_B/((gamma-1) mu m_H), in code units. */
+    Mat->cv = Mat->dGasConst/((Mat->dConstGamma-1.0)*Mat->dMeanMolMass);
 
-    /* This value is hard coded and used as a default value in ballic. */
-    Mat->rho0 = 0.001;
-
-    /* Convert to code units. */
-    Mat->rho0 /= Mat->dGmPerCcUnit;
-    Mat->cv /= Mat->dErgPerGmUnit;
+    /* Reference density, hard coded and used as a default value in ballic (cgs -> code units). */
+    Mat->rho0 = 0.001/Mat->dGmPerCcUnit;
 
     return Mat;
 }
