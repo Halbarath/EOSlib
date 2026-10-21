@@ -715,15 +715,18 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u) {
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
             fprintf(stderr, "EOSYieldStrength not implemented for material %d\n",material->iMat);
+            yieldStrengthModel = -2;
             assert(0);
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
         case EOSANEOS:
             yieldStrengthModel = ANEOSYieldParameters(material->ANEOSmaterial, &Y0, &YM, &mui, &mud, &xi);
-            Tmelt = ANEOSTmeltofRho(material->ANEOSmaterial, rho);
-            T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);
-            P = ANEOSPofRhoT(material->ANEOSmaterial, rho, T);
+            if (yieldStrengthModel > 0) {
+                Tmelt = ANEOSTmeltofRho(material->ANEOSmaterial, rho);
+                T = ANEOSTofRhoU(material->ANEOSmaterial, rho, u);
+                P = ANEOSPofRhoT(material->ANEOSmaterial, rho, T);
+            }
             break;
 #endif
 #ifdef HAVE_REOS3_H
@@ -769,11 +772,11 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u) {
         }
 
         /* Thermal softening (Ohnaka 1995), zero at and above the melt temperature. */
-        if (T > 0.0 && Tmelt > 0.0) {
-            Y *= fmax(tanh(xi * (Tmelt / T - 1.0)), 0.0);
-        } else {
-            Y = 0.0;
+        if (!(T > 0.0) || !(Tmelt > 0.0)) {
+            fprintf(stderr, "EOSYieldStrength: invalid T= %g or Tmelt= %g for material %d (rho= %g u= %g).\n", T, Tmelt, material->iMat, rho, u);
+            assert(0);
         }
+        Y *= fmax(tanh(xi * (Tmelt / T - 1.0)), 0.0);
 
         /* Guard against roundoff; the strength is never negative. */
         Y = fmax(Y, 0.0);
