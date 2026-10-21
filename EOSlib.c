@@ -47,7 +47,11 @@
  */
 EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const void * additional_data)
 {
-    if (!EOSCheckVersions()) exit(1);
+    static int bVersionsChecked = 0;
+    if (!bVersionsChecked) {
+        if (!EOSCheckVersions()) exit(1);
+        bVersionsChecked = 1;
+    }
 
     EOSMATERIAL *material;
     material = (EOSMATERIAL *) calloc(1, sizeof(EOSMATERIAL));
@@ -1348,7 +1352,6 @@ double EOSGammaofRhoT(EOSMATERIAL *material, double rho, double T){
 double EOSUCold(EOSMATERIAL *material, double rho)
 {
     double ucold = 0;
-    double logrho = log10(rho);
 
     switch(material->matType)
     {
@@ -1375,7 +1378,7 @@ double EOSUCold(EOSMATERIAL *material, double rho)
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
             // Limit temperatures to LogTMin
-            ucold = scvheosLogUofLogRhoLogT(material->scvheosmaterial, logrho, material->scvheosmaterial->LogTMin);
+            ucold = scvheosLogUofLogRhoLogT(material->scvheosmaterial, log10(rho), material->scvheosmaterial->LogTMin);
             ucold = pow(material->scvheosmaterial->dLogBase, ucold);
             break;
 #endif
