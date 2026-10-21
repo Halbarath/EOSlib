@@ -64,10 +64,10 @@ IGEOSMAT *igeosInitMat(int iMat, double dConstGamma, double dMeanMolMass, double
     return Mat;
 }
 
-/* Free memory. */
+/* Free memory. Returns IGEOS_SUCCESS. */
 int igeosFinalizeMat(IGEOSMAT *Mat) {
     free(Mat);
-    return 0;
+    return IGEOS_SUCCESS;
 }
 
 /* Print material data. */
@@ -140,4 +140,25 @@ double igeosdPdU(IGEOSMAT *Mat, double rho, double u) {
     return (Mat->dConstGamma-1.0)*rho;
 }
 
+/*
+ * Calculate the specific entropy s(rho, T) of an ideal gas with constant cv:
+ *
+ *   s = cv*ln(T) - (gamma-1)*cv*ln(rho) + const
+ *
+ * where (gamma-1)*cv = k_B/(mu*m_H). The result is returned in cgs
+ * (erg/g/K), consistent with the tabulated EOS libraries, and the additive
+ * constant is set to zero. Only entropy differences are meaningful.
+ */
+double igeosSofRhoT(IGEOSMAT *Mat, double rho, double T) {
+    double cv_cgs = Mat->cv * Mat->dErgPerGmUnit;
+    double rho_cgs = rho * Mat->dGmPerCcUnit;
 
+    if (!(rho_cgs > 0.0) || !(T > 0.0)) return -1e50;
+
+    return cv_cgs * (log(T) - (Mat->dConstGamma - 1.0) * log(rho_cgs));
+}
+
+/* Calculate the specific entropy s(rho, u). */
+double igeosSofRhoU(IGEOSMAT *Mat, double rho, double u) {
+    return igeosSofRhoT(Mat, rho, igeosTofRhoU(Mat, rho, u));
+}

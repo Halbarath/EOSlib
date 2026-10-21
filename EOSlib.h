@@ -26,6 +26,8 @@
 
 #ifndef EOSLIB_HINCLUDED
 #define EOSLIB_HINCLUDED
+
+#include <stdio.h>   /* FILE in EOSPrintMat */
  
 #ifdef HAVE_TILLOTSON_H
     #include <tillotson.h>
@@ -55,12 +57,12 @@
 #include "igeos.h"
 #define IGEOS_VERSION_MAJOR_REQUIRED 1
 #define IGEOS_VERSION_MINOR_REQUIRED 0
-#define IGEOS_VERSION_PATCH_REQUIRED 1
+#define IGEOS_VERSION_PATCH_REQUIRED 2
 
-#define EOS_VERSION_TEXT    "1.0.3"
+#define EOS_VERSION_TEXT    "1.0.4"
 #define EOS_VERSION_MAJOR   1
 #define EOS_VERSION_MINOR   0
-#define EOS_VERSION_PATCH   3
+#define EOS_VERSION_PATCH   4
 
 #define WOOLFSON_MIN_PRESSURE 1e-3
 
@@ -85,6 +87,11 @@
 #define EOS_TRUE 1
 #define EOS_FALSE 0
 
+/*
+ * Status codes. Note two conventions coexist in this library:
+ *  - EOSIsInTable/EOSIsUsable use EOS_SUCCESS (1) / EOS_FAIL (0) / EOS_OUTSIDE_*.
+ *  - EOSSolveBC follows the C convention: 0 on success, -1 on failure.
+ */
 #define EOS_SUCCESS 1
 #define EOS_FAIL 0
 #define EOS_OUTSIDE_RHOMIN -1
@@ -107,7 +114,7 @@ typedef struct EOSmaterial
 	double rho0; // reference density
 	double rho0forInterfaceCorrection; // reference density for interface correction
 	int bEntropyTableInit; // flag to signal if the entropy table is initialized
-    int bEntropy; // flag to signal if the eos has entropy available
+    int bEntropy; // flag to signal if the eos has entropy available (see EOSSofRhoU)
 	double minSoundSpeed; // sound speed at reference values
     char MatString[256];
     IGEOSMAT *igeosmaterial; // Pointer to ideal gas material
@@ -146,6 +153,16 @@ double EOSCofRhoU(EOSMATERIAL *material, double rho, double u);
 double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c);
 double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, double *T);
 double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2);
+
+/*
+ * Entropy functions.
+ *
+ * NOTE: Unlike all other quantities, the specific entropy is NOT converted to
+ * code units. It is always returned in cgs (erg g^-1 K^-1), and the additive
+ * constant is library-dependent, so only entropy differences within the same
+ * material are meaningful. Both functions return -1e50 if the material has no
+ * entropy available (bEntropy == EOS_FALSE) or the lookup fails.
+ */
 double EOSSofRhoU(EOSMATERIAL *material, double rho, double u);
 double EOSSofRhoT(EOSMATERIAL *material, double rho, double T);
 
@@ -160,7 +177,21 @@ double EOSRhoofPT(EOSMATERIAL *material, double p, double T);
 double EOSRhoofUT(EOSMATERIAL *material, double u, double T);
 
 int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u);
+
+/*
+ * EOSIsInTable reports the raw table status of (rho, u) for the material:
+ * EOS_SUCCESS, or one of the EOS_OUTSIDE_* codes, or EOS_FAIL. It never
+ * applies a tolerance policy.
+ *
+ * EOSIsUsable applies the library policy: returns EOS_TRUE if P(rho, u),
+ * c(rho, u) and T(rho, u) can be evaluated for this material even if the
+ * state lies outside the lookup table (e.g. u > u_max for an analytic EOS such
+ * as Tillotson), EOS_FALSE otherwise. Use this in the hydro code; use
+ * EOSIsInTable when you need to know *why* a state is out of range or whether
+ * isentropic lookups (EOSIsentropic) are available.
+ */
 int EOSIsInTable(EOSMATERIAL *material, double rho, double u);
+int EOSIsUsable(EOSMATERIAL *material, double rho, double u);
 
 // Derivatives
 double EOSdPdRho(EOSMATERIAL *material, double rho, double u);
@@ -174,11 +205,12 @@ double EOSGammaofRhoT(EOSMATERIAL *material, double rho, double T);
 
 double EOSUCold(EOSMATERIAL *material, double rho);
 
-// Boundary condition solver
+// Boundary condition solver (returns 0 on success, -1 on failure)
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,
  double *prho2, double *pu2, double Tjump);
  
-// Woolfson correction
+// Woolfson correction f_ij = rho_1(P,T)/rho_2(P,T). Returns -1.0 if the
+// density inversion fails; callers must check for a negative result.
 double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P, double T);
 #ifdef __cplusplus
 }

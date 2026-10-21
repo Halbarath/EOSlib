@@ -4,11 +4,13 @@
 #ifndef IGEOS_HINCLUDED
 #define IGEOS_HINCLUDED
 
+#include <stdio.h>   /* FILE in igeosPrintMat */
+
 /* Version. */
-#define IGEOS_VERSION_TEXT    "1.0.1"
+#define IGEOS_VERSION_TEXT    "1.0.2"
 #define IGEOS_VERSION_MAJOR   1
 #define IGEOS_VERSION_MINOR   0
-#define IGEOS_VERSION_PATCH   1
+#define IGEOS_VERSION_PATCH   2
 
 /*
  * Error codes.
@@ -55,5 +57,7 @@ double igeosRhoofPT(IGEOSMAT *Mat, double P, double T);
 double igeosRhoofUT(IGEOSMAT *Mat, double U, double T);
 double igeosdPdRho(IGEOSMAT *Mat, double rho, double u);
 double igeosdPdU(IGEOSMAT *Mat, double rho, double u);
+double igeosSofRhoU(IGEOSMAT *Mat, double rho, double u);
+double igeosSofRhoT(IGEOSMAT *Mat, double rho, double T);
 
 #endif
