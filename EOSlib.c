@@ -772,7 +772,7 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u) {
         }
 
         /* Thermal softening (Ohnaka 1995), zero at and above the melt temperature. */
-        if (!(T > 0.0) || !(Tmelt > 0.0)) {
+        if (!(T > 0.0) || !(Tmelt >= 0.0)) {
             fprintf(stderr, "EOSYieldStrength: invalid T= %g or Tmelt= %g for material %d (rho= %g u= %g).\n", T, Tmelt, material->iMat, rho, u);
             assert(0);
         }
