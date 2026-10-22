@@ -1,5 +1,5 @@
 /*  This file is part of EOSlib.
- *  Copyright (c) 2020-2021 Thomas Meier & Christian Reinhardt
+ *  Copyright (c) 2020-2026 Thomas Meier & Christian Reinhardt
  *
  *  EOSlib is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -15,153 +15,394 @@
  *  along with EOSlib.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*
+ * Test suite for EOSlib.
+ *
+ * Tests the wrapper layer: dispatch to the sublibraries, the ideal-gas EOS
+ * against its closed form, the ANEOS path against the ANEOSmaterial library
+ * directly, the table-status policy, the yield model, and the boundary
+ * condition solver. Everything is an invariant; no reference values are
+ * hard-coded. Usage:
+ *
+ *   testEOSmaterial [iMatA iMatB] [dKpcUnit dMsolUnit]
+ *
+ * Defaults: ANEOS dunite (54) and ANEOS iron (55), Earth-like code units.
+ * iMatA/iMatB must be ANEOS materials whose tables are in the working
+ * directory; the Tillotson tests run only if HAVE_TILLOTSON_H is defined.
+ * Exit status is the number of failed checks.
+ */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "EOSlib.h"
+
+/* ---------------------------------------------------------------- harness */
+
+static int nChecks = 0;
+static int nFails = 0;
+static const char *currentTest = "";
+
+#define CHECK(cond, ...) do { \
+    nChecks++; \
+    if (!(cond)) { \
+        nFails++; \
+        fprintf(stderr, "FAIL [%s] %s:%d: ", currentTest, __FILE__, __LINE__); \
+        fprintf(stderr, __VA_ARGS__); \
+        fprintf(stderr, "\n"); \
+    } \
+} while (0)
+
+#define CHECK_REL(a, b, tol, ...) do { \
+    double _a = (a), _b = (b); \
+    double _den = fmax(fabs(_a), fabs(_b)); \
+    double _err = (_den > 0.0) ? fabs(_a - _b) / _den : fabs(_a - _b); \
+    nChecks++; \
+    if (!(_err <= (tol))) { \
+        nFails++; \
+        fprintf(stderr, "FAIL [%s] %s:%d: ", currentTest, __FILE__, __LINE__); \
+        fprintf(stderr, __VA_ARGS__); \
+        fprintf(stderr, " (got %.15e vs %.15e, rel err %.3e > %.1e)\n", _a, _b, _err, (double)(tol)); \
+    } \
+} while (0)
+
+#define TEST(name) do { currentTest = name; printf("  %-44s", name); fflush(stdout); } while (0)
+#define END_TEST() do { printf("%s\n", nFails == failsBefore ? "ok" : "FAILED"); } while (0)
+
+static int isSentinel(double v) { return v < -1e40; }
+
+/* ---------------------------------------------------------- ideal gas EOS */
+
+static void testIdealGas(double dKpcUnit, double dMsolUnit)
+{
+    int failsBefore = nFails;
+    TEST("ideal gas against closed form");
+    struct igeosParam par = { 1.4, 1.0 };
+    EOSMATERIAL *g = EOSinitMaterial(MAT_IDEALGAS, dKpcUnit, dMsolUnit, &par);
+    double gm1 = par.dConstGamma - 1.0;
+
+    CHECK(g->matType == EOSIDEALGAS, "matType");
+    CHECK(g->bEntropy && g->bEntropyTableInit, "entropy flags");
+    CHECK(EOSYieldModel(g) == 0, "yield model for gas");
+    CHECK(EOSYieldStrength(g, 1.0, 1.0) == 0.0, "yield strength for gas");
+    CHECK(EOSGammaofRhoT(g, 1.0, 300.0) == 0.0, "shear modulus for gas");
+
+    double rhos[] = { 1e-6, 1e-3, 1.0, 50.0 };
+    double us[]   = { 1e-4, 1e-1, 1.0, 1e3 };
+    for (int a = 0; a < 4; a++) for (int b = 0; b < 4; b++) {
+        double rho = rhos[a], u = us[b];
+        double c, T;
+        double P = EOSPCTofRhoU(g, rho, u, &c, &T);
+        CHECK_REL(P, gm1 * rho * u, 1e-14, "P rho=%g u=%g", rho, u);
+        CHECK_REL(c, sqrt(par.dConstGamma * gm1 * u), 1e-14, "c rho=%g u=%g", rho, u);
+        CHECK_REL(EOSPofRhoU(g, rho, u), P, 1e-14, "PofRhoU vs PCT");
+        CHECK_REL(EOSCofRhoU(g, rho, u), c, 1e-14, "CofRhoU vs PCT");
+        CHECK_REL(EOSTofRhoU(g, rho, u), T, 1e-14, "TofRhoU vs PCT");
+        CHECK_REL(EOSUofRhoT(g, rho, T), u, 1e-13, "u(rho,T(rho,u)) roundtrip");
+        CHECK_REL(EOSPofRhoT(g, rho, T), P, 1e-13, "P(rho,T) vs P(rho,u)");
+        CHECK_REL(EOSRhoofPT(g, P, T), rho, 1e-13, "rho(P,T) roundtrip");
+        CHECK_REL(EOSdPdRho(g, rho, u), gm1 * u, 1e-14, "dP/drho");
+        CHECK_REL(EOSdPdU(g, rho, u), gm1 * rho, 1e-14, "dP/du");
+        CHECK_REL(EOSdUdRho(g, rho, u), P / (rho * rho), 1e-14, "du/drho");
+        /* Isentrope: u2/u1 = (rho2/rho1)^(gamma-1), and entropy is conserved. */
+        double rho2 = 2.0 * rho;
+        double u2 = EOSIsentropic(g, rho, u, rho2);
+        CHECK_REL(u2, u * pow(2.0, gm1), 1e-14, "isentropic u");
+        CHECK_REL(EOSSofRhoU(g, rho2, u2), EOSSofRhoU(g, rho, u), 1e-12, "entropy conserved");
+        CHECK(EOSIsInTable(g, rho, u) == EOS_SUCCESS, "ideal gas always in table");
+        CHECK(EOSIsUsable(g, rho, u) == EOS_TRUE, "ideal gas always usable");
+        CHECK(EOSUCold(g, rho) == 0.0, "ucold = 0 for gas");
+    }
+    EOSfinalizeMaterial(g);
+    END_TEST();
+}
+
+/* ---------------------------------------------------------------- ANEOS */
+
+#ifdef HAVE_ANEOSMATERIAL_H
+
+#define NSAMPLE 10
+
+static double sampleRho(ANEOSMATERIAL *m, int k)
+{
+    double lo = log(m->rhoAxis[0]), hi = log(m->rhoAxis[m->nRho-1]);
+    double f = 0.05 + 0.90 * (k + 0.5) / NSAMPLE;
+    return exp(lo + f * (hi - lo)) * m->CGStoCodeUnitsforRho;
+}
+
+static double sampleT(ANEOSMATERIAL *m, int k)
+{
+    double lo = m->TAxis[0], hi = m->TAxis[m->nT-1];
+    double f = 0.05 + 0.90 * (k + 0.5) / NSAMPLE;
+    return lo + f * (hi - lo);
+}
+
+static void testANEOSDispatch(EOSMATERIAL *e)
+{
+    int failsBefore = nFails;
+    TEST("ANEOS dispatch matches ANEOSmaterial directly");
+    ANEOSMATERIAL *m = e->ANEOSmaterial;
+    CHECK(e->matType == EOSANEOS, "matType");
+    CHECK(e->bEntropy && e->bEntropyTableInit, "entropy flags");
+    CHECK_REL(e->rho0, ANEOSgetRho0(m), 1e-15, "rho0");
+    CHECK(e->minSoundSpeed > 0.0, "minSoundSpeed = %g", e->minSoundSpeed);
+    CHECK(strlen(e->MatString) > 0, "MatString empty");
+
+    for (int a = 0; a < NSAMPLE; a++) for (int b = 0; b < NSAMPLE; b++) {
+        double rho = sampleRho(m, a), T = sampleT(m, b);
+        double u = EOSUofRhoT(e, rho, T);
+        double c, Tf;
+        double P = EOSPCTofRhoU(e, rho, u, &c, &Tf);
+        CHECK_REL(u, ANEOSUofRhoT(m, rho, T), 0.0, "UofRhoT dispatch");
+        CHECK_REL(P, ANEOSPofRhoU(m, rho, u), 1e-13, "PCTofRhoU P");
+        CHECK_REL(c, ANEOSCofRhoU(m, rho, u), 1e-13, "PCTofRhoU c");
+        CHECK_REL(Tf, T, 1e-10, "PCTofRhoU T roundtrip");
+        CHECK_REL(EOSPofRhoU(e, rho, u), P, 1e-13, "PofRhoU");
+        CHECK_REL(EOSPofRhoT(e, rho, T), ANEOSPofRhoT(m, rho, T), 0.0, "PofRhoT");
+        CHECK_REL(EOSCofRhoU(e, rho, u), c, 1e-13, "CofRhoU");
+        CHECK_REL(EOSTofRhoU(e, rho, u), Tf, 0.0, "TofRhoU");
+        double c2; double P2 = EOSPCofRhoU(e, rho, u, &c2);
+        CHECK_REL(P2, P, 0.0, "PCofRhoU P"); CHECK_REL(c2, c, 0.0, "PCofRhoU c");
+        CHECK_REL(EOSSofRhoU(e, rho, u), ANEOSSofRhoU(m, rho, u), 0.0, "SofRhoU");
+        CHECK_REL(EOSSofRhoT(e, rho, T), ANEOSSofRhoT(m, rho, T), 0.0, "SofRhoT");
+        CHECK_REL(EOSRhoofPT(e, P, T), ANEOSRhoofPT(m, P, T), 0.0, "RhoofPT");
+        CHECK_REL(EOSdPdRho(e, rho, u), ANEOSdPdRhoofRhoU(m, rho, u), 0.0, "dPdRho");
+        CHECK_REL(EOSdPdU(e, rho, u), ANEOSdPdUofRhoU(m, rho, u), 0.0, "dPdU");
+        CHECK_REL(EOSdUdRho(e, rho, u), ANEOSdUdRhoofRhoU(m, rho, u), 0.0, "dUdRho");
+        CHECK_REL(EOSdPdRhoofRhoT(e, rho, T), ANEOSdPdRhoofRhoT(m, rho, T), 0.0, "dPdRhoofRhoT");
+        CHECK_REL(EOSdPdT(e, rho, T), ANEOSdPdTofRhoT(m, rho, T), 0.0, "dPdT");
+        CHECK_REL(EOSUCold(e, rho), ANEOSUofRhoT(m, rho, m->TAxis[0]), 0.0, "UCold");
+        CHECK(EOSisbelowColdCurve(e, rho, 0.5 * EOSUCold(e, rho)) == 1, "below cold curve");
+        CHECK(EOSisbelowColdCurve(e, rho, u) == 0, "above cold curve (u at T=%g)", T);
+        CHECK(EOSIsInTable(e, rho, u) == EOS_SUCCESS, "in table at rho=%g T=%g", rho, T);
+        CHECK(EOSIsUsable(e, rho, u) == EOS_TRUE, "usable at rho=%g T=%g", rho, T);
+    }
+    /* Entropy is in cgs: compare against the raw table at a node. */
+    {
+        int i = m->nRho / 2, j = m->nT / 2;
+        double rho = m->rhoAxis[i] * m->CGStoCodeUnitsforRho;
+        CHECK_REL(EOSSofRhoT(e, rho, m->TAxis[j]), m->sArray[i][j], 1e-13, "entropy returned in cgs");
+    }
+    CHECK(m->nLookupFail == 0, "nLookupFail = %ld after in-table dispatch", m->nLookupFail);
+    END_TEST();
+}
+
+static void testANEOSTableStatus(EOSMATERIAL *e)
+{
+    int failsBefore = nFails;
+    TEST("EOSIsInTable / EOSIsUsable codes");
+    ANEOSMATERIAL *m = e->ANEOSmaterial;
+    double rhoOk = sampleRho(m, NSAMPLE / 2);
+    double uOk = EOSUofRhoT(e, rhoOk, sampleT(m, NSAMPLE / 2));
+    double rhoLo = 0.5 * m->rhoAxis[0] * m->CGStoCodeUnitsforRho;
+    double rhoHi = 2.0 * m->rhoAxis[m->nRho-1] * m->CGStoCodeUnitsforRho;
+    /* Just above the exclusive upper bound, with enough margin to survive the
+     * code<->cgs round trip (the exact node is one ulp ambiguous). */
+    double rhoEdge = m->rhoAxis[m->nRho-1] * (1.0 + 1e-12) * m->CGStoCodeUnitsforRho;
+
+    CHECK(EOSIsInTable(e, rhoLo, uOk) == EOS_OUTSIDE_RHOMIN, "below rhoMin");
+    CHECK(EOSIsInTable(e, rhoHi, uOk) == EOS_OUTSIDE_RHOMAX, "above rhoMax");
+    CHECK(EOSIsInTable(e, rhoEdge, uOk) == EOS_OUTSIDE_RHOMAX, "just above rhoMax");
+    CHECK(EOSIsInTable(e, rhoOk, 0.5 * EOSUCold(e, rhoOk)) == EOS_OUTSIDE_VMIN, "below cold curve");
+    CHECK(EOSIsInTable(e, rhoOk, 1e6 * uOk) == EOS_OUTSIDE_VMAX, "huge u");
+    CHECK(EOSIsUsable(e, rhoLo, uOk) == EOS_FALSE, "tabulated EOS unusable below rhoMin");
+    CHECK(EOSIsUsable(e, rhoOk, 1e6 * uOk) == EOS_FALSE, "tabulated EOS unusable above u_max");
+    /* Consistency between the status and the actual lookup: anything EOSIsInTable
+     * accepts must not produce a sentinel. */
+    for (int a = 0; a < NSAMPLE; a++) for (int b = 0; b < NSAMPLE; b++) {
+        double rho = sampleRho(m, a), u = EOSUofRhoT(e, rho, sampleT(m, b));
+        if (EOSIsInTable(e, rho, u) == EOS_SUCCESS) {
+            double c, T;
+            double P = EOSPCTofRhoU(e, rho, u, &c, &T);
+            CHECK(!isSentinel(P) && !isSentinel(c), "in-table state produced a sentinel at rho=%g", rho);
+        }
+    }
+    END_TEST();
+}
+
+static void testANEOSYield(EOSMATERIAL *e)
+{
+    int failsBefore = nFails;
+    TEST("yield strength model");
+    ANEOSMATERIAL *m = e->ANEOSmaterial;
+    int model = EOSYieldModel(e);
+    CHECK(model == m->yieldStrengthModel, "EOSYieldModel = %d vs %d", model, m->yieldStrengthModel);
+
+    if (model <= 0) {
+        double rho = sampleRho(m, NSAMPLE / 2), u = EOSUofRhoT(e, rho, sampleT(m, 1));
+        CHECK(EOSYieldStrength(e, rho, u) == 0.0, "no strength model but Y != 0");
+        END_TEST();
+        return;
+    }
+
+    double Y0, YM, mui, mud, xi;
+    ANEOSYieldParameters(m, &Y0, &YM, &mui, &mud, &xi);
+
+    for (int a = 1; a < NSAMPLE - 1; a++) {
+        double rho = sampleRho(m, a);
+        double Tcold = sampleT(m, 0);
+        double Tm = ANEOSTmeltofRho(m, rho);
+        double u = EOSUofRhoT(e, rho, Tcold);
+        double c, T;
+        double P = EOSPCTofRhoU(e, rho, u, &c, &T);
+
+        double Y = EOSYieldStrength(e, rho, u);
+        double Ytp = EOSYieldStrengthofRhoTP(e, rho, T, P);
+        CHECK(Y >= 0.0 && isfinite(Y), "Y = %g at rho=%g", Y, rho);
+        CHECK_REL(Y, Ytp, 1e-13, "Y(rho,u) vs Y(rho,T,P) at rho=%g", rho);
+
+        /* Tension: strength at P < 0 equals strength at P = 0. */
+        if (Tcold < Tm) {
+            double Yzero = EOSYieldStrengthofRhoTP(e, rho, T, 0.0);
+            double Yneg = EOSYieldStrengthofRhoTP(e, rho, T, -10.0 * fabs(P) - 1.0);
+            CHECK_REL(Yneg, Yzero, 1e-14, "tension clamp at rho=%g", rho);
+            /* Intact model: Y(P=0) = Y0 * thermal factor, and Y grows with P. */
+            if (model == 1) {
+                double thermal = fmax(tanh(xi * (Tm / T - 1.0)), 0.0);
+                CHECK_REL(Yzero, Y0 * thermal, 1e-13, "Y(P=0) = Y0 * f(T) at rho=%g", rho);
+                CHECK(EOSYieldStrengthofRhoTP(e, rho, T, 2.0 * fabs(P) + 1.0) >= Yzero, "Y increases with P");
+            }
+            /* Damaged model: Y <= intact Y and Y(P=0) = 0. */
+            if (model == 2) CHECK(Yzero == 0.0, "damaged Y(P=0) = %g", Yzero);
+        }
+        /* At and above the melt temperature the strength vanishes. */
+        if (Tm < m->TAxis[m->nT-1]) {
+            double Pm = EOSPofRhoT(e, rho, fmin(1.5 * Tm, 0.99 * m->TAxis[m->nT-1]));
+            double Ym = EOSYieldStrengthofRhoTP(e, rho, fmin(1.5 * Tm, 0.99 * m->TAxis[m->nT-1]), Pm);
+            CHECK(Ym == 0.0, "Y above melt = %g at rho=%g", Ym, rho);
+        }
+        CHECK(EOSGammaofRhoT(e, rho, T) > 0.0, "shear modulus at rho=%g", rho);
+    }
+    END_TEST();
+}
+
+static void testSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
+{
+    int failsBefore = nFails;
+    TEST("EOSSolveBC: P and T continuity at an interface");
+    ANEOSMATERIAL *m = outer->ANEOSmaterial;
+    int nSolved = 0;
+    for (int a = 2; a < NSAMPLE - 2; a++) for (int b = 1; b < NSAMPLE - 3; b++) {
+        /* State in the outer (less dense) material. */
+        double rho1 = sampleRho(m, a), T1 = sampleT(m, b);
+        double u1 = EOSUofRhoT(outer, rho1, T1);
+        double P1 = EOSPofRhoU(outer, rho1, u1);
+        if (P1 <= 0.0) continue;   /* only compressed states have a meaningful interface */
+        double rho2, u2;
+        for (int jump = 0; jump < 2; jump++) {
+            double Tjump = jump ? 0.05 * T1 : 0.0;
+            if (EOSSolveBC(outer, inner, rho1, u1, &rho2, &u2, Tjump) != 0) continue;
+            nSolved++;
+            CHECK_REL(EOSPofRhoU(inner, rho2, u2), P1, 1e-8, "P continuity rho1=%g T1=%g jump=%g", rho1, T1, Tjump);
+            CHECK_REL(EOSTofRhoU(inner, rho2, u2), T1 - Tjump, 1e-8, "T continuity rho1=%g T1=%g jump=%g", rho1, T1, Tjump);
+            CHECK(EOSIsUsable(inner, rho2, u2) == EOS_TRUE, "solved state not usable");
+        }
+    }
+    CHECK(nSolved > 0, "EOSSolveBC never succeeded");
+    /* Failure path: a negative target temperature. The library prints a
+     * diagnostic to stderr for this; that message is expected. */
+    {
+        double rho1 = sampleRho(m, NSAMPLE - 1);
+        double u1 = EOSUofRhoT(outer, rho1, sampleT(m, NSAMPLE - 1));
+        double rho2 = -1.0, u2 = -1.0;
+        int ret = EOSSolveBC(outer, inner, rho1, u1, &rho2, &u2, 10.0 * sampleT(m, NSAMPLE - 1));
+        CHECK(ret == -1 || (isfinite(rho2) && rho2 > 0.0), "SolveBC: bad return %d with rho2=%g", ret, rho2);
+        if (ret == -1) CHECK(rho2 == -1.0 && u2 == -1.0, "outputs touched on failure");
+    }
+    END_TEST();
+}
+
+static void testWoolfson(EOSMATERIAL *a, EOSMATERIAL *b)
+{
+    int failsBefore = nFails;
+    TEST("EOSWoolfsonCoeff contract");
+    ANEOSMATERIAL *m = a->ANEOSmaterial;
+    double rho = sampleRho(m, NSAMPLE / 2), T = sampleT(m, NSAMPLE / 2);
+    double P = EOSPofRhoT(a, rho, T);
+    CHECK(EOSWoolfsonCoeff(a, a, P, T) == 1.0, "same material");
+    CHECK(EOSWoolfsonCoeff(a, b, 0.5 * WOOLFSON_MIN_PRESSURE, T) == 1.0, "below minimum pressure");
+    double f = EOSWoolfsonCoeff(a, b, P, T);
+    CHECK(f == -1.0 || (f > 0.0 && isfinite(f)), "f_ij = %g", f);
+    if (f > 0.0 && f != 1.0) {
+        double r1 = EOSRhoofPT(a, P, T), r2 = EOSRhoofPT(b, P, T);
+        CHECK_REL(f, r1 / r2, 1e-13, "f_ij = rho1/rho2");
+    }
+    END_TEST();
+}
+
+#endif /* HAVE_ANEOSMATERIAL_H */
+
+/* ------------------------------------------------------------- Tillotson */
+
+#ifdef HAVE_TILLOTSON_H
+static void testTillotsonPolicy(double dKpcUnit, double dMsolUnit)
+{
+    int failsBefore = nFails;
+    TEST("Tillotson: usable above the lookup table");
+    EOSMATERIAL *t = EOSinitMaterial(1, dKpcUnit, dMsolUnit, NULL);   /* granite */
+    CHECK(t->matType == EOSTILLOTSON, "matType");
+    CHECK(!t->bEntropy, "Tillotson has no entropy");
+    CHECK(EOSSofRhoU(t, t->rho0, 1.0) == -1e50, "entropy sentinel");
+    double rho = t->rho0;
+    double u = 1e4 * EOSUofRhoT(t, rho, 300.0);   /* far above any lookup table */
+    int st = EOSIsInTable(t, rho, u);
+    if (st == EOS_OUTSIDE_VMAX) CHECK(EOSIsUsable(t, rho, u) == EOS_TRUE, "OUTSIDE_VMAX must be usable for Tillotson");
+    CHECK(isfinite(EOSPofRhoU(t, rho, u)), "P above table is finite");
+    EOSfinalizeMaterial(t);
+    END_TEST();
+}
+#endif
+
+/* ------------------------------------------------------------------- main */
 
 int main(int argc, char *argv[])
 {
-	double dKpcUnit = 2.06701e-13;
-	double dMsolUnit = 4.80438e-08;
-	//double dKpcUnit = -1.0;
-	//double dMsolUnit = -1.0;
-	
-	// Version check
-	if (EOS_VERSION_MAJOR != 1) {
-        fprintf(stderr, "EOS library has the wrong version (%s)\n", EOS_VERSION_TEXT);
-        exit(1);
+    int iMatA = 54, iMatB = 55;
+    double dKpcUnit = 2.06701e-13;   /* Earth radius */
+    double dMsolUnit = 4.80438e-08;  /* Earth mass */
+
+    if (argc > 2) { iMatA = atoi(argv[1]); iMatB = atoi(argv[2]); }
+    if (argc > 4) { dKpcUnit = atof(argv[3]); dMsolUnit = atof(argv[4]); }
+
+    printf("EOSlib %s test suite: materials %d and %d, dKpcUnit = %g, dMsolUnit = %g\n",
+           EOS_VERSION_TEXT, iMatA, iMatB, dKpcUnit, dMsolUnit);
+
+    {
+        int failsBefore = nFails;
+        TEST("library versions");
+        CHECK(EOSCheckVersions() == 1, "EOSCheckVersions failed");
+        END_TEST();
     }
-	
-	// Initialization
-	EOSMATERIAL *material1;
-	EOSMATERIAL *material2;
 
-	material1 = EOSinitMaterial(54, dKpcUnit, dMsolUnit, 0);
-	material2 = EOSinitMaterial(6, dKpcUnit, dMsolUnit, 0);
+    testIdealGas(dKpcUnit, dMsolUnit);
 
-	EOSinitIsentropicLookup(material1, 0);
-	EOSinitIsentropicLookup(material2, 0);
-	
-	printf("minSoundSpeed mat1 %.15e\n", material1->minSoundSpeed);
-	printf("minSoundSpeed mat2 %.15e\n", material2->minSoundSpeed);
-	
-	// Test p(rho,u)
-	double rho = 8/material1->ANEOSmaterial->CodeUnitstoCGSforRho;
-	double u = 1e12/material1->ANEOSmaterial->CodeUnitstoCGSforU;
-	
-	double P1 = EOSPofRhoU(material1, rho, u);
-	printf("Pressure %.15e\n", P1);
-	double P2 = EOSPofRhoU(material2, rho, u);
-	printf("Pressure %.15e\n", P2);
-	
-	// Test c(rho,u) and p_and_c(rho,u)
-	double c1 = 0;
-	double c2 = 0;
-	c1 = EOSCofRhoU(material1, rho, u);
-	printf("Sound speed %.15e\n", c1);
-	c2 = EOSCofRhoU(material2, rho, u);
-	printf("Sound speed %.15e\n", c2);
-	
-	P1 = EOSPCofRhoU(material1, rho, u, &c1);
-	printf("Pressure %.15e\n", P1);
-	printf("Sound speed %.15e\n", c1);
-	P2 = EOSPCofRhoU(material2, rho, u, &c2);
-	printf("Pressure %.15e\n", P2);
-	printf("Sound speed %.15e\n", c2);
-	
-	// Test rho0
-	printf("rho0 %.15e\n", material1->rho0);
-	printf("rho0 %.15e\n", material2->rho0);
-	
-	// Test isentropic evolution
-	double rhonew = 8.1/material1->ANEOSmaterial->CodeUnitstoCGSforRho;
-	double unew1 = EOSIsentropic(material1, rho, u, rhonew);
-	double unew2 = EOSIsentropic(material2, rho, u, rhonew);
-	printf("old u %.15e, new u %.15e\n", u, unew1);
-	printf("old u %.15e, new u %.15e\n", u, unew2);
+#ifdef HAVE_ANEOSMATERIAL_H
+    EOSMATERIAL *A = EOSinitMaterial(iMatA, dKpcUnit, dMsolUnit, NULL);
+    EOSMATERIAL *B = EOSinitMaterial(iMatB, dKpcUnit, dMsolUnit, NULL);
+    EOSinitIsentropicLookup(A, NULL);
+    EOSinitIsentropicLookup(B, NULL);
+    printf("  A: %s  B: %s\n", A->MatString, B->MatString);
 
-	// Test T(rho,u)
-	double T1 = EOSTofRhoU(material1, rho, u);
-	double T2 = EOSTofRhoU(material2, rho, u);
-	printf("Temperature %.15e\n", T1);
-	printf("Temperature %.15e\n", T2);
+    testANEOSDispatch(A);
+    testANEOSDispatch(B);
+    testANEOSTableStatus(A);
+    testANEOSTableStatus(B);
+    testANEOSYield(A);
+    testANEOSYield(B);
+    /* Convention: the denser material is the inner one. */
+    if (A->rho0 >= B->rho0) { testSolveBC(A, B); testWoolfson(B, A); }
+    else                    { testSolveBC(B, A); testWoolfson(A, B); }
 
-	// Test u(rho,T)
-	double u1 = EOSUofRhoT(material1, rho, T1);
-	double u2 = EOSUofRhoT(material2, rho, T2);
-	printf("u %.15e\n", u1);
-	printf("u %.15e\n", u2);
+    EOSfinalizeMaterial(A);
+    EOSfinalizeMaterial(B);
+#else
+    printf("  (ANEOS tests skipped: HAVE_ANEOSMATERIAL_H not defined)\n");
+#endif
 
-	// Test rho(p,T)
-	double rho1 = EOSRhoofPT(material1, P1, T1);
-	double rho2 = EOSRhoofPT(material2, P2, T2);
-	printf("rho %.15e\n", rho1);
-	printf("rho %.15e\n", rho2);
+#ifdef HAVE_TILLOTSON_H
+    testTillotsonPolicy(dKpcUnit, dMsolUnit);
+#endif
 
-	// Test derivatives
-	double dPdRho1 = EOSdPdRho(material1, rho, u);
-	double dPdRho2 = EOSdPdRho(material2, rho, u);
-	double dPdU1 = EOSdPdU(material1, rho, u);
-	double dPdU2 = EOSdPdU(material2, rho, u);
-	double dUdRho1 = EOSdUdRho(material1, rho, u);
-	double dUdRho2 = EOSdUdRho(material2, rho, u);
-	printf("derivatives: dPdRho %.15e, dPdU %.15e, dUdRho %.15e\n", dPdRho1, dPdU1, dUdRho1);
-	printf("derivatives: dPdRho %.15e, dPdU %.15e, dUdRho %.15e\n", dPdRho2, dPdU2, dUdRho2);
-
-	// Test solveBC
-	double rhosolved;
-	double usolved;
-	int ret = EOSSolveBC(material2, material1, rho, u, &rhosolved, &usolved);
-	printf("returnvalue %d\n", ret);
-	printf("rhosolved %.15e\n", rhosolved);
-	printf("usolved %.15e\n", usolved);
-	P1 = EOSPofRhoU(material2, rho, u);
-	P2 = EOSPofRhoU(material1, rhosolved, usolved);
-	T1 = EOSTofRhoU(material2, rho, u);
-	T2 = EOSTofRhoU(material1, rhosolved, usolved);
-	printf("T: original %.15e, solved %.15e\n", T1, T2);
-	printf("P: original %.15e, solved %.15e\n", P1, P2);
-
-	// Test Woolfson correction
-	double woolfsoncoeff = EOSWoolfsonCoeff(material1, material2, P1, T1);
-	printf("woolfsoncoeff %.15e\n", woolfsoncoeff);
-
-	// Test EOSisbelowColdCurve
-	int ret1 = EOSisbelowColdCurve(material1, 25, 0.1);
-	int ret2 = EOSisbelowColdCurve(material1, 25, 60);
-	printf("isbelowColdCurve: true = %d, false = %d\n", ret1, ret2);
-
-	ret1 = EOSisbelowColdCurve(material2, 25, 0.1);
-	ret2 = EOSisbelowColdCurve(material2, 25, 60);
-	printf("isbelowColdCurve: true = %d, false = %d\n", ret1, ret2);
-
-	// Test coldU
-	printf("cold u = %g\n",EOSUCold(material1, rho));
-	printf("cold u = %g\n",EOSUCold(material2, rho));
-
-	// Test printing
-	EOSPrintMat(material1,stderr);
-	EOSPrintMat(material2,stderr);
-
-    // Test isInTable
-    printf("Test neg density mat1: %d\n",EOSIsInTable(material1,2.7e-4,u1));
-    printf("Test neg density mat2: %d\n",EOSIsInTable(material2,0.9e-4,u1));
-
-    printf("Test large density mat1: %d\n",EOSIsInTable(material1,275,u1));
-    printf("Test large density mat2: %d\n",EOSIsInTable(material2,200,u1));
-
-    printf("Test small u mat1: %d\n",EOSIsInTable(material1,rho,EOSUCold(material1,rho)*0.9999));
-    printf("Test small u mat2: %d\n",EOSIsInTable(material2,rho,EOSUCold(material2,rho)*0.9999));
-
-    printf("Test large u mat1: %d\n",EOSIsInTable(material1,10,100000));
-    printf("Test large u mat2: %d\n",EOSIsInTable(material2,10,100000));
-
-    printf("Test ok parameters mat1: %d\n",EOSIsInTable(material1,rho,u));
-    printf("Test ok parameters mat2: %d\n",EOSIsInTable(material2,rho,u));
-
-	// Finalize
-	EOSfinalizeMaterial(material1);
-	EOSfinalizeMaterial(material2);
-	return 0;
+    printf("%d checks, %d failed\n", nChecks, nFails);
+    return nFails;
 }
