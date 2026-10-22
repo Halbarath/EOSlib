@@ -66,6 +66,13 @@
 
 #define WOOLFSON_MIN_PRESSURE 1e-3
 
+/* EOSSolveBC: bracket expansion limits and convergence tolerances. */
+#define EOS_SOLVEBC_MAX_EXPAND  100   /* 1.1^100 ~ 1.4e4, 0.9^100 ~ 2.7e-5 */
+#define EOS_SOLVEBC_MAX_BISECT  200
+#define EOS_SOLVEBC_TOL         1e-10 /* relative, in density */
+#define EOS_SOLVEBC_PTOL        1e-6  /* relative, in pressure: the bracket must close to this */
+
+
 #define EOS_N_MATERIAL_MAX 130
 
 #define EOSIDEALGAS  0
@@ -210,7 +217,15 @@ double EOSGammaofRhoT(EOSMATERIAL *material, double rho, double T);
 
 double EOSUCold(EOSMATERIAL *material, double rho);
 
-// Boundary condition solver (returns 0 on success, -1 on failure)
+/*
+ * Boundary condition solver: given (rho1, u1) in material 1, find (rho2, u2)
+ * in material 2 with equal pressure and T2 = T1 - Tjump. Converges to
+ * EOS_SOLVEBC_TOL in density and EOS_SOLVEBC_PTOL in pressure. Returns 0 on
+ * success, -1 on failure (no bracket, state outside the table, or P2(rho, T2)
+ * discontinuous at the root, which happens where u(T) of material 2 is not
+ * monotonic, e.g. at a melt transition of a defective table). On failure
+ * *prho2 and *pu2 are untouched.
+ */
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,
  double *prho2, double *pu2, double Tjump);
  

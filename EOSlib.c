@@ -602,10 +602,11 @@ double EOSSofRhoU(EOSMATERIAL *material, double rho, double u)
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
-        case EOSSCVHEOS:
+        case EOSSCVHEOS: {
             double T = scvheosTofRhoU(material->scvheosmaterial, rho, u);
             S = scvheosSofRhoT(material->scvheosmaterial, rho, T);
             break;
+        }
 #endif
         default: EOS_UNKNOWN_MATERIAL(material);
     }
@@ -1377,11 +1378,6 @@ double EOSUCold(EOSMATERIAL *material, double rho)
     return ucold;
 }
 
-
-#define EOS_SOLVEBC_MAX_EXPAND  100   /* 1.1^100 ~ 1.4e4, 0.9^100 ~ 2.7e-5 */
-#define EOS_SOLVEBC_MAX_BISECT  200
-#define EOS_SOLVEBC_TOL         1e-10
-
 /*
  * Evaluate u(rho,T) and P(rho,u) for a material and check that the state is
  * valid (inside the EOS table, finite). Returns EOS_SUCCESS or EOS_FAIL.
@@ -1520,6 +1516,19 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
         } else {
             a = c; ua = uc; Pa = Pc;
         }
+    }
+
+    /*
+     * On a continuous P2(rho, T) the pressure bracket closes with the density
+     * bracket. If it has not, P2 jumps at the root: T(rho, u) switches between
+     * roots of a non-monotonic u(T) column (melt transition in a defective
+     * table), and no density matches P. Report that rather than returning the
+     * location of the jump.
+     */
+    if (Pa - Pb > EOS_SOLVEBC_PTOL * fabs(P)) {
+        fprintf(stderr, "EOSSolveBC: P2(rho, T) is discontinuous at the root "
+                "(P= %g T= %g rho= %g Pb= %g Pa= %g).\n", P, T, c, Pb, Pa);
+        return -1;
     }
 
     /* Make sure the returned (rho2, u2) pair is consistent. */
