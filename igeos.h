@@ -28,7 +28,7 @@ typedef struct igeosMat {
     double dSecUnit;
 
     int iMat;
-    
+
     /* Constant for ideal gas EOS. */
     double dConstGamma;
     double dMeanMolMass;
@@ -38,7 +38,7 @@ typedef struct igeosMat {
 
     /* Specific heat capacity. */
     double cv;
-} IGEOSMAT; 
+} IGEOSMAT;
 
 IGEOSMAT *igeosInitMat(int iMat, double dConstGamma, double dMeanMolMass, double dKpcUnit, double dMsolUnit);
 

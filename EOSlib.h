@@ -1,5 +1,5 @@
 /*  This file is part of EOSlib.
- *  Copyright (c) 2020-2021 Thomas Meier & Christian Reinhardt
+ *  Copyright (c) 2020-2026 Thomas Meier & Christian Reinhardt
  *
  *  EOSlib is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,17 +18,21 @@
 /*
  * Equation Of State library EOSlib
  *
- * This is a wrapper to be used in Gasoline and ballic
+ * This is a wrapper to be used in pkdgrav3, Gasoline and ballic.
  * It wraps around the Tillotson material library and the ANEOSmaterial library
- * but can be extended with additional material libraries
+ * but can be extended with additional material libraries.
  *
+ * Version history
+ *   1.0.6  requires ANEOSmaterial 1.0.4; EOSSolveBC returns -1 where
+ *          P2(rho, T) is discontinuous at the root instead of returning the
+ *          location of the jump; solver tolerances exported from this header.
  */
 
 #ifndef EOSLIB_HINCLUDED
 #define EOSLIB_HINCLUDED
 
 #include <stdio.h>   /* FILE in EOSPrintMat */
- 
+
 #ifdef HAVE_TILLOTSON_H
     #include <tillotson.h>
 #define TILL_VERSION_MAJOR_REQUIRED 3
@@ -72,7 +76,6 @@
 #define EOS_SOLVEBC_TOL         1e-10 /* relative, in density */
 #define EOS_SOLVEBC_PTOL        1e-6  /* relative, in pressure: the bracket must close to this */
 
-
 #define EOS_N_MATERIAL_MAX 130
 
 #define EOSIDEALGAS  0
@@ -105,37 +108,37 @@
 #define EOS_OUTSIDE_RHOMAX -2
 #define EOS_OUTSIDE_VMIN -3
 #define EOS_OUTSIDE_VMAX -4
- 
+
 // Pass additional parameters for some EOS
 struct igeosParam
-{ 
+{
     /* Constant for ideal gas EOS. */
     double dConstGamma;
-    double dMeanMolMass;	
+    double dMeanMolMass;
 };
 
 typedef struct EOSmaterial
 {
-	int iMat; // Material number
-	int matType; // Material type, e.g., 0: ideal gas, 1: Tillotson, 2: ANEOS
-	double rho0; // reference density
-	double rho0forInterfaceCorrection; // reference density for interface correction
-	int bEntropyTableInit; // flag to signal if the entropy table is initialized
+    int iMat; // Material number
+    int matType; // Material type, e.g., 0: ideal gas, 1: Tillotson, 2: ANEOS
+    double rho0; // reference density
+    double rho0forInterfaceCorrection; // reference density for interface correction
+    int bEntropyTableInit; // flag to signal if the entropy table is initialized
     int bEntropy; // flag to signal if the eos has entropy available (see EOSSofRhoU)
-	double minSoundSpeed; // sound speed at reference values
+    double minSoundSpeed; // sound speed at reference values
     char MatString[256];
     IGEOSMAT *igeosmaterial; // Pointer to ideal gas material
 #ifdef HAVE_TILLOTSON_H
-	TILLMATERIAL *tillmaterial; // Pointer to tillotson material
+    TILLMATERIAL *tillmaterial; // Pointer to tillotson material
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
-	ANEOSMATERIAL *ANEOSmaterial; // Pointer to ANEOS material
+    ANEOSMATERIAL *ANEOSmaterial; // Pointer to ANEOS material
 #endif
 #ifdef HAVE_REOS3_H
-	REOS3MAT *reos3material; // Pointer to REOS3 material
+    REOS3MAT *reos3material; // Pointer to REOS3 material
 #endif
 #ifdef HAVE_SCVHEOS_H
-	SCVHEOSMAT *scvheosmaterial; // Pointer to SCvH EOS material
+    SCVHEOSMAT *scvheosmaterial; // Pointer to SCvH EOS material
 #endif
 
 } EOSMATERIAL;
@@ -149,7 +152,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data);
 void EOSfinalizeMaterial(EOSMATERIAL *material);
 void EOSPrintMat(EOSMATERIAL *material, FILE *fp);
-int EOSCheckVersions();
+int EOSCheckVersions(void);
 
 // Access functions
 
@@ -228,7 +231,7 @@ double EOSUCold(EOSMATERIAL *material, double rho);
  */
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,
  double *prho2, double *pu2, double Tjump);
- 
+
 // Woolfson correction f_ij = rho_1(P,T)/rho_2(P,T). Returns -1.0 if the
 // density inversion fails; callers must check for a negative result.
 double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P, double T);

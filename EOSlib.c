@@ -1,5 +1,5 @@
 /*  This file is part of EOSlib.
- *  Copyright (c) 2020-2021 Thomas Meier & Christian Reinhardt
+ *  Copyright (c) 2020-2026 Thomas Meier & Christian Reinhardt
  *
  *  EOSlib is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,9 +18,9 @@
 /*
  * Equation Of State library EOSlib
  *
- * This is a wrapper to be used in Gasoline and ballic
+ * This is a wrapper to be used in pkdgrav3, Gasoline and ballic.
  * It wraps around the Tillotson material library and the ANEOSmaterial library
- * but can be extended with additional material libraries
+ * but can be extended with additional material libraries.
  *
  */
 
@@ -41,7 +41,7 @@
  * Initialization of the material structures
  * iMat: Material number
  * dKpcUnit, dMsolUnit: Unit conversion factors
- * additional_data: void pointer that can be used to give additional options, not used at the moment
+ * additional_data: EOS-specific options; a struct igeosParam for the ideal gas, NULL otherwise
  *
  * Required: all
  */
@@ -117,7 +117,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->reos3material = reos3InitMaterial(iMat, dKpcUnit, dMsolUnit, TRUE);
         material->rho0 = material->reos3material->rho0;
         material->rho0forInterfaceCorrection = 0.0; // Gas has no cutoff
-        // So far we do not have entropy for REOS3. 
+        // So far we do not have entropy for REOS3.
         material->bEntropyTableInit = EOS_FALSE;
         // How do we define a minimum sound speed and reference density for H and He?
         material->minSoundSpeed = 0.0;
@@ -153,7 +153,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 }
 
 /*
- * Initialize the lookup tables needed for the isentropoic evolution
+ * Initialize the lookup tables needed for the isentropic evolution
  *
  * Required: pkdgrav3, gasoline (ISPH), fix initial conditions
  */
@@ -163,7 +163,7 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            // nothing to do, material->bEntropyTableInitis always EOS_TRUE
+            // nothing to do, material->bEntropyTableInit is always EOS_TRUE
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
@@ -173,19 +173,18 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
         case EOSANEOS:
-            // nothing to do, material->bEntropyTableInitis always EOS_TRUE
+            // nothing to do, material->bEntropyTableInit is always EOS_TRUE
             break;
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            // Fail because not implemented yet
+            // Not implemented yet: warn, do not fail.
             fprintf(stderr, "REOS3: Warning entropy lookup table not implemented yet.\n");
-            //assert(0);
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
-            // nothing to do, material->bEntropyTableInitis always EOS_TRUE
+            // nothing to do, material->bEntropyTableInit is always EOS_TRUE
             break;
 #endif
         default: EOS_UNKNOWN_MATERIAL(material);
@@ -254,13 +253,11 @@ void EOSPrintMat(EOSMATERIAL *material, FILE *fp)
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            // Not implemented yet.
             reos3PrintMat(material->reos3material, fp);
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
-            // Not implemented yet.
             scvheosPrintMat(material->scvheosmaterial, fp);
             break;
 #endif
@@ -271,7 +268,7 @@ void EOSPrintMat(EOSMATERIAL *material, FILE *fp)
 /*
  * Check if all sublibraries have the correct version
  */
-int EOSCheckVersions() {
+int EOSCheckVersions(void) {
     int result = 1;
     if ((IGEOS_VERSION_MAJOR * 10000 + IGEOS_VERSION_MINOR * 100 + IGEOS_VERSION_PATCH) < (IGEOS_VERSION_MAJOR_REQUIRED * 10000 + IGEOS_VERSION_MINOR_REQUIRED * 100 + IGEOS_VERSION_PATCH_REQUIRED)) {
         fprintf(stderr, "EOSCheckVersions: Ideal gas EOS library version (%s) is outdated. At least version %d.%d.%d is required.\n", IGEOS_VERSION_TEXT,IGEOS_VERSION_MAJOR_REQUIRED,IGEOS_VERSION_MINOR_REQUIRED,IGEOS_VERSION_PATCH_REQUIRED);
@@ -936,7 +933,7 @@ double EOSRhoofPT(EOSMATERIAL *material, double p, double T)
 /*
  * Calculates the density rho(u,T) for a material
  *
- * Require: none
+ * Required: none
  */
 double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
 {
@@ -962,14 +959,14 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            // Not implemented, return rho=0.
+            // Not implemented.
             assert(0);
             exit(1);
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
-            // Not implemented, return rho=0.
+            // Not implemented.
             assert(0);
             exit(1);
             break;
@@ -1335,9 +1332,13 @@ double EOSGammaofRhoT(EOSMATERIAL *material, double rho, double T){
 }
 
 /*
- * Calculate the cold part of the internal energy, i.e., u(rho, T=0).
+ * Calculate the cold part of the internal energy, u(rho, T=0). For the
+ * tabulated EOS this is u at the lowest tabulated temperature, i.e. the first
+ * table row; where a table's cold rows are defective (u(T_min) above u at
+ * higher T) it is not the energy minimum, and EOSisbelowColdCurve and
+ * EOSIsInTable inherit that.
  *
- * Required: internal
+ * Required: internal, ballic
  */
 double EOSUCold(EOSMATERIAL *material, double rho)
 {
@@ -1355,13 +1356,13 @@ double EOSUCold(EOSMATERIAL *material, double rho)
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
         case EOSANEOS:
-            // For ANEOS temperatures below T_min cause problems
+            // Lowest tabulated temperature: ANEOS cannot be evaluated below T_min.
             ucold = ANEOSUofRhoT(material->ANEOSmaterial, rho, material->ANEOSmaterial->TAxis[0]);
             break;
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            // For REOS3 temperatures below T_min cause problems
+            // Lowest tabulated temperature.
             ucold = reos3UofRhoT(material->reos3material, rho, material->reos3material->TAxis[0]);
             break;
 #endif
@@ -1412,7 +1413,8 @@ static int EOSSolveBCEval(EOSMATERIAL *material, double rho, double T,
  * P1(rho1,u1) = P2(rho2,u2) and T1(rho1,u1) - Tjump = T2(rho2,u2)
  *
  * Since P = P(rho, T) and T2 is known we solve P2(rho2) - P1 = 0 by bisection,
- * assuming P2(rho, T2) is monotonically increasing in rho.
+ * assuming P2(rho, T2) is monotonically increasing in rho. The tolerances and
+ * the discontinuity check are described in EOSlib.h.
  *
  * Returns 0 if successful or -1 if not. On failure *prho2 and *pu2 are untouched.
  */
@@ -1586,9 +1588,10 @@ double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P
         return -1.0;
     }
 
-    /* 
-     * Limit correction in the expanded states because e.g. at phase transitions P(rho) is
-     * monotonic and f_ij can become huge.
+    /*
+     * Limit the correction in expanded states: at phase transitions P(rho) is
+     * flat (not strictly monotonic), so rho(P, T) is ill-conditioned and f_ij
+     * can become huge.
      */
     if ((rho1 <= 0.8*material1->rho0) || (rho2 <= 0.8*material2->rho0)) {
         return 1.0;

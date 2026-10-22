@@ -73,7 +73,7 @@ void igeosPrintMat(IGEOSMAT *Mat, FILE *fp) {
     fprintf(fp,"# Material: %i (IDEALGAS)\n", Mat->iMat);
 
     fprintf(fp,"# dConstGamma:  %g\n", Mat->dConstGamma);
-    fprintf(fp,"# dMeanMolMass: %g\n", Mat->dMeanMolMass);    
+    fprintf(fp,"# dMeanMolMass: %g\n", Mat->dMeanMolMass);
     fprintf(fp,"# rho0:         %g\n", Mat->rho0);
     fprintf(fp,"# cv:           %g\n", Mat->cv);
 }
@@ -96,7 +96,7 @@ double igeosCofRhoU(IGEOSMAT *Mat, double rho, double u) {
 /* Calculate P(rho, u) and cs(rho, u). */
 double igeosPCofRhoU(IGEOSMAT *Mat, double rho, double u, double *c) {
    *c = igeosCofRhoU(Mat, rho, u);
-   return igeosPofRhoU(Mat, rho, u);  
+   return igeosPofRhoU(Mat, rho, u);
 }
 
 /* Calculate u2(rho1, u1, rho2) so that (rho1, u1) and (rho2, u2) are on the same isentrope. */

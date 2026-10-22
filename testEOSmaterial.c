@@ -129,6 +129,7 @@ static void testIdealGas(double dKpcUnit, double dMsolUnit)
 
 #ifdef HAVE_ANEOSMATERIAL_H
 
+/* 100 for a quick run (seconds); 1000 for a full sweep (minutes per material). */
 #define NSAMPLE 1000
 
 static double sampleRho(ANEOSMATERIAL *m, int k)
