@@ -130,11 +130,13 @@ static double sampleRho(ANEOSMATERIAL *m, int k)
     return exp(lo + f * (hi - lo)) * m->CGStoCodeUnitsforRho;
 }
 
+/* Log-spaced in T, from 300 K (above the defective cold rows of the M-ANEOS
+ * tables) to the top of the table. */
 static double sampleT(ANEOSMATERIAL *m, int k)
 {
-    double lo = m->TAxis[0], hi = m->TAxis[m->nT-1];
+    double lo = log(fmax(m->TAxis[0], 300.0)), hi = log(m->TAxis[m->nT-1]);
     double f = 0.05 + 0.90 * (k + 0.5) / NSAMPLE;
-    return lo + f * (hi - lo);
+    return exp(lo + f * (hi - lo));
 }
 
 static void testANEOSDispatch(EOSMATERIAL *e)
