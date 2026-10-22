@@ -1022,24 +1022,15 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
         case EOSANEOS:
-            if (rho < material->ANEOSmaterial->rhoAxis[0]/material->ANEOSmaterial->CodeUnitstoCGSforRho)
-            {
-                return EOS_OUTSIDE_RHOMIN;
-            }
-            if (rho >= material->ANEOSmaterial->rhoAxis[material->ANEOSmaterial->nRho-1]/material->ANEOSmaterial->CodeUnitstoCGSforRho)
-            {
-                return EOS_OUTSIDE_RHOMAX;
-            }
-            if (u < ANEOSUofRhoT(material->ANEOSmaterial, rho, material->ANEOSmaterial->TAxis[0]))
-            {
-                return EOS_OUTSIDE_VMIN;
-            }
-            if (u > ANEOSUofRhoT(material->ANEOSmaterial, rho, material->ANEOSmaterial->TAxis[material->ANEOSmaterial->nT-1]*0.9999))
-            {
-                return EOS_OUTSIDE_VMAX;
-            }
+        {
+            ANEOSMATERIAL *am = material->ANEOSmaterial;
+            double rho_cgs = rho * am->CodeUnitstoCGSforRho;
+            if (rho_cgs < am->rhoAxis[0]) return EOS_OUTSIDE_RHOMIN;
+            if (rho_cgs >= am->rhoAxis[am->nRho-1]) return EOS_OUTSIDE_RHOMAX;
+            if (u < ANEOSUofRhoT(am, rho, am->TAxis[0])) return EOS_OUTSIDE_VMIN;
+            if (u > ANEOSUofRhoT(am, rho, am->TAxis[am->nT-1]*0.9999)) return EOS_OUTSIDE_VMAX;
             return EOS_SUCCESS;
-            break;
+        }
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
