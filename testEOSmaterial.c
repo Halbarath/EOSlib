@@ -288,10 +288,13 @@ static void testANEOSYield(EOSMATERIAL *e)
             /* Damaged model: Y <= intact Y and Y(P=0) = 0. */
             if (model == 2) CHECK(Yzero == 0.0, "damaged Y(P=0) = %g", Yzero);
         }
-        /* At and above the melt temperature the strength vanishes. */
-        if (Tm < m->TAxis[m->nT-1]) {
-            double Pm = EOSPofRhoT(e, rho, fmin(1.5 * Tm, 0.99 * m->TAxis[m->nT-1]));
-            double Ym = EOSYieldStrengthofRhoTP(e, rho, fmin(1.5 * Tm, 0.99 * m->TAxis[m->nT-1]), Pm);
+        /* At and above the melt temperature the strength vanishes. Needs a melt
+         * temperature inside the table; the melt curve is 0 where the material
+         * has no condensed phase (low-density vapour region). */
+        if (Tm > m->TAxis[0] && Tm < m->TAxis[m->nT-1]) {
+            double Tabove = fmin(1.5 * Tm, 0.99 * m->TAxis[m->nT-1]);
+            double Pm = EOSPofRhoT(e, rho, Tabove);
+            double Ym = EOSYieldStrengthofRhoTP(e, rho, Tabove, Pm);
             CHECK(Ym == 0.0, "Y above melt = %g at rho=%g", Ym, rho);
         }
         CHECK(EOSGammaofRhoT(e, rho, T) > 0.0, "shear modulus at rho=%g", rho);
