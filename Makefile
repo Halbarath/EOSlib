@@ -1,6 +1,9 @@
 objects = EOSlib.o igeos.o ../ANEOSmaterial/ANEOSmaterial.o ../ANEOSmaterial/interpBilinear.o ../tillotson/tillotson.o ../tillotson/tillinitlookup.o ../tillotson/tillsplint.o ../tillotson/interpol/brent.o ../reos3/reos3.o ../scvh/scvheos.o
 
-defs = -DTILL_OUTPUT_ALL_WARNINGS -DTILL_VERBOSE -EOSLIB_VERBOSE
+# Position-independent copies of the same objects for the shared library.
+pic_objects = $(objects:.o=.pic.o)
+
+defs = -DTILL_OUTPUT_ALL_WARNINGS -DTILL_VERBOSE -DEOSLIB_VERBOSE
 
 execs = testEOSmaterial calcTemperature calcColdcurveEnergy timingTest writeColdCurve calcPressure calcSoundSpeed
 
@@ -19,6 +22,15 @@ default:
 	@echo "Please specify which tool you want to make."	
 
 all: default
+
+# Shared library for the Python wrapper (eoslib.py):  make libEOSlib
+libEOSlib: libEOSlib.so
+
+libEOSlib.so: $(pic_objects)
+	$(CC) $(LDFLAGS) -shared -o $@ $^ $(LIBS)
+
+%.pic.o: %.c
+	$(CC) $(CFLAGS) -fPIC -c $< -o $@
 
 testEOSmaterial: testEOSmaterial.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
@@ -56,8 +68,10 @@ callEOSlibforMixing: callEOSlibforMixing.o $(objects)
 callEOSlibRhoofPT: callEOSlibRhoofPT.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
+.PHONY: default all libEOSlib clean cleanall
+
 clean:
-	rm -f $(execs) $(objects)
+	rm -f $(execs) $(objects) $(pic_objects) libEOSlib.so
 
 cleanall:
-	rm -f $(execs) *.txt *.mat *.o *.pdf
+	rm -f $(execs) *.txt *.mat *.o *.pdf libEOSlib.so $(pic_objects)
