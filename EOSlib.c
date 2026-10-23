@@ -144,6 +144,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->bEntropy = EOS_TRUE;
         // How do we define a minimum sound speed and reference density for H and He?
         material->minSoundSpeed = 0.0;
+        snprintf(material->MatString, sizeof(material->MatString), "%s", material->scvheosmaterial->MatString);
 #else
         fprintf(stderr,"Tried to initialize an SCvH EOS material, but the SCvH EOS library is absent.\n");
         assert(0);
@@ -605,7 +606,8 @@ double EOSSofRhoU(EOSMATERIAL *material, double rho, double u)
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS: {
             double T = scvheosTofRhoU(material->scvheosmaterial, rho, u);
-            S = scvheosSofRhoT(material->scvheosmaterial, rho, T);
+            /* With SCVH_NOEXIT a failed inversion returns the sentinel; do not feed it to log10. */
+            S = (T < -1e40) ? -1e50 : scvheosSofRhoT(material->scvheosmaterial, rho, T);
             break;
         }
 #endif
@@ -1040,7 +1042,7 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
             if (iret == REOS3_OUTSIDE_RHOMAX) return EOS_OUTSIDE_RHOMAX;
             if (iret == REOS3_OUTSIDE_TMIN) return EOS_OUTSIDE_VMIN;
             if (iret == REOS3_OUTSIDE_TMAX) return EOS_OUTSIDE_VMAX;
-            break;
+            return EOS_FAIL;
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
@@ -1050,7 +1052,7 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
             if (iret == SCVHEOS_OUTSIDE_RHOMAX) return EOS_OUTSIDE_RHOMAX;
             if (iret == SCVHEOS_OUTSIDE_TMIN) return EOS_OUTSIDE_VMIN;
             if (iret == SCVHEOS_OUTSIDE_TMAX) return EOS_OUTSIDE_VMAX;
-            break;
+            return EOS_FAIL;
 #endif
         default: EOS_UNKNOWN_MATERIAL(material);
     }

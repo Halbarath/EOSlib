@@ -26,6 +26,11 @@
  *   1.0.6  requires ANEOSmaterial 1.0.4; EOSSolveBC returns -1 where
  *          P2(rho, T) is discontinuous at the root instead of returning the
  *          location of the jump; solver tolerances exported from this header.
+ *   1.0.7  requires scvheos 1.1.0: EOSPCofRhoU/EOSPCTofRhoU use the fused
+ *          scvheosPCTofRhoU; EOSUCold no longer reaches into the SCvH
+ *          tables; MatString set for SCvH materials; EOSSofRhoU returns
+ *          -1e50 for SCvH when T(rho, u) fails; EOSIsInTable returns
+ *          EOS_FAIL instead of a raw sublibrary code for REOS3 and SCvH.
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -54,8 +59,8 @@
 #ifdef HAVE_SCVHEOS_H
     #include <scvheos.h>
 #define SCVHEOS_VERSION_MAJOR_REQUIRED 1
-#define SCVHEOS_VERSION_MINOR_REQUIRED 0
-#define SCVHEOS_VERSION_PATCH_REQUIRED 1
+#define SCVHEOS_VERSION_MINOR_REQUIRED 1
+#define SCVHEOS_VERSION_PATCH_REQUIRED 0
 #endif
 
 #include "igeos.h"
@@ -63,10 +68,10 @@
 #define IGEOS_VERSION_MINOR_REQUIRED 0
 #define IGEOS_VERSION_PATCH_REQUIRED 2
 
-#define EOS_VERSION_TEXT    "1.0.6"
+#define EOS_VERSION_TEXT    "1.0.7"
 #define EOS_VERSION_MAJOR   1
 #define EOS_VERSION_MINOR   0
-#define EOS_VERSION_PATCH   6
+#define EOS_VERSION_PATCH   7
 
 #define WOOLFSON_MIN_PRESSURE 1e-3
 
