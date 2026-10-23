@@ -1372,9 +1372,9 @@ double EOSUCold(EOSMATERIAL *material, double rho)
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
-            // Limit temperatures to LogTMin
-            ucold = scvheosLogUofLogRhoLogT(material->scvheosmaterial, log10(rho), material->scvheosmaterial->LogTMin);
-            ucold = pow(material->scvheosmaterial->dLogBase, ucold);
+            // Lowest tabulated temperature: the library cannot be evaluated below T_min.
+            ucold = scvheosUofRhoT(material->scvheosmaterial, rho,
+                                   pow(10.0, material->scvheosmaterial->LogTMin));
             break;
 #endif
         default: EOS_UNKNOWN_MATERIAL(material);
