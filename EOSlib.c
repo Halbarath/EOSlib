@@ -131,6 +131,14 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->matType = EOSSCVHEOS;
         material->scvheosmaterial = scvheosInitMaterial(iMat, dKpcUnit, dMsolUnit);
         material->rho0 = material->scvheosmaterial->rho0;
+        /*
+         * rho0 of an SCvH material is a convention (SCVHEOS_RHO0_CGS, 1e-3 g/cc
+         * unless outside the table): a gas has no reference density. It only
+         * serves as the starting point of EOSSolveBC's lower bracket, which
+         * shrinks by 0.9 up to EOS_SOLVEBC_MAX_EXPAND times, so interface
+         * densities down to ~3e-8 g/cc are found from it. rho0forInterfaceCorrection
+         * is 0 because the Woolfson cutoff 0.8*rho0 has no meaning for a gas.
+         */
         material->rho0forInterfaceCorrection = 0.0; // Gas has no cutoff
         material->bEntropyTableInit = EOS_TRUE;
         material->bEntropy = EOS_TRUE;
