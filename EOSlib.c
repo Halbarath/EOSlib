@@ -469,9 +469,7 @@ double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c)
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
-            T = scvheosTofRhoU(material->scvheosmaterial, rho, u);
-            P = scvheosPofRhoT(material->scvheosmaterial, rho, T);
-            *c = scvheosCsofRhoT(material->scvheosmaterial, rho, T);
+            P = scvheosPCTofRhoU(material->scvheosmaterial, rho, u, c, &T);
             break;
 #endif
         default: EOS_UNKNOWN_MATERIAL(material);
@@ -517,9 +515,7 @@ double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, doub
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
-            *T = scvheosTofRhoU(material->scvheosmaterial, rho, u);
-            P = scvheosPofRhoT(material->scvheosmaterial, rho, *T);
-            *c = scvheosCsofRhoT(material->scvheosmaterial, rho, *T);
+            P = scvheosPCTofRhoU(material->scvheosmaterial, rho, u, c, T);
             break;
 #endif
         default: EOS_UNKNOWN_MATERIAL(material);
