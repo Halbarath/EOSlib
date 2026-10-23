@@ -24,12 +24,15 @@
  * condition solver. Everything is an invariant; no reference values are
  * hard-coded. Usage:
  *
- *   testEOSmaterial [iMatA iMatB] [dKpcUnit dMsolUnit]
+ *   testEOSmaterial [iMatA iMatB] [dKpcUnit dMsolUnit] [iMatSCVH]
  *
  * Defaults: ANEOS dunite (54) and ANEOS iron (55), Earth-like code units.
  * iMatA/iMatB must be ANEOS materials whose tables are in the working
  * directory; the Tillotson tests run only if HAVE_TILLOTSON_H is defined.
- * Exit status is the number of failed checks.
+ * With HAVE_SCVHEOS_H and an iMatSCVH (e.g. 114) the SCvH path is tested too,
+ * including the boundary condition solver for a gas envelope on material A;
+ * the scvheos table must be in the working directory. Exit status is the
+ * number of failed checks.
  */
 #include <math.h>
 #include <stdio.h>
@@ -375,6 +378,175 @@ static void testWoolfson(EOSMATERIAL *a, EOSMATERIAL *b)
 
 #endif /* HAVE_ANEOSMATERIAL_H */
 
+/* ------------------------------------------------------------------ SCvH */
+
+#ifdef HAVE_SCVHEOS_H
+
+#define NSAMPLE_SCVH 300
+
+static double scvhExp10(double x) { return exp(x * 2.302585092994045684); }
+
+/* Log-spaced samples in the interior of the SCvH table, code units / Kelvin. */
+static double scvhSampleRho(SCVHEOSMAT *s, int k)
+{
+    double f = 0.05 + 0.90 * (k + 0.5137) / NSAMPLE_SCVH;
+    return scvhExp10(s->LogRhoMin + f * (s->LogRhoMax - s->LogRhoMin));
+}
+
+static double scvhSampleT(SCVHEOSMAT *s, int k)
+{
+    double f = 0.05 + 0.90 * (k + 0.5137) / NSAMPLE_SCVH;
+    return scvhExp10(s->LogTMin + f * (s->LogTMax - s->LogTMin));
+}
+
+/* 1 if the table A increases along T in the rho column containing rho (both
+ * node columns). Where it does not, T(rho, u) or T(rho, s) may return another
+ * root (table defect), and the identities through them are not invariants. */
+static int scvhMonotonic(SCVHEOSMAT *s, const double *A, double rho)
+{
+    double lr = log10(rho);
+    int j = 0;
+    while (j < s->nRho - 2 && s->dLogRhoAxis[j+1] <= lr) j++;
+    for (int i = 0; i < s->nT - 1; i++) {
+        if (!(A[(size_t)j * s->nT + i + 1] > A[(size_t)j * s->nT + i])) return 0;
+        if (!(A[(size_t)(j+1) * s->nT + i + 1] > A[(size_t)(j+1) * s->nT + i])) return 0;
+    }
+    return 1;
+}
+
+static int scvhEnergyMonotonic(SCVHEOSMAT *s, double rho)  { return scvhMonotonic(s, s->dLogUArray, rho); }
+static int scvhEntropyMonotonic(SCVHEOSMAT *s, double rho) { return scvhMonotonic(s, s->dLogSArray, rho); }
+
+static void testSCVHDispatch(EOSMATERIAL *e)
+{
+    int failsBefore = nFails;
+    TEST("SCvH dispatch matches scvheos directly");
+    SCVHEOSMAT *s = e->scvheosmaterial;
+    CHECK(e->matType == EOSSCVHEOS, "matType");
+    CHECK(e->bEntropy && e->bEntropyTableInit, "entropy flags");
+    CHECK_REL(e->rho0, s->rho0, 0.0, "rho0");
+    CHECK(e->rho0forInterfaceCorrection == 0.0, "gas has no interface-correction cutoff");
+    CHECK(strlen(e->MatString) > 0, "MatString empty");
+    CHECK(EOSYieldModel(e) == 0, "yield model for gas");
+    CHECK(EOSYieldStrength(e, scvhSampleRho(s, 1), 1.0) == 0.0, "yield strength for gas");
+    CHECK(EOSGammaofRhoT(e, scvhSampleRho(s, 1), scvhSampleT(s, 1)) == 0.0, "shear modulus for gas");
+
+    int nSkipped = 0, nSkippedS = 0;
+    for (int a = 0; a < NSAMPLE_SCVH; a++) for (int b = 0; b < NSAMPLE_SCVH; b++) {
+        double rho = scvhSampleRho(s, a), T = scvhSampleT(s, b);
+        if (!scvhEnergyMonotonic(s, rho)) { nSkipped++; continue; }
+        double u = EOSUofRhoT(e, rho, T);
+        double c, Tf;
+        double P = EOSPCTofRhoU(e, rho, u, &c, &Tf);
+        CHECK_REL(u, scvheosUofRhoT(s, rho, T), 0.0, "UofRhoT dispatch");
+        /* The inversion is closed-form on the bilinear interpolant, so the
+         * fused lookup reproduces the (rho, T) lookups to roundoff. */
+        CHECK_REL(P, scvheosPofRhoT(s, rho, T), 1e-12, "PCTofRhoU P at rho=%g T=%g", rho, T);
+        CHECK_REL(c, scvheosCsofRhoT(s, rho, T), 1e-12, "PCTofRhoU c at rho=%g T=%g", rho, T);
+        CHECK_REL(Tf, T, 1e-12, "PCTofRhoU T at rho=%g T=%g", rho, T);
+        CHECK_REL(EOSPofRhoU(e, rho, u), P, 0.0, "PofRhoU");
+        CHECK_REL(EOSCofRhoU(e, rho, u), c, 0.0, "CofRhoU");
+        CHECK_REL(EOSTofRhoU(e, rho, u), scvheosTofRhoU(s, rho, u), 0.0, "TofRhoU");
+        CHECK_REL(EOSPofRhoT(e, rho, T), scvheosPofRhoT(s, rho, T), 0.0, "PofRhoT");
+        double c2; double P2 = EOSPCofRhoU(e, rho, u, &c2);
+        CHECK_REL(P2, P, 0.0, "PCofRhoU P"); CHECK_REL(c2, c, 0.0, "PCofRhoU c");
+        CHECK_REL(EOSSofRhoT(e, rho, T), scvheosSofRhoT(s, rho, T), 0.0, "SofRhoT");
+        CHECK_REL(EOSSofRhoU(e, rho, u), scvheosSofRhoT(s, rho, T), 1e-12, "SofRhoU");
+        CHECK_REL(EOSdPdRho(e, rho, u), scvheosdPdRhoofRhoU(s, rho, u), 0.0, "dPdRho");
+        CHECK_REL(EOSdPdU(e, rho, u), scvheosdPdUofRhoU(s, rho, u), 0.0, "dPdU");
+        CHECK_REL(EOSdUdRho(e, rho, u), P / (rho * rho), 1e-14, "dUdRho");
+        CHECK_REL(EOSdPdRhoofRhoT(e, rho, T), scvheosdPdRhoofRhoT(s, rho, T), 0.0, "dPdRhoofRhoT");
+        CHECK_REL(EOSdPdT(e, rho, T), scvheosdPdTofRhoT(s, rho, T), 0.0, "dPdT");
+        /* EOSUCold evaluates u at pow(10, LogTMin); an ulp in T is 1e-16 in u. */
+        CHECK_REL(EOSUCold(e, rho), scvheosUofRhoT(s, rho, scvhExp10(s->LogTMin)), 1e-13, "UCold");
+        CHECK(EOSisbelowColdCurve(e, rho, 0.5 * EOSUCold(e, rho)) == 1, "below cold curve");
+        CHECK(EOSisbelowColdCurve(e, rho, u) == 0, "above cold curve (u at T=%g)", T);
+        CHECK(EOSIsInTable(e, rho, u) == EOS_SUCCESS, "in table at rho=%g T=%g", rho, T);
+        CHECK(EOSIsUsable(e, rho, u) == EOS_TRUE, "usable at rho=%g T=%g", rho, T);
+        /* Isentrope to the same density is the identity, where T(rho, s) is
+         * unique (s(T) monotonic in this column). */
+        if (scvhEntropyMonotonic(s, rho))
+            CHECK_REL(EOSIsentropic(e, rho, u, rho), u, 1e-9, "isentrope to same rho");   /* s(T) round trip amplifies roundoff on flat stretches */
+        else nSkippedS++;
+    }
+    /* Entropy is in cgs: compare against the raw table at a node. */
+    {
+        int j = s->nRho / 2, i = s->nT / 2;
+        double rho = scvhExp10(s->dLogRhoAxis[j]), T = scvhExp10(s->dLogTAxis[i]);
+        CHECK_REL(EOSSofRhoT(e, rho, T), scvhExp10(s->dLogSArray[(size_t)j * s->nT + i]), 1e-13, "entropy returned in cgs");
+    }
+    CHECK(s->nLookupFail == 0, "nLookupFail = %ld after in-table dispatch", s->nLookupFail);
+    if (nSkipped || nSkippedS)
+        printf("\n    note: %d of %d states skipped (u(T) not monotonic), %d isentrope identities skipped (s(T) not monotonic); table defects\n  %-44s",
+               nSkipped, NSAMPLE_SCVH * NSAMPLE_SCVH, nSkippedS, "");
+    END_TEST();
+}
+
+static void testSCVHTableStatus(EOSMATERIAL *e)
+{
+    int failsBefore = nFails;
+    TEST("SCvH EOSIsInTable / EOSIsUsable codes");
+    SCVHEOSMAT *s = e->scvheosmaterial;
+    double rhoOk = scvhSampleRho(s, NSAMPLE_SCVH / 2);
+    double uOk = EOSUofRhoT(e, rhoOk, scvhSampleT(s, NSAMPLE_SCVH / 2));
+    double rhoLo = 0.5 * scvhExp10(s->LogRhoMin), rhoHi = 2.0 * scvhExp10(s->LogRhoMax);
+    double uHi = 2.0 * EOSUofRhoT(e, rhoOk, scvhExp10(s->LogTMax));
+
+    CHECK(EOSIsInTable(e, rhoLo, uOk) == EOS_OUTSIDE_RHOMIN, "below rhoMin");
+    CHECK(EOSIsInTable(e, rhoHi, uOk) == EOS_OUTSIDE_RHOMAX, "above rhoMax");
+    CHECK(EOSIsInTable(e, rhoOk, 0.5 * EOSUCold(e, rhoOk)) == EOS_OUTSIDE_VMIN, "below cold curve");
+    CHECK(EOSIsInTable(e, rhoOk, uHi) == EOS_OUTSIDE_VMAX, "above top row");
+    CHECK(EOSIsInTable(e, rhoOk, -1.0) == EOS_OUTSIDE_VMIN, "negative u");
+    CHECK(EOSIsInTable(e, -1.0, uOk) == EOS_OUTSIDE_RHOMIN, "negative rho");
+    CHECK(EOSIsUsable(e, rhoLo, uOk) == EOS_FALSE, "tabulated EOS unusable below rhoMin");
+    CHECK(EOSIsUsable(e, rhoOk, uHi) == EOS_FALSE, "tabulated EOS unusable above u_max");
+    CHECK(EOSIsUsable(e, rhoOk, -1.0) == EOS_FALSE, "tabulated EOS unusable for u < 0");
+    /* Anything EOSIsInTable accepts must evaluate without a sentinel. */
+    for (int a = 0; a < NSAMPLE_SCVH; a++) for (int b = 0; b < NSAMPLE_SCVH; b++) {
+        double rho = scvhSampleRho(s, a);
+        if (!scvhEnergyMonotonic(s, rho)) continue;
+        double u = EOSUofRhoT(e, rho, scvhSampleT(s, b));
+        if (EOSIsInTable(e, rho, u) == EOS_SUCCESS) {
+            double c, T;
+            double P = EOSPCTofRhoU(e, rho, u, &c, &T);
+            CHECK(!isSentinel(P) && !isSentinel(c) && !isSentinel(T), "in-table state produced a sentinel at rho=%g", rho);
+        }
+    }
+    END_TEST();
+}
+
+#ifdef HAVE_ANEOSMATERIAL_H
+/* Gas envelope (SCvH, outer) on a condensed core (ANEOS, inner). */
+static void testSCVHSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
+{
+    int failsBefore = nFails;
+    TEST("EOSSolveBC: SCvH envelope on ANEOS core");
+    SCVHEOSMAT *s = outer->scvheosmaterial;
+    int nSolved = 0;
+    for (int a = 2; a < NSAMPLE_SCVH - 2; a += 4) for (int b = 1; b < NSAMPLE_SCVH - 3; b += 4) {
+        /* State at the base of the envelope. The solver brackets from rho1
+         * upwards in the inner material, so the envelope state must be denser
+         * than the core's low-density table edge, and its pressure must exceed
+         * the interface-correction floor like in the ANEOS test. */
+        double rho1 = scvhSampleRho(s, a), T1 = scvhSampleT(s, b);
+        if (!scvhEnergyMonotonic(s, rho1)) continue;
+        double u1 = EOSUofRhoT(outer, rho1, T1);
+        double P1 = EOSPofRhoU(outer, rho1, u1);
+        if (P1 <= WOOLFSON_MIN_PRESSURE) continue;
+        double rho2, u2;
+        if (EOSSolveBC(outer, inner, rho1, u1, &rho2, &u2, 0.0) != 0) continue;
+        nSolved++;
+        CHECK_REL(EOSPofRhoU(inner, rho2, u2), P1, EOS_SOLVEBC_PTOL, "P continuity rho1=%g T1=%g", rho1, T1);
+        CHECK_REL(u2, EOSUofRhoT(inner, rho2, T1), 1e-10, "T continuity rho1=%g T1=%g", rho1, T1);
+        CHECK(EOSIsUsable(inner, rho2, u2) == EOS_TRUE, "solved state not usable");
+    }
+    if (nSolved == 0) printf("\n    note: no envelope state had a solution in the core table (table ranges do not overlap)\n  %-44s", "");
+    END_TEST();
+}
+#endif
+
+#endif /* HAVE_SCVHEOS_H */
+
 /* ------------------------------------------------------------- Tillotson */
 
 #ifdef HAVE_TILLOTSON_H
@@ -401,11 +573,13 @@ static void testTillotsonPolicy(double dKpcUnit, double dMsolUnit)
 int main(int argc, char *argv[])
 {
     int iMatA = 63, iMatB = 62;
+    int iMatSCVH = 114;                /* 0: SCvH tests skipped */
     double dKpcUnit = 2.06701e-13;   /* Earth radius */
     double dMsolUnit = 4.80438e-08;  /* Earth mass */
 
     if (argc > 2) { iMatA = atoi(argv[1]); iMatB = atoi(argv[2]); }
     if (argc > 4) { dKpcUnit = atof(argv[3]); dMsolUnit = atof(argv[4]); }
+    if (argc > 5) iMatSCVH = atoi(argv[5]);
 
     printf("EOSlib %s test suite: materials %d and %d, dKpcUnit = %g, dMsolUnit = %g\n",
            EOS_VERSION_TEXT, iMatA, iMatB, dKpcUnit, dMsolUnit);
@@ -435,6 +609,17 @@ int main(int argc, char *argv[])
     /* Convention: the denser material is the inner one. */
     if (A->rho0 >= B->rho0) { testSolveBC(A, B); testWoolfson(B, A); }
     else                    { testSolveBC(B, A); testWoolfson(A, B); }
+
+#ifdef HAVE_SCVHEOS_H
+    if (iMatSCVH > 0) {
+        EOSMATERIAL *S = EOSinitMaterial(iMatSCVH, dKpcUnit, dMsolUnit, NULL);
+        printf("  S: %s\n", S->MatString);
+        testSCVHDispatch(S);
+        testSCVHTableStatus(S);
+        if (A->rho0 >= B->rho0) testSCVHSolveBC(A, S); else testSCVHSolveBC(B, S);
+        EOSfinalizeMaterial(S);
+    }
+#endif
 
     EOSfinalizeMaterial(A);
     EOSfinalizeMaterial(B);
