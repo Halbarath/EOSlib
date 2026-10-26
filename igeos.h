@@ -6,17 +6,36 @@
 
 #include <stdio.h>   /* FILE in igeosPrintMat */
 
-/* Version. */
-#define IGEOS_VERSION_TEXT    "1.0.2"
+/*
+ * Version history
+ *   1.1.0  EOSlib failure contract: IGEOS_FAIL = -99, IGEOS_FAIL_VALUE and
+ *          igeosFailed(); igeosRhoofUT is fatal with a message (it is
+ *          undefined for an ideal gas, not a lookup failure).
+ */
+#define IGEOS_VERSION_TEXT    "1.1.0"
 #define IGEOS_VERSION_MAJOR   1
-#define IGEOS_VERSION_MINOR   0
-#define IGEOS_VERSION_PATCH   2
+#define IGEOS_VERSION_MINOR   1
+#define IGEOS_VERSION_PATCH   0
 
 /*
- * Error codes.
+ * Status codes (EOSlib convention: 0 is success, -99 a generic failure,
+ * -1..-4 are reserved for the OUTSIDE_* codes of the tabulated libraries).
  */
 #define IGEOS_SUCCESS 0
-#define IGEOS_FAIL   -1
+#define IGEOS_FAIL  -99
+
+/*
+ * Failure contract (the EOSlib convention, shared by all EOS libraries).
+ * The ideal gas is analytic and its lookups cannot fail; the only sentinel
+ * is returned by igeosSofRhoT/igeosSofRhoU for rho <= 0 or T <= 0, where
+ * the entropy is undefined. Test a returned value with igeosFailed(x).
+ * Unimplemented functions (igeosRhoofUT) are fatal.
+ */
+#define IGEOS_FAIL_VALUE (-1e50)
+
+static inline int igeosFailed(double x) {
+    return !(x > -1e40);
+}
 
 typedef struct igeosMat {
     /* Units. */

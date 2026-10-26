@@ -1,22 +1,22 @@
-objects = EOSlib.o igeos.o ../ANEOSmaterial/ANEOSmaterial.o ../tillotson/tillotson.o ../tillotson/tillinitlookup.o ../tillotson/tillsplint.o ../tillotson/interpol/brent.o ../reos3/reos3.o ../scvh/scvheos.o
+objects = EOSlib.o igeos.o ../ANEOSmaterial/ANEOSmaterial.o ../tillotson/tillotson.o ../tillotson/tillinitlookup.o ../tillotson/tillsplint.o ../reos3/reos3.o ../scvh/scvheos.o
 
 # Position-independent copies of the same objects for the shared library.
 pic_objects = $(objects:.o=.pic.o)
 
-defs = -DTILL_OUTPUT_ALL_WARNINGS -DTILL_VERBOSE -DEOSLIB_VERBOSE
+# -DEOSLIB_VERBOSE makes EOSlib and every sublibrary print a diagnostic for
+# each failed lookup (see "Failure contract" in EOSlib.h). Off by default:
+# a failed lookup is counted in nLookupFail either way.
+DEFS =
 
 execs = testEOSmaterial calcTemperature calcColdcurveEnergy timingTest writeColdCurve calcPressure calcSoundSpeed
-
-# GNU Science library (uncomment if not needed)
-GSL_LIB = -lgsl -lgslcblas
 
 # Enable the use of the external libraries
 INCLUDES = -DHAVE_ANEOSMATERIAL_H -DHAVE_TILLOTSON_H -DHAVE_REOS3_H -DHAVE_SCVHEOS_H -I../ANEOSmaterial -I../tillotson -I../reos3 -I../scvh
 
-CFLAGS ?= -O3 -Wall $(INCLUDES)
+CFLAGS ?= -O3 -Wall $(DEFS) $(INCLUDES)
 
 FFLAGS ?= $(CFLAGS)
-LIBS ?= -lm $(GSL_LIB)
+LIBS ?= -lm
 
 default: 
 	@echo "Please specify which tool you want to make."	

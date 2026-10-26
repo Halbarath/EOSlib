@@ -3,6 +3,7 @@
  *
  * Author: Christian Reinhardt
  * Date: 15.06.2022
+ * Modified: 26.10.2026 (1.1.0)
  */
 #include <stdlib.h>
 #include <stdio.h>
@@ -119,11 +120,15 @@ double igeosRhoofPT(IGEOSMAT *Mat, double P, double T) {
     return P / ((Mat->dConstGamma - 1.0) * Mat->cv * T);
 }
 
-/* Calculate rho(U, T). */
+/*
+ * Calculate rho(u, T). Undefined for an ideal gas with constant cv: u = cv*T
+ * does not depend on rho. Calling it is a programming error and therefore
+ * fatal (EOSlib convention for unimplemented functions).
+ */
 double igeosRhoofUT(IGEOSMAT *Mat, double U, double T) {
-    // This is undefined, as cv is constant (both u(rho,T) and T(rho,u) do not use rho)
-    assert(0);
-    return 0;
+    fprintf(stderr, "igeosRhoofUT: rho(u, T) is undefined for an ideal gas (iMat= %i, u= %g, T= %g).\n", Mat->iMat, U, T);
+    exit(1);
+    return IGEOS_FAIL_VALUE;   /* not reached */
 }
 
 /* Calculate dP/drho(rho, u). */
@@ -144,12 +149,13 @@ double igeosdPdU(IGEOSMAT *Mat, double rho, double u) {
  * where (gamma-1)*cv = k_B/(mu*m_H). The result is returned in cgs
  * (erg/g/K), consistent with the tabulated EOS libraries, and the additive
  * constant is set to zero. Only entropy differences are meaningful.
+ * Returns IGEOS_FAIL_VALUE for rho <= 0 or T <= 0.
  */
 double igeosSofRhoT(IGEOSMAT *Mat, double rho, double T) {
     double cv_cgs = Mat->cv * Mat->dErgPerGmUnit;
     double rho_cgs = rho * Mat->dGmPerCcUnit;
 
-    if (!(rho_cgs > 0.0) || !(T > 0.0)) return -1e50;
+    if (!(rho_cgs > 0.0) || !(T > 0.0)) return IGEOS_FAIL_VALUE;
 
     return cv_cgs * (log(T) - (Mat->dConstGamma - 1.0) * log(rho_cgs));
 }

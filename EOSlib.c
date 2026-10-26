@@ -31,11 +31,15 @@
 #include <string.h>
 #include "EOSlib.h"
 
-#define EOS_UNKNOWN_MATERIAL(material) do { \
-    fprintf(stderr, "%s was called for the unknown material %d.\n", __func__, (material)->iMat); \
-    assert(0); \
-    exit(1); \
-} while (0)
+/*
+ * Fatal errors (see "Failure contract" in EOSlib.h): a message and exit(1),
+ * for programming errors (unknown material, function not implemented for
+ * the material) and for initialisation failures. Lookup failures never come
+ * here; they return EOS_FAIL_VALUE.
+ */
+#define EOS_FATAL(...) do { fprintf(stderr, __VA_ARGS__); assert(0); exit(1); } while (0)
+#define EOS_UNKNOWN_MATERIAL(material) EOS_FATAL("%s was called for the unknown material %d.\n", __func__, (material)->iMat)
+#define EOS_NOT_IMPLEMENTED(material) EOS_FATAL("%s is not implemented for material %d (%s).\n", __func__, (material)->iMat, (material)->MatString)
 
 /*
  * Initialization of the material structures
@@ -49,7 +53,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 {
     static int bVersionsChecked = 0;
     if (!bVersionsChecked) {
-        if (!EOSCheckVersions()) exit(1);
+        if (EOSCheckVersions() != EOS_TRUE) EOS_FATAL("EOSinitMaterial: sublibrary version mismatch (see above).\n");
         bVersionsChecked = 1;
     }
 
@@ -62,7 +66,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 
     if (iMat == MAT_IDEALGAS)
     {
-        assert(additional_data != NULL);
+        if (additional_data == NULL) EOS_FATAL("EOSinitMaterial: the ideal gas (iMat= 0) needs a struct igeosParam as additional_data.\n");
 
         /* Pass additional parameter to the ideal gas EOS library. */
         struct igeosParam *Param;
@@ -284,37 +288,37 @@ void EOSPrintMat(EOSMATERIAL *material, FILE *fp)
  * Check if all sublibraries have the correct version
  */
 int EOSCheckVersions(void) {
-    int result = 1;
+    int result = EOS_TRUE;
     if ((IGEOS_VERSION_MAJOR * 10000 + IGEOS_VERSION_MINOR * 100 + IGEOS_VERSION_PATCH) < (IGEOS_VERSION_MAJOR_REQUIRED * 10000 + IGEOS_VERSION_MINOR_REQUIRED * 100 + IGEOS_VERSION_PATCH_REQUIRED)) {
         fprintf(stderr, "EOSCheckVersions: Ideal gas EOS library version (%s) is outdated. At least version %d.%d.%d is required.\n", IGEOS_VERSION_TEXT,IGEOS_VERSION_MAJOR_REQUIRED,IGEOS_VERSION_MINOR_REQUIRED,IGEOS_VERSION_PATCH_REQUIRED);
-        result = 0;
+        result = EOS_FALSE;
     }
 #ifdef HAVE_TILLOTSON_H
     /* Check if the Tillotson library has the right version. */
     if ((TILL_VERSION_MAJOR * 10000 + TILL_VERSION_MINOR * 100 + TILL_VERSION_PATCH) < (TILL_VERSION_MAJOR_REQUIRED * 10000 + TILL_VERSION_MINOR_REQUIRED * 100 + TILL_VERSION_PATCH_REQUIRED)) {
         fprintf(stderr, "EOSCheckVersions: Tillotson library version (%s) is outdated. At least version %d.%d.%d is required.\n", TILL_VERSION_TEXT,TILL_VERSION_MAJOR_REQUIRED,TILL_VERSION_MINOR_REQUIRED,TILL_VERSION_PATCH_REQUIRED);
-        result = 0;
+        result = EOS_FALSE;
     }
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
     /* Check if the ANEOS library has the right version. */
     if ((ANEOS_VERSION_MAJOR * 10000 + ANEOS_VERSION_MINOR * 100 + ANEOS_VERSION_PATCH) < (ANEOS_VERSION_MAJOR_REQUIRED * 10000 + ANEOS_VERSION_MINOR_REQUIRED * 100 + ANEOS_VERSION_PATCH_REQUIRED)) {
         fprintf(stderr, "EOSCheckVersions: ANEOS library version (%s) is outdated. At least version %d.%d.%d is required.\n", ANEOS_VERSION_TEXT,ANEOS_VERSION_MAJOR_REQUIRED,ANEOS_VERSION_MINOR_REQUIRED,ANEOS_VERSION_PATCH_REQUIRED);
-        result = 0;
+        result = EOS_FALSE;
     }
 #endif
 #ifdef HAVE_REOS3_H
     /* Check if the REOS3 library has the right version. */
     if ((REOS3_VERSION_MAJOR * 10000 + REOS3_VERSION_MINOR * 100 + REOS3_VERSION_PATCH) < (REOS3_VERSION_MAJOR_REQUIRED * 10000 + REOS3_VERSION_MINOR_REQUIRED * 100 + REOS3_VERSION_PATCH_REQUIRED)) {
         fprintf(stderr, "EOSCheckVersions: REOS3 library version (%s) is outdated. At least version %d.%d.%d is required.\n", REOS3_VERSION_TEXT,REOS3_VERSION_MAJOR_REQUIRED,REOS3_VERSION_MINOR_REQUIRED,REOS3_VERSION_PATCH_REQUIRED);
-        result = 0;
+        result = EOS_FALSE;
     }
 #endif
 #ifdef HAVE_SCVHEOS_H
     /* Check if the SCVHEOS library has the right version. */
     if ((SCVHEOS_VERSION_MAJOR * 10000 + SCVHEOS_VERSION_MINOR * 100 + SCVHEOS_VERSION_PATCH) < (SCVHEOS_VERSION_MAJOR_REQUIRED * 10000 + SCVHEOS_VERSION_MINOR_REQUIRED * 100 + SCVHEOS_VERSION_PATCH_REQUIRED)) {
         fprintf(stderr, "EOSCheckVersions: SCvH EOS library version (%s) is outdated. At least version %d.%d.%d is required.\n",SCVHEOS_VERSION_TEXT,SCVHEOS_VERSION_MAJOR_REQUIRED,SCVHEOS_VERSION_MINOR_REQUIRED,SCVHEOS_VERSION_PATCH_REQUIRED);
-        result = 0;
+        result = EOS_FALSE;
     }
 #endif
     return result;
@@ -451,6 +455,7 @@ double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c)
 {
     double P = 0;
     double T = 0;
+    (void) T;   /* only the tabulated EOS fill it */
 
     switch(material->matType)
     {
@@ -552,10 +557,7 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            // Not implemented yet
-            //u2 = reos3IsentropicU(material->reos3material, rho1, u1, rho2);
-            assert(0);
-            exit(1);
+            EOS_NOT_IMPLEMENTED(material);   /* REOS3 has no entropy table */
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
@@ -573,7 +575,7 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
  * Calculates the specific entropy S(rho, u) for a material.
  *
  * Returned in cgs (erg/g/K), NOT in code units; additive constant is
- * library-dependent. Returns -1e50 if not available.
+ * library-dependent. Returns EOS_FAIL_VALUE if not available.
  *
  * Required: none
  */
@@ -581,7 +583,7 @@ double EOSSofRhoU(EOSMATERIAL *material, double rho, double u)
 {
     double S = 0;
 
-    if (!material->bEntropy) return -1e50;
+    if (!material->bEntropy) return EOS_FAIL_VALUE;
 
     switch(material->matType)
     {
@@ -590,8 +592,7 @@ double EOSSofRhoU(EOSMATERIAL *material, double rho, double u)
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            fprintf(stderr, "EOSSofRhoU not implemented for material %d\n",material->iMat);
-            S = -1e50;
+            S = EOS_FAIL_VALUE;   /* no entropy for this EOS (bEntropy is EOS_FALSE, so this is not reached) */
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
@@ -601,15 +602,14 @@ double EOSSofRhoU(EOSMATERIAL *material, double rho, double u)
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            fprintf(stderr, "EOSSofRhoU not implemented for material %d\n",material->iMat);
-            S = -1e50;
+            S = EOS_FAIL_VALUE;   /* no entropy for this EOS (bEntropy is EOS_FALSE, so this is not reached) */
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS: {
+            /* T(rho, u) never fails (T_min fallback); s(rho, T) does if rho is outside the table. */
             double T = scvheosTofRhoU(material->scvheosmaterial, rho, u);
-            /* With SCVH_NOEXIT a failed inversion returns the sentinel; do not feed it to log10. */
-            S = (T < -1e40) ? -1e50 : scvheosSofRhoT(material->scvheosmaterial, rho, T);
+            S = scvheosSofRhoT(material->scvheosmaterial, rho, T);
             break;
         }
 #endif
@@ -623,7 +623,7 @@ double EOSSofRhoU(EOSMATERIAL *material, double rho, double u)
  * Calculates the specific entropy S(rho, T) for a material.
  *
  * Returned in cgs (erg/g/K), NOT in code units; additive constant is
- * library-dependent. Returns -1e50 if not available.
+ * library-dependent. Returns EOS_FAIL_VALUE if not available.
  *
  * Required: none
  */
@@ -631,7 +631,7 @@ double EOSSofRhoT(EOSMATERIAL *material, double rho, double T)
 {
     double S = 0;
 
-    if (!material->bEntropy) return -1e50;
+    if (!material->bEntropy) return EOS_FAIL_VALUE;
 
     switch(material->matType)
     {
@@ -640,8 +640,7 @@ double EOSSofRhoT(EOSMATERIAL *material, double rho, double T)
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            fprintf(stderr, "EOSSofRhoT not implemented for material %d\n", material->iMat);
-            S = -1e50;
+            S = EOS_FAIL_VALUE;   /* no entropy for this EOS (bEntropy is EOS_FALSE, so this is not reached) */
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
@@ -651,8 +650,7 @@ double EOSSofRhoT(EOSMATERIAL *material, double rho, double T)
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            fprintf(stderr, "EOSSofRhoT not implemented for material %d\n", material->iMat);
-            S = -1e50;
+            S = EOS_FAIL_VALUE;   /* no entropy for this EOS (bEntropy is EOS_FALSE, so this is not reached) */
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
@@ -726,10 +724,7 @@ static double EOSYieldStrengthCore(EOSMATERIAL *material, double rho, double T, 
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            fprintf(stderr, "EOSYieldStrength not implemented for material %d\n",material->iMat);
-            yieldStrengthModel = -2;
-            assert(0);
-            exit(1);
+            EOS_NOT_IMPLEMENTED(material);   /* no strength model for Tillotson yet */
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
@@ -772,23 +767,22 @@ static double EOSYieldStrengthCore(EOSMATERIAL *material, double rho, double T, 
         if (yieldStrengthModel == 1) {
             Y = Yi;
         } else if (yieldStrengthModel == 2) {
-            if (mud < 0.0) {
-                fprintf(stderr, "EOSYieldStrength: yieldStrengthModel 2 requested, but mud not defined\n");
-                assert(0);
-                exit(1);
-            }
+            if (mud < 0.0) EOS_FATAL("EOSYieldStrength: yieldStrengthModel 2 requested for material %d, but mud not defined.\n", material->iMat);
             Y = fmin(Yi, mud * Peff);
         } else {
-            fprintf(stderr, "EOSYieldStrength: yieldStrengthModel = %d not supported\n", yieldStrengthModel);
-            assert(0);
-            exit(1);
+            EOS_FATAL("EOSYieldStrength: yieldStrengthModel = %d not supported (material %d).\n", yieldStrengthModel, material->iMat);
         }
 
-        /* Thermal softening (Ohnaka 1995), zero at and above the melt temperature. */
+        /*
+         * Thermal softening (Ohnaka 1995), zero at and above the melt
+         * temperature. T comes from a lookup (T_min fallback, never the
+         * sentinel) and T_melt from the melt curve (sentinel for an invalid
+         * rho): an invalid pair is a lookup failure, so return the sentinel
+         * rather than exit.
+         */
         if (!(T > 0.0) || !(Tmelt >= 0.0)) {
-            fprintf(stderr, "EOSYieldStrength: invalid T= %g or Tmelt= %g for material %d (rho= %g P= %g).\n", T, Tmelt, material->iMat, rho, P);
-            assert(0);
-            exit(1);
+            EOS_WARN("EOSYieldStrength: invalid T= %g or Tmelt= %g for material %d (rho= %g P= %g).\n", T, Tmelt, material->iMat, rho, P);
+            return EOS_FAIL_VALUE;
         }
         Y *= fmax(tanh(xi * (Tmelt / T - 1.0)), 0.0);
 
@@ -949,15 +943,11 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            // not implemented
-            assert(0);
-            exit(1);
+            EOS_NOT_IMPLEMENTED(material);
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            // not implemented
-            assert(0);
-            exit(1);
+            EOS_NOT_IMPLEMENTED(material);
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
@@ -967,16 +957,12 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            // Not implemented.
-            assert(0);
-            exit(1);
+            EOS_NOT_IMPLEMENTED(material);
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
-            // Not implemented.
-            assert(0);
-            exit(1);
+            EOS_NOT_IMPLEMENTED(material);
             break;
 #endif
         default: EOS_UNKNOWN_MATERIAL(material);
@@ -1234,15 +1220,11 @@ double EOSdPdRhoofRhoT(EOSMATERIAL *material, double rho, double T)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            // not implemented
-            assert(0);
-            exit(1);
+            EOS_NOT_IMPLEMENTED(material);
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            // not implemented
-            assert(0);
-            exit(1);
+            EOS_NOT_IMPLEMENTED(material);
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
@@ -1277,15 +1259,11 @@ double EOSdPdT(EOSMATERIAL *material, double rho, double T)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            // not implemented
-            assert(0);
-            exit(1);
+            EOS_NOT_IMPLEMENTED(material);
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            // not implemented
-            assert(0);
-            exit(1);
+            EOS_NOT_IMPLEMENTED(material);
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
@@ -1323,10 +1301,7 @@ double EOSGammaofRhoT(EOSMATERIAL *material, double rho, double T){
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            // Tillotson has strength not implemented yet
-            fprintf(stderr, "EOSGammaofRhoT not implemented for material %d\n",material->iMat);
-            assert(0);
-            exit(1);
+            EOS_NOT_IMPLEMENTED(material);   /* no strength model for Tillotson yet */
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
@@ -1412,8 +1387,7 @@ static int EOSSolveBCEval(EOSMATERIAL *material, double rho, double T,
     if (!(rho > 0.0) || !isfinite(rho)) return EOS_FAIL;
 
     u = EOSUofRhoT(material, rho, T);
-    /* Table lookups signal failure with a huge negative value. */
-    if (!isfinite(u) || u < -1e40) return EOS_FAIL;
+    if (EOSFailed(u) || !isfinite(u)) return EOS_FAIL;
 
     if (!EOSIsUsable(material, rho, u)) return EOS_FAIL;
 
@@ -1437,7 +1411,8 @@ static int EOSSolveBCEval(EOSMATERIAL *material, double rho, double T,
  * assuming P2(rho, T2) is monotonically increasing in rho. The tolerances and
  * the discontinuity check are described in EOSlib.h.
  *
- * Returns 0 if successful or -1 if not. On failure *prho2 and *pu2 are untouched.
+ * Returns EOS_SUCCESS, or EOS_FAIL (message under EOSLIB_VERBOSE) if not.
+ * On failure *prho2 and *pu2 are untouched.
  */
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,
                double *prho2, double *pu2, double Tjump)
@@ -1452,9 +1427,9 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
     P = EOSPofRhoU(material1, rho1, u1);
     T = EOSTofRhoU(material1, rho1, u1) - Tjump;
     if (!isfinite(P) || !isfinite(T) || T <= 0.0) {
-        fprintf(stderr, "EOSSolveBC: invalid state in material 1 "
+        EOS_WARN("EOSSolveBC: invalid state in material 1 "
                 "(rho1= %g u1= %g P= %g T= %g).\n", rho1, u1, P, T);
-        return -1;
+        return EOS_FAIL;
     }
 
     /*
@@ -1463,22 +1438,22 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
      */
     a = rho1;
     if (EOSSolveBCEval(material2, a, T, &ua, &Pa) != EOS_SUCCESS) {
-        fprintf(stderr, "EOSSolveBC: rho= %g T= %g not valid in material %d.\n",
+        EOS_WARN("EOSSolveBC: rho= %g T= %g not valid in material %d.\n",
                 a, T, material2->iMat);
-        return -1;
+        return EOS_FAIL;
     }
     for (i = 0; Pa < P; i++) {
         if (i >= EOS_SOLVEBC_MAX_EXPAND) {
-            fprintf(stderr, "EOSSolveBC: upper bracket not found "
+            EOS_WARN("EOSSolveBC: upper bracket not found "
                     "(P= %g T= %g a= %g Pa= %g).\n", P, T, a, Pa);
-            return -1;
+            return EOS_FAIL;
         }
         a *= 1.1;
         if (EOSSolveBCEval(material2, a, T, &ua, &Pa) != EOS_SUCCESS) {
-            fprintf(stderr, "EOSSolveBC: left EOS table of material %d while "
+            EOS_WARN("EOSSolveBC: left EOS table of material %d while "
                     "expanding upper bracket (rho= %g T= %g).\n",
                     material2->iMat, a, T);
-            return -1;
+            return EOS_FAIL;
         }
     }
 
@@ -1488,51 +1463,51 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
      */
     b = fmin(0.999*material2->rho0, 0.999*a);
     if (EOSSolveBCEval(material2, b, T, &ub, &Pb) != EOS_SUCCESS) {
-        fprintf(stderr, "EOSSolveBC: rho= %g T= %g not valid in material %d.\n",
+        EOS_WARN("EOSSolveBC: rho= %g T= %g not valid in material %d.\n",
                 b, T, material2->iMat);
-        return -1;
+        return EOS_FAIL;
     }
     for (i = 0; Pb > P; i++) {
         if (i >= EOS_SOLVEBC_MAX_EXPAND) {
-            fprintf(stderr, "EOSSolveBC: lower bracket not found "
+            EOS_WARN("EOSSolveBC: lower bracket not found "
                     "(P= %g T= %g b= %g Pb= %g).\n", P, T, b, Pb);
-            return -1;
+            return EOS_FAIL;
         }
         b *= 0.9;
         if (EOSSolveBCEval(material2, b, T, &ub, &Pb) != EOS_SUCCESS) {
-            fprintf(stderr, "EOSSolveBC: left EOS table of material %d while "
+            EOS_WARN("EOSSolveBC: left EOS table of material %d while "
                     "expanding lower bracket (rho= %g T= %g).\n",
                     material2->iMat, b, T);
-            return -1;
+            return EOS_FAIL;
         }
     }
 
     /* The root must now be bracketed by (b, a). */
     if (!(b < a) || Pa < P || Pb > P) {
-        fprintf(stderr, "EOSSolveBC: root not bracketed: P= %g T= %g "
+        EOS_WARN("EOSSolveBC: root not bracketed: P= %g T= %g "
                 "a= %g ua= %g Pa= %g b= %g ub= %g Pb= %g\n",
                 P, T, a, ua, Pa, b, ub, Pb);
-        return -1;
+        return EOS_FAIL;
     }
 
     /* Exact hits at the bracket ends (also covers the degenerate case a == b). */
-    if (Pa == P) { *prho2 = a; *pu2 = ua; return 0; }
-    if (Pb == P) { *prho2 = b; *pu2 = ub; return 0; }
+    if (Pa == P) { *prho2 = a; *pu2 = ua; return EOS_SUCCESS; }
+    if (Pb == P) { *prho2 = b; *pu2 = ub; return EOS_SUCCESS; }
 
     /* Bisection. c is always set at least once because b < a here. */
     c = 0.5*(a + b);
     uc = ub;
     for (i = 0; 2.0*(a - b)/(a + b) > EOS_SOLVEBC_TOL; i++) {
         if (i >= EOS_SOLVEBC_MAX_BISECT) {
-            fprintf(stderr, "EOSSolveBC: bisection did not converge "
+            EOS_WARN("EOSSolveBC: bisection did not converge "
                     "(a= %g b= %g).\n", a, b);
-            return -1;
+            return EOS_FAIL;
         }
         c = 0.5*(a + b);
         if (EOSSolveBCEval(material2, c, T, &uc, &Pc) != EOS_SUCCESS) {
-            fprintf(stderr, "EOSSolveBC: invalid state during bisection "
+            EOS_WARN("EOSSolveBC: invalid state during bisection "
                     "(rho= %g T= %g).\n", c, T);
-            return -1;
+            return EOS_FAIL;
         }
         if (Pc < P) {
             b = c; ub = uc; Pb = Pc;
@@ -1549,17 +1524,17 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
      * location of the jump.
      */
     if (Pa - Pb > EOS_SOLVEBC_PTOL * fabs(P)) {
-        fprintf(stderr, "EOSSolveBC: P2(rho, T) is discontinuous at the root "
+        EOS_WARN("EOSSolveBC: P2(rho, T) is discontinuous at the root "
                 "(P= %g T= %g rho= %g Pb= %g Pa= %g).\n", P, T, c, Pb, Pa);
-        return -1;
+        return EOS_FAIL;
     }
 
     /* Make sure the returned (rho2, u2) pair is consistent. */
-    if (EOSSolveBCEval(material2, c, T, &uc, &Pc) != EOS_SUCCESS) return -1;
+    if (EOSSolveBCEval(material2, c, T, &uc, &Pc) != EOS_SUCCESS) return EOS_FAIL;
 
     *prho2 = c;
     *pu2 = uc;
-    return 0;
+    return EOS_SUCCESS;
 }
 
 /*
@@ -1586,9 +1561,7 @@ double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P
      */
 
     if (P < WOOLFSON_MIN_PRESSURE) {
-#ifdef EOSLIB_VERBOSE
-        fprintf(stderr, "Warning: Pressure is close to zero so no density correction is done.\n");
-#endif
+        EOS_WARN("EOSWoolfsonCoeff: P= %g is close to zero, no density correction is done.\n", P);
         return 1.0;
     }
 
@@ -1596,17 +1569,18 @@ double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P
     rho2 = EOSRhoofPT(material2, P, T);
 
     /*
-     * Unphysical density (rho <= 0, which includes the -1e50 failure sentinel
-     * of the tabulated EOS). This is deliberately NOT mapped to f_ij = 1: a
-     * failed inversion means (P, T) is outside the range where the interface
+     * Unphysical density (rho <= 0, which includes the failure sentinel of
+     * the inversions). This is deliberately NOT mapped to f_ij = 1: a failed
+     * inversion means (P, T) is outside the range where the interface
      * correction is defined, and silently skipping the correction would hide
-     * that. Return -1.0 so the caller can detect the failure and abort or
-     * handle the particle explicitly. Callers must check for f_ij < 0.
+     * that. Return EOS_FAIL_VALUE so the caller can detect the failure and
+     * abort or handle the particle explicitly. Callers must check for
+     * f_ij < 0 (EOSFailed).
      */
     if ((rho1 <= 0.0) || (rho2 <= 0.0))
     {
-        fprintf(stderr, "EOSWoolfsonCoeff: unphysical density (rho1= %g, rho2= %g).\n", rho1, rho2);
-        return -1.0;
+        EOS_WARN("EOSWoolfsonCoeff: unphysical density (rho1= %g, rho2= %g) at P= %g T= %g.\n", rho1, rho2, P, T);
+        return EOS_FAIL_VALUE;
     }
 
     /*
@@ -1618,19 +1592,5 @@ double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P
         return 1.0;
     }
 
-#if 0
-    // CR 10.12.2020: Debugging why some f_ij > 1e3
-    if (rho1/rho2 > 1e3) {
-        fprintf(stderr, "\n");
-        fprintf(stderr, "EOSWoolfsonCoeff: ");
-        fprintf(stderr, "iMat1= %i ", material1->iMat);
-        fprintf(stderr, "iMat2= %i ", material2->iMat);
-        fprintf(stderr, "P= %g ", P);
-        fprintf(stderr, "T= %g ", T);
-        fprintf(stderr, "rho1= %g ", rho1);
-        fprintf(stderr, "rho2= %g ", rho2);
-        fprintf(stderr, "\n");
-    }
-#endif
     return (rho1/rho2);
 }

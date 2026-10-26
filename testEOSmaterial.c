@@ -28,16 +28,18 @@
  *
  * Defaults: M-ANEOS iron (63) and forsterite (62), Earth-like code units,
  * SCvH 114 and REOS3 104. iMatA/iMatB must be ANEOS materials whose tables
- * are in the working directory; the Tillotson tests run only if
- * HAVE_TILLOTSON_H is defined. With HAVE_SCVHEOS_H / HAVE_REOS3_H and a
+ * are in the working directory; the Tillotson tests (dispatch, table status
+ * and policy, interface solver between iron and granite) run only if
+ * HAVE_TILLOTSON_H is defined and need no table files. With HAVE_SCVHEOS_H / HAVE_REOS3_H and a
  * non-zero iMatSCVH / iMatREOS3 the SCvH and REOS3 paths are tested too
  * (0 skips them), including the boundary condition solver for a gas envelope
  * on the denser ANEOS material; the gas tables must be in the working
  * directory. Exit status is the number of failed checks.
  *
- * The REOS3 tests only visit states inside the lookup limits (the library
- * exits on out-of-range input unless built with -DREOS3_NOEXIT, which this
- * test does not need).
+ * The failure contract of the wrapper (EOS_FAIL_VALUE, the T_min fallback of
+ * EOSTofRhoU, EOSSolveBC/EOSWoolfsonCoeff return codes) is tested per
+ * material type; with -DEOSLIB_VERBOSE the libraries print a diagnostic for
+ * every failed lookup, so messages are expected there.
  */
 #include <float.h>
 #include <math.h>
@@ -78,7 +80,7 @@ static const char *currentTest = "";
 #define TEST(name) do { currentTest = name; printf("  %-44s", name); fflush(stdout); } while (0)
 #define END_TEST() do { printf("%s\n", nFails == failsBefore ? "ok" : "FAILED"); } while (0)
 
-static int isSentinel(double v) { return v < -1e40; }
+static int isSentinel(double v) { return EOSFailed(v); }
 
 /* An energy strictly below the cold curve at rho, whatever the sign of
  * u_cold (the M-ANEOS tables have u_cold < 0 around the reference density). */
@@ -378,8 +380,9 @@ static void testSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
         double u1 = EOSUofRhoT(outer, rho1, sampleT(m, NSAMPLE - 1));
         double rho2 = -1.0, u2 = -1.0;
         int ret = EOSSolveBC(outer, inner, rho1, u1, &rho2, &u2, 10.0 * sampleT(m, NSAMPLE - 1));
-        CHECK(ret == -1 || (isfinite(rho2) && rho2 > 0.0), "SolveBC: bad return %d with rho2=%g", ret, rho2);
-        if (ret == -1) CHECK(rho2 == -1.0 && u2 == -1.0, "outputs touched on failure");
+        CHECK(ret == EOS_SUCCESS || ret == EOS_FAIL, "SolveBC: bad return %d", ret);
+        if (ret == EOS_SUCCESS) CHECK(isfinite(rho2) && rho2 > 0.0, "SolveBC: success with rho2=%g", rho2);
+        if (ret == EOS_FAIL) CHECK(rho2 == -1.0 && u2 == -1.0, "outputs touched on failure");
     }
     if (nSkipped) printf("\n    note: %d interface states skipped (T(rho,u) does not reproduce T, table defect)\n  %-44s", nSkipped, "");
     END_TEST();
@@ -395,7 +398,8 @@ static void testWoolfson(EOSMATERIAL *a, EOSMATERIAL *b)
     CHECK(EOSWoolfsonCoeff(a, a, P, T) == 1.0, "same material");
     CHECK(EOSWoolfsonCoeff(a, b, 0.5 * WOOLFSON_MIN_PRESSURE, T) == 1.0, "below minimum pressure");
     double f = EOSWoolfsonCoeff(a, b, P, T);
-    CHECK(f == -1.0 || (f > 0.0 && isfinite(f)), "f_ij = %g", f);
+    CHECK(EOSFailed(f) || (f > 0.0 && isfinite(f)), "f_ij = %g", f);
+    CHECK(EOSFailed(EOSWoolfsonCoeff(a, b, 1e6 * EOSPofRhoT(a, m->rhoAxis[m->nRho-1] * m->CGStoCodeUnitsforRho, T), T)), "f_ij above the table must be the sentinel");
     if (f > 0.0 && f != 1.0) {
         double r1 = EOSRhoofPT(a, P, T), r2 = EOSRhoofPT(b, P, T);
         CHECK_REL(f, r1 / r2, 1e-13, "f_ij = rho1/rho2");
@@ -652,8 +656,8 @@ static void testREOS3Dispatch(EOSMATERIAL *e)
     CHECK(EOSYieldModel(e) == 0, "yield model for gas");
     CHECK(EOSYieldStrength(e, reos3SampleRho(r, 1), 1.0) == 0.0, "yield strength for gas");
     CHECK(EOSGammaofRhoT(e, reos3SampleRho(r, 1), reos3SampleT(r, 1)) == 0.0, "shear modulus for gas");
-    CHECK(EOSSofRhoU(e, reos3SampleRho(r, 1), 1.0) == -1e50, "entropy sentinel (rho,u)");
-    CHECK(EOSSofRhoT(e, reos3SampleRho(r, 1), reos3SampleT(r, 1)) == -1e50, "entropy sentinel (rho,T)");
+    CHECK(EOSSofRhoU(e, reos3SampleRho(r, 1), 1.0) == EOS_FAIL_VALUE, "entropy sentinel (rho,u)");
+    CHECK(EOSSofRhoT(e, reos3SampleRho(r, 1), reos3SampleT(r, 1)) == EOS_FAIL_VALUE, "entropy sentinel (rho,T)");
     /* EOSinitIsentropicLookup only warns for REOS3 (not implemented). */
     EOSinitIsentropicLookup(e, NULL);
     CHECK(!e->bEntropyTableInit, "isentropic lookup must stay uninitialised");
@@ -818,24 +822,258 @@ static void testREOS3SolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
 
 #endif /* HAVE_REOS3_H */
 
+/* ------------------------------------------------------ failure contract */
+
+/*
+ * The wrapper's failure contract for a tabulated material (ANEOS, SCvH,
+ * REOS3): outside the table every lookup returns EOS_FAIL_VALUE, except
+ * EOSTofRhoU, which falls back to the lowest tabulated temperature; the
+ * fused lookup sets its outputs the same way; the status function names the
+ * reason; everything is counted in the sublibrary's nLookupFail. rhoHi is a
+ * density above the table, TMin the lowest tabulated temperature, (rhoOk,
+ * uOk) a state inside the table and uHi an energy above its column.
+ */
+static void testFailureContract(EOSMATERIAL *e, double rhoOk, double uOk, double uHi, double rhoHi, double TMin, long *pnLookupFail)
+{
+    int failsBefore = nFails;
+    TEST("failure contract through the wrapper");
+    long nf0 = *pnLookupFail;
+    double c = 1.0, T = 1.0, P;
+
+    CHECK(EOSIsInTable(e, rhoHi, uOk) == EOS_OUTSIDE_RHOMAX, "status above rhoMax");
+    CHECK(EOSIsInTable(e, rhoOk, uHi) == EOS_OUTSIDE_VMAX, "status above the column");
+    CHECK(EOSIsUsable(e, rhoHi, uOk) == EOS_FALSE, "usable above rhoMax");
+    CHECK(EOSFailed(EOSPofRhoU(e, rhoHi, uOk)), "P above rhoMax");
+    CHECK(EOSFailed(EOSCofRhoU(e, rhoHi, uOk)), "c above rhoMax");
+    CHECK(EOSFailed(EOSUofRhoT(e, rhoHi, TMin)), "u(rho, T) above rhoMax");
+    CHECK(EOSFailed(EOSPofRhoT(e, rhoHi, TMin)), "P(rho, T) above rhoMax");
+    CHECK(EOSFailed(EOSdPdRho(e, rhoHi, uOk)), "dP/drho above rhoMax");
+    CHECK(EOSFailed(EOSdPdU(e, rhoHi, uOk)), "dP/du above rhoMax");
+    CHECK_REL(EOSTofRhoU(e, rhoHi, uOk), TMin, 1e-12, "T(rho, u) above rhoMax falls back to T_min");
+    CHECK_REL(EOSTofRhoU(e, rhoOk, uHi), TMin, 1e-12, "T(rho, u) above the column falls back to T_min");
+    CHECK_REL(EOSPofRhoU(e, rhoOk, uHi), EOSPofRhoT(e, rhoOk, TMin), 1e-12, "P(rho, u) above the column = P(rho, T_min)");
+    P = EOSPCTofRhoU(e, rhoHi, uOk, &c, &T);
+    CHECK(EOSFailed(P) && EOSFailed(c), "fused lookup above rhoMax: P=%g c=%g", P, c);
+    CHECK_REL(T, TMin, 1e-12, "fused lookup above rhoMax: T");
+    P = EOSPCTofRhoU(e, rhoOk, uHi, &c, &T);
+    CHECK(!EOSFailed(P) && !EOSFailed(c), "fused lookup above the column: P=%g c=%g", P, c);
+    CHECK_REL(T, TMin, 1e-12, "fused lookup above the column: T");
+    if (e->bEntropy) CHECK(EOSFailed(EOSSofRhoU(e, rhoHi, uOk)), "s above rhoMax");
+    CHECK(*pnLookupFail > nf0, "failures not counted (%ld -> %ld)", nf0, *pnLookupFail);
+    *pnLookupFail = nf0;
+    END_TEST();
+}
+
 /* ------------------------------------------------------------- Tillotson */
 
 #ifdef HAVE_TILLOTSON_H
-static void testTillotsonPolicy(double dKpcUnit, double dMsolUnit)
+#define NSAMPLE_TILL 300
+
+/* Log-spaced in rho over the lookup table (code units). */
+static double tillSampleRho(TILLMATERIAL *m, int k)
+{
+    double lo = log(m->rhomin), hi = log(m->rhomax);
+    double f = 0.02 + 0.96 * (k + 0.5) / NSAMPLE_TILL;
+    return exp(lo + f * (hi - lo));
+}
+
+/* Log-spaced in T from 10 K to 1e5 K: u = u_cold + cv*T stays far below the
+ * top of the isentrope table (vmax) for every material. */
+static double tillSampleT(int k)
+{
+    double lo = log(10.0), hi = log(1e5);
+    double f = 0.02 + 0.96 * (k + 0.5) / NSAMPLE_TILL;
+    return exp(lo + f * (hi - lo));
+}
+
+static void testTillotsonDispatch(EOSMATERIAL *e)
 {
     int failsBefore = nFails;
-    TEST("Tillotson: usable above the lookup table");
-    EOSMATERIAL *t = EOSinitMaterial(1, dKpcUnit, dMsolUnit, NULL);   /* granite */
-    CHECK(t->matType == EOSTILLOTSON, "matType");
-    CHECK(!t->bEntropy, "Tillotson has no entropy");
-    CHECK(EOSSofRhoU(t, t->rho0, 1.0) == -1e50, "entropy sentinel");
-    double rho = t->rho0;
-    double u = 1e4 * EOSUofRhoT(t, rho, 300.0);   /* far above any lookup table */
-    int st = EOSIsInTable(t, rho, u);
-    if (st == EOS_OUTSIDE_VMAX) CHECK(EOSIsUsable(t, rho, u) == EOS_TRUE, "OUTSIDE_VMAX must be usable for Tillotson");
-    CHECK(isfinite(EOSPofRhoU(t, rho, u)), "P above table is finite");
-    EOSfinalizeMaterial(t);
+    TEST("Tillotson dispatch matches tillotson directly");
+    TILLMATERIAL *m = e->tillmaterial;
+    CHECK(e->matType == EOSTILLOTSON, "matType");
+    CHECK(!e->bEntropy && e->bEntropyTableInit, "entropy flags");
+    CHECK_REL(e->rho0, m->rho0, 0.0, "rho0");
+    CHECK_REL(e->rho0forInterfaceCorrection, m->rho0, 0.0, "interface-correction cutoff");
+    CHECK_REL(e->minSoundSpeed, sqrt(m->A / m->rho0), 1e-15, "minSoundSpeed");
+    CHECK(strlen(e->MatString) > 0, "MatString empty");
+    CHECK(EOSYieldModel(e) == -2, "yield model %d (no strength for Tillotson)", EOSYieldModel(e));
+    CHECK(EOSSofRhoU(e, m->rho0, 1.0) == EOS_FAIL_VALUE, "entropy sentinel (rho,u)");
+    CHECK(EOSSofRhoT(e, m->rho0, 300.0) == EOS_FAIL_VALUE, "entropy sentinel (rho,T)");
+    long nf0 = m->nLookupFail;
+
+    int nRhoPT = 0, nInTable = 0, nAbove = 0;
+    for (int a = 0; a < NSAMPLE_TILL; a++) for (int b = 0; b < NSAMPLE_TILL; b++) {
+        double rho = tillSampleRho(m, a), T = tillSampleT(b);
+        double u = EOSUofRhoT(e, rho, T);
+        double c, Tf;
+        double P = EOSPCTofRhoU(e, rho, u, &c, &Tf);
+        CHECK_REL(u, tillURhoTemp(m, rho, T), 0.0, "UofRhoT dispatch");
+        CHECK_REL(P, tillPressure(m, rho, u), 0.0, "PCTofRhoU P");
+        CHECK_REL(EOSPofRhoU(e, rho, u), P, 0.0, "PofRhoU");
+        CHECK_REL(EOSPofRhoT(e, rho, T), P, 0.0, "PofRhoT");
+        CHECK_REL(EOSCofRhoU(e, rho, u), c, 0.0, "CofRhoU");
+        CHECK(c >= e->minSoundSpeed * (1.0 - 1e-12) && isfinite(c), "c = %g below the floor at rho=%g T=%g", c, rho, T);
+        CHECK_REL(Tf, tillTempRhoU(m, rho, u), 0.0, "TofRhoU");
+        CHECK_REL(EOSTofRhoU(e, rho, u), Tf, 0.0, "TofRhoU dispatch");
+        /* u(rho, T) = u_cold + cv*T is exactly invertible up to roundoff in u_cold + cv*T. */
+        CHECK_REL(Tf, T, 1e-8, "T(rho, u(rho,T)) round trip at rho=%g T=%g", rho, T);
+        double c2; double P2 = EOSPCofRhoU(e, rho, u, &c2);
+        CHECK_REL(P2, P, 0.0, "PCofRhoU P"); CHECK_REL(c2, c, 0.0, "PCofRhoU c");
+        CHECK_REL(EOSdPdRho(e, rho, u), tilldPdrho(m, rho, u), 0.0, "dPdRho");
+        CHECK_REL(EOSdPdU(e, rho, u), tilldPdu(m, rho, u), 0.0, "dPdU");
+        CHECK_REL(EOSdUdRho(e, rho, u), tilldudrho(m, rho, u), 0.0, "dUdRho");
+        CHECK_REL(EOSUCold(e, rho), tillColdULookup(m, rho), 0.0, "UCold");
+        CHECK(EOSUCold(e, rho) >= 0.0 || rho >= m->rho0, "u_cold < 0 in the expanded region at rho=%g", rho);
+        CHECK(EOSisbelowColdCurve(e, rho, belowColdCurve(e, rho)) == 1, "below cold curve");
+        CHECK(EOSisbelowColdCurve(e, rho, u) == 0, "above cold curve (u at T=%g)", T);
+        /* The isentrope table ends at s_max; in the expanded region that is a
+         * low u, so hot expanded states lie above it. They stay usable. */
+        int st = EOSIsInTable(e, rho, u);
+        CHECK(st == EOS_SUCCESS || st == EOS_OUTSIDE_VMAX, "status %d at rho=%g T=%g", st, rho, T);
+        CHECK(EOSIsUsable(e, rho, u) == EOS_TRUE, "usable at rho=%g T=%g", rho, T);
+        if (st == EOS_SUCCESS) {
+            /* Isentropic lookup: identity at the same density, dispatch otherwise. */
+            CHECK_REL(EOSIsentropic(e, rho, u, rho), u, 1e-8, "isentrope to same rho at rho=%g T=%g", rho, T);
+            if (a + 1 < NSAMPLE_TILL) {
+                double rho2 = tillSampleRho(m, a + 1);
+                CHECK_REL(EOSIsentropic(e, rho, u, rho2), tillLookupU(m, rho, u, rho2, 0), 0.0, "isentrope dispatch");
+            }
+            nInTable++;
+        } else nAbove++;
+        /* rho(P, T): unique in the condensed region (rho >= rho0) at P > 0. */
+        if (rho >= m->rho0 && P > 0.0) {
+            CHECK_REL(EOSRhoofPT(e, P, T), tillRhoPTemp(m, P, T), 0.0, "RhoofPT dispatch");
+            CHECK_REL(EOSRhoofPT(e, P, T), rho, 1e-8, "rho(P(rho,T),T) at rho=%g T=%g", rho, T);
+            nRhoPT++;
+        }
+    }
+    CHECK(nRhoPT > 0, "no rho(P,T) round trip tested");
+    CHECK(nInTable > 0, "no state inside the isentrope table");
+    CHECK(m->nLookupFail == nf0, "nLookupFail %ld -> %ld after in-table dispatch", nf0, m->nLookupFail);
+    if (nAbove) printf("\n    note: %d of %d states above the isentrope table (hot expanded states), usable but no isentrope\n  %-44s", nAbove, nInTable + nAbove, "");
     END_TEST();
+}
+
+static void testTillotsonTableStatus(EOSMATERIAL *e)
+{
+    int failsBefore = nFails;
+    TEST("Tillotson EOSIsInTable / EOSIsUsable codes");
+    TILLMATERIAL *m = e->tillmaterial;
+    double rhoOk = 2.0 * m->rho0;
+    double uOk = EOSUofRhoT(e, rhoOk, 1000.0);
+    double ucold = EOSUCold(e, rhoOk);
+    double uHuge = 1e4 * EOSUofRhoT(e, rhoOk, 1e6);   /* far above the isentrope table */
+    double rhoLo = 0.5 * m->rhomin, rhoHi = 2.0 * m->rhomax;
+    long nf0 = m->nLookupFail;
+
+    CHECK(rhoOk < m->rhomax, "table does not cover 2 rho0");
+    CHECK(EOSIsInTable(e, rhoOk, uOk) == EOS_SUCCESS, "in table");
+    CHECK(EOSIsInTable(e, m->rhomin, EOSUCold(e, m->rhomin)) == EOS_SUCCESS, "on rhomin (closed interval)");
+    CHECK(EOSIsInTable(e, m->rhomax, EOSUCold(e, m->rhomax)) == EOS_SUCCESS, "on rhomax (closed interval)");
+    CHECK(EOSIsInTable(e, rhoOk, ucold) == EOS_SUCCESS, "on the cold curve");
+    CHECK(EOSIsInTable(e, rhoLo, uOk) == EOS_OUTSIDE_RHOMIN, "below rhomin");
+    CHECK(EOSIsInTable(e, rhoHi, uOk) == EOS_OUTSIDE_RHOMAX, "above rhomax");
+    CHECK(EOSIsInTable(e, -1.0, uOk) == EOS_OUTSIDE_RHOMIN, "negative rho");
+    CHECK(EOSIsInTable(e, NAN, uOk) == EOS_OUTSIDE_RHOMIN, "NaN rho");
+    CHECK(EOSIsInTable(e, rhoOk, 0.5 * ucold) == EOS_OUTSIDE_VMIN, "below the cold curve");
+    CHECK(EOSIsInTable(e, rhoOk, uHuge) == EOS_OUTSIDE_VMAX, "above the table");
+    CHECK(EOSIsInTable(e, rhoOk, NAN) == EOS_OUTSIDE_VMAX, "NaN u");
+
+    /* Policy: the pressure is analytic, only u above the table is tolerated. */
+    CHECK(EOSIsUsable(e, rhoOk, uOk) == EOS_TRUE, "usable in table");
+    CHECK(EOSIsUsable(e, rhoOk, uHuge) == EOS_TRUE, "usable above the table (analytic P)");
+    CHECK(EOSIsUsable(e, rhoOk, 0.5 * ucold) == EOS_FALSE, "not usable below the cold curve");
+    CHECK(EOSIsUsable(e, rhoLo, uOk) == EOS_FALSE, "not usable below rhomin");
+    CHECK(EOSIsUsable(e, rhoHi, uOk) == EOS_FALSE, "not usable above rhomax");
+    CHECK(isfinite(EOSPofRhoU(e, rhoOk, uHuge)), "P above the table is finite");
+    CHECK(isfinite(EOSCofRhoU(e, rhoOk, uHuge)), "c above the table is finite");
+    CHECK(EOSisbelowColdCurve(e, rhoOk, 0.5 * ucold) == 1, "below cold curve");
+    CHECK(EOSisbelowColdCurve(e, rhoOk, uOk) == 0, "above cold curve");
+
+    /* Failure contract: outside the table in rho the cold curve is unknown;
+     * the isentrope lookup integrates directly instead (not a failure). */
+    long nf = m->nLookupFail;
+    CHECK(EOSFailed(EOSUofRhoT(e, rhoHi, 300.0)), "u(rho, T) above rhomax");
+    CHECK(EOSFailed(EOSUCold(e, rhoHi)), "u_cold above rhomax");
+    CHECK(EOSTofRhoU(e, rhoHi, uOk) == 0.0, "T(rho, u) above rhomax falls back to T = 0");
+    CHECK(EOSUCold(e, rhoLo) == 0.0, "u_cold below rhomin is zero (rho < rho0)");
+    CHECK(EOSFailed(EOSRhoofPT(e, -1.0, 300.0)), "rho(P < 0, T)");
+    CHECK(EOSFailed(EOSIsentropic(e, rhoOk, 0.5 * ucold, rhoOk)), "isentrope from below the cold curve");
+    CHECK(m->nLookupFail == nf + 5, "failures not counted (%ld -> %ld)", nf, m->nLookupFail);
+    CHECK(isfinite(EOSIsentropic(e, rhoHi, uOk, rhoOk)), "isentrope from above rhomax integrates directly");
+    {
+        double c = 1.0, T = 1.0;
+        double P = EOSPCTofRhoU(e, rhoHi, uOk, &c, &T);
+        CHECK(isfinite(P) && isfinite(c) && T == 0.0, "fused lookup above rhomax: P=%g c=%g T=%g (analytic P, c; T = 0)", P, c, T);
+    }
+    m->nLookupFail = nf0;
+    END_TEST();
+}
+
+/* Interface between two Tillotson materials: the denser one is the inner one. */
+static void testTillotsonSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
+{
+    int failsBefore = nFails;
+    TEST("EOSSolveBC / EOSWoolfsonCoeff: two Tillotson materials");
+    TILLMATERIAL *m = outer->tillmaterial;
+    int nSolved = 0, nWoolfson = 0;
+    for (int a = 0; a < NSAMPLE_TILL; a++) for (int b = 0; b < NSAMPLE_TILL; b++) {
+        double rho1 = tillSampleRho(m, a), T1 = tillSampleT(b);
+        if (rho1 < outer->rho0 || rho1 > 3.0 * outer->rho0) continue;   /* condensed interface states */
+        double u1 = EOSUofRhoT(outer, rho1, T1);
+        double P1 = EOSPofRhoU(outer, rho1, u1);
+        if (P1 <= WOOLFSON_MIN_PRESSURE) continue;
+        double rho2, u2;
+        for (int jump = 0; jump < 2; jump++) {
+            double Tjump = jump ? 0.05 * T1 : 0.0;
+            int ret = EOSSolveBC(outer, inner, rho1, u1, &rho2, &u2, Tjump);
+            CHECK(ret == EOS_SUCCESS || ret == EOS_FAIL, "SolveBC: bad return %d", ret);
+            if (ret != EOS_SUCCESS) continue;
+            nSolved++;
+            CHECK_REL(EOSPofRhoU(inner, rho2, u2), P1, EOS_SOLVEBC_PTOL, "P continuity rho1=%g T1=%g jump=%g", rho1, T1, Tjump);
+            CHECK_REL(EOSTofRhoU(inner, rho2, u2), T1 - Tjump, 1e-8, "T continuity rho1=%g T1=%g jump=%g", rho1, T1, Tjump);
+            CHECK(EOSIsUsable(inner, rho2, u2) == EOS_TRUE, "solved state not usable");
+        }
+        /* Woolfson correction: the ratio of the two inversions, or 1 in the expanded region. */
+        double f = EOSWoolfsonCoeff(outer, inner, P1, T1);
+        CHECK(EOSFailed(f) || (f > 0.0 && isfinite(f)), "f_ij = %g at P=%g T=%g", f, P1, T1);
+        if (!EOSFailed(f) && f != 1.0) {
+            double r1 = EOSRhoofPT(outer, P1, T1), r2 = EOSRhoofPT(inner, P1, T1);
+            CHECK_REL(f, r1 / r2, 1e-14, "f_ij = rho1/rho2 at P=%g T=%g", P1, T1);
+            nWoolfson++;
+        }
+    }
+    CHECK(nSolved > 0, "EOSSolveBC never succeeded");
+    CHECK(nWoolfson > 0, "EOSWoolfsonCoeff never corrected");
+    CHECK(EOSWoolfsonCoeff(outer, outer, 1.0, 300.0) == 1.0, "same material");
+    CHECK(EOSWoolfsonCoeff(outer, inner, 0.5 * WOOLFSON_MIN_PRESSURE, 300.0) == 1.0, "below minimum pressure");
+    /* Failure path: a negative target temperature. */
+    {
+        double rho1 = 1.5 * outer->rho0, u1 = EOSUofRhoT(outer, rho1, 1000.0);
+        double rho2 = -1.0, u2 = -1.0;
+        int ret = EOSSolveBC(outer, inner, rho1, u1, &rho2, &u2, 1e4);
+        CHECK(ret == EOS_FAIL, "SolveBC with T < 0 must fail (ret=%d)", ret);
+        CHECK(rho2 == -1.0 && u2 == -1.0, "outputs touched on failure");
+    }
+    END_TEST();
+}
+
+static void testTillotson(double dKpcUnit, double dMsolUnit)
+{
+    /* Iron (2) and granite (1): the two Tillotson materials with a unique
+     * rho(P, T) in the condensed region; ice and water are not (intermediate region). */
+    EOSMATERIAL *iron = EOSinitMaterial(2, dKpcUnit, dMsolUnit, NULL);
+    EOSMATERIAL *granite = EOSinitMaterial(1, dKpcUnit, dMsolUnit, NULL);
+    printf("  T1: %s  T2: %s\n", granite->MatString, iron->MatString);
+    testTillotsonDispatch(granite);
+    testTillotsonDispatch(iron);
+    testTillotsonTableStatus(granite);
+    testTillotsonTableStatus(iron);
+    CHECK(iron->rho0 > granite->rho0, "iron must be denser than granite");
+    testTillotsonSolveBC(iron, granite);
+    EOSfinalizeMaterial(iron);
+    EOSfinalizeMaterial(granite);
 }
 #endif
 
@@ -860,7 +1098,7 @@ int main(int argc, char *argv[])
     {
         int failsBefore = nFails;
         TEST("library versions");
-        CHECK(EOSCheckVersions() == 1, "EOSCheckVersions failed");
+        CHECK(EOSCheckVersions() == EOS_TRUE, "EOSCheckVersions failed");
         END_TEST();
     }
 
@@ -879,6 +1117,13 @@ int main(int argc, char *argv[])
     testANEOSTableStatus(B);
     testANEOSYield(A);
     testANEOSYield(B);
+    {
+        ANEOSMATERIAL *m = A->ANEOSmaterial;
+        double rhoOk = sampleRho(m, NSAMPLE / 2), TMin = m->TAxis[0];
+        double uOk = EOSUofRhoT(A, rhoOk, sampleT(m, NSAMPLE / 2));
+        double uHi = 2.0 * fabs(EOSUofRhoT(A, rhoOk, m->TAxis[m->nT-1])) + 1.0;
+        testFailureContract(A, rhoOk, uOk, uHi, 2.0 * m->rhoAxis[m->nRho-1] * m->CGStoCodeUnitsforRho, TMin, &m->nLookupFail);
+    }
     /* Convention: the denser material is the inner one. */
     if (A->rho0 >= B->rho0) { testSolveBC(A, B); testWoolfson(B, A); }
     else                    { testSolveBC(B, A); testWoolfson(A, B); }
@@ -889,6 +1134,13 @@ int main(int argc, char *argv[])
         printf("  S: %s\n", S->MatString);
         testSCVHDispatch(S);
         testSCVHTableStatus(S);
+        {
+            SCVHEOSMAT *s = S->scvheosmaterial;
+            double rhoOk = scvhSampleRho(s, 1), TMin = pow(10.0, s->LogTMin);
+            double uOk = EOSUofRhoT(S, rhoOk, scvhSampleT(s, 1));
+            double uHi = 2.0 * EOSUofRhoT(S, rhoOk, pow(10.0, s->LogTMax));
+            testFailureContract(S, rhoOk, uOk, uHi, 2.0 * pow(10.0, s->LogRhoMax), TMin, &s->nLookupFail);
+        }
         if (A->rho0 >= B->rho0) testSCVHSolveBC(A, S); else testSCVHSolveBC(B, S);
         EOSfinalizeMaterial(S);
     }
@@ -901,6 +1153,13 @@ int main(int argc, char *argv[])
         testREOS3Dispatch(R);
         testREOS3Extrapolation(R);
         testREOS3TableStatus(R);
+        {
+            REOS3MAT *r = R->reos3material;
+            double rhoOk = reos3SampleRho(r, 1), TMin = pow(10.0, r->LogTMin);
+            double uOk = EOSUofRhoT(R, rhoOk, reos3SampleT(r, 1));
+            double uHi = 2.0 * EOSUofRhoT(R, rhoOk, pow(10.0, r->LogTMax));
+            testFailureContract(R, rhoOk, uOk, uHi, 2.0 * pow(10.0, r->LogRhoMax), TMin, &r->nLookupFail);
+        }
         if (A->rho0 >= B->rho0) testREOS3SolveBC(A, R); else testREOS3SolveBC(B, R);
         EOSfinalizeMaterial(R);
     }
@@ -913,7 +1172,7 @@ int main(int argc, char *argv[])
 #endif
 
 #ifdef HAVE_TILLOTSON_H
-    testTillotsonPolicy(dKpcUnit, dMsolUnit);
+    testTillotson(dKpcUnit, dMsolUnit);
 #endif
 
     printf("%d checks, %d failed\n", nChecks, nFails);

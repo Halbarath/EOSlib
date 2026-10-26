@@ -36,6 +36,17 @@
  *          roundoff tolerance at the edges, no GSL). EOSIsInTable treats
  *          the ANEOS table as closed with the same tolerance, so a state on
  *          the edge that the sublibrary evaluates is reported as inside.
+ *   1.2.0  one failure contract across EOSlib and all sublibraries (see
+ *          "Failure contract" below): requires tillotson 4.0.0, ANEOSmaterial
+ *          1.2.0, reos3 1.3.0, scvheos 1.3.0, igeos 1.1.0. API changes:
+ *          EOS_SUCCESS is 0 and EOS_FAIL is -99 (were 1 and 0), so test
+ *          "== EOS_SUCCESS", never the truth value; EOSSolveBC returns
+ *          EOS_SUCCESS/EOS_FAIL (0/-99, "!= 0" still means failure);
+ *          EOSWoolfsonCoeff returns EOS_FAIL_VALUE (-1e50) instead of -1.0
+ *          (still negative); EOSTofRhoU never fails (T_min of the table,
+ *          0 for Tillotson); EOSYieldStrength returns EOS_FAIL_VALUE for an
+ *          invalid T or T_melt instead of exiting; per-call diagnostics only
+ *          with -DEOSLIB_VERBOSE; no GSL, no brent.o.
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -45,38 +56,38 @@
 
 #ifdef HAVE_TILLOTSON_H
     #include <tillotson.h>
-#define TILL_VERSION_MAJOR_REQUIRED 3
-#define TILL_VERSION_MINOR_REQUIRED 4
-#define TILL_VERSION_PATCH_REQUIRED 4
+#define TILL_VERSION_MAJOR_REQUIRED 4
+#define TILL_VERSION_MINOR_REQUIRED 0
+#define TILL_VERSION_PATCH_REQUIRED 0
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
     #include <ANEOSmaterial.h>
 #define ANEOS_VERSION_MAJOR_REQUIRED 1
-#define ANEOS_VERSION_MINOR_REQUIRED 1
+#define ANEOS_VERSION_MINOR_REQUIRED 2
 #define ANEOS_VERSION_PATCH_REQUIRED 0
 #endif
 #ifdef HAVE_REOS3_H
     #include <reos3.h>
 #define REOS3_VERSION_MAJOR_REQUIRED 1
-#define REOS3_VERSION_MINOR_REQUIRED 2
+#define REOS3_VERSION_MINOR_REQUIRED 3
 #define REOS3_VERSION_PATCH_REQUIRED 0
 #endif
 #ifdef HAVE_SCVHEOS_H
     #include <scvheos.h>
 #define SCVHEOS_VERSION_MAJOR_REQUIRED 1
-#define SCVHEOS_VERSION_MINOR_REQUIRED 2
-#define SCVHEOS_VERSION_PATCH_REQUIRED 1
+#define SCVHEOS_VERSION_MINOR_REQUIRED 3
+#define SCVHEOS_VERSION_PATCH_REQUIRED 0
 #endif
 
 #include "igeos.h"
 #define IGEOS_VERSION_MAJOR_REQUIRED 1
-#define IGEOS_VERSION_MINOR_REQUIRED 0
-#define IGEOS_VERSION_PATCH_REQUIRED 2
+#define IGEOS_VERSION_MINOR_REQUIRED 1
+#define IGEOS_VERSION_PATCH_REQUIRED 0
 
-#define EOS_VERSION_TEXT    "1.1.2"
+#define EOS_VERSION_TEXT    "1.2.0"
 #define EOS_VERSION_MAJOR   1
-#define EOS_VERSION_MINOR   1
-#define EOS_VERSION_PATCH   2
+#define EOS_VERSION_MINOR   2
+#define EOS_VERSION_PATCH   0
 
 #define WOOLFSON_MIN_PRESSURE 1e-3
 
@@ -108,16 +119,61 @@
 #define EOS_FALSE 0
 
 /*
- * Status codes. Note two conventions coexist in this library:
- *  - EOSIsInTable/EOSIsUsable use EOS_SUCCESS (1) / EOS_FAIL (0) / EOS_OUTSIDE_*.
- *  - EOSSolveBC follows the C convention: 0 on success, -1 on failure.
+ * Status codes (the same values in every sublibrary): EOS_SUCCESS is 0,
+ * EOS_FAIL a generic failure, EOS_OUTSIDE_* the reasons EOSIsInTable gives.
+ * Always compare with == EOS_SUCCESS; the truth value of a status is not
+ * meaningful (EOS_SUCCESS was 1 before 1.2.0).
  */
-#define EOS_SUCCESS 1
-#define EOS_FAIL 0
+#define EOS_SUCCESS 0
+#define EOS_FAIL  -99
 #define EOS_OUTSIDE_RHOMIN -1
 #define EOS_OUTSIDE_RHOMAX -2
 #define EOS_OUTSIDE_VMIN -3
 #define EOS_OUTSIDE_VMAX -4
+
+/*
+ * Failure contract (EOSlib and all sublibraries: igeos, tillotson,
+ * ANEOSmaterial, reos3, scvheos).
+ *
+ * A failed evaluation never exits. Every function returning a double
+ * returns exactly EOS_FAIL_VALUE (-1e50), in any unit system, when the
+ * state is outside the table, an inversion has no solution, or the quantity
+ * is not available for the material (e.g. the entropy); the fused lookups
+ * set their output arguments to it as well. The one exception is T(rho, u):
+ * EOSTofRhoU (and *T of EOSPCTofRhoU) never fails and returns the lowest
+ * temperature of the table (T_min of the tabulated EOS, 0 for Tillotson)
+ * when (rho, u) cannot be inverted; the hydro codes rely on this. Status
+ * functions return EOS_FAIL or an EOS_OUTSIDE_* code.
+ *
+ * Every failure and every fallback is counted in the sublibrary's
+ * nLookupFail (printed by EOSPrintMat) and reported on stderr only when the
+ * libraries are compiled with -DEOSLIB_VERBOSE (EOS_WARN and the *_WARN of
+ * each sublibrary). Test a returned value with EOSFailed(x), which is true
+ * for the sentinel and for NaN.
+ *
+ * Fatal (message and exit(1)): initialisation errors (unknown material,
+ * missing or defective table, version mismatch) and calling a function that
+ * is not implemented for the material (EOSRhoofUT for all but ANEOS,
+ * EOSIsentropic for REOS3, EOSdPdRhoofRhoT/EOSdPdT for the analytic EOS,
+ * EOSGammaofRhoT/EOSYieldStrength for Tillotson); those are programming
+ * errors, not lookup failures.
+ */
+#define EOS_FAIL_VALUE (-1e50)
+
+static inline int EOSFailed(double x) {
+    return !(x > -1e40);
+}
+
+/*
+ * Diagnostic messages of the lookups and solvers, only with
+ * -DEOSLIB_VERBOSE. The silent variant still type-checks the arguments but
+ * compiles to nothing.
+ */
+#ifdef EOSLIB_VERBOSE
+#define EOS_WARN(...) fprintf(stderr, __VA_ARGS__)
+#else
+#define EOS_WARN(...) do { if (0) fprintf(stderr, __VA_ARGS__); } while (0)
+#endif
 
 // Pass additional parameters for some EOS
 struct igeosParam
@@ -162,7 +218,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data);
 void EOSfinalizeMaterial(EOSMATERIAL *material);
 void EOSPrintMat(EOSMATERIAL *material, FILE *fp);
-int EOSCheckVersions(void);
+int EOSCheckVersions(void);   /* EOS_TRUE if every sublibrary is recent enough (fatal in EOSinitMaterial otherwise) */
 
 // Access functions
 
@@ -180,8 +236,9 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
  * NOTE: Unlike all other quantities, the specific entropy is NOT converted to
  * code units. It is always returned in cgs (erg g^-1 K^-1), and the additive
  * constant is library-dependent, so only entropy differences within the same
- * material are meaningful. Both functions return -1e50 if the material has no
- * entropy available (bEntropy == EOS_FALSE) or the lookup fails.
+ * material are meaningful. Both functions return EOS_FAIL_VALUE if the
+ * material has no entropy available (bEntropy == EOS_FALSE) or the lookup
+ * fails.
  */
 double EOSSofRhoU(EOSMATERIAL *material, double rho, double u);
 double EOSSofRhoT(EOSMATERIAL *material, double rho, double T);
@@ -233,17 +290,21 @@ double EOSUCold(EOSMATERIAL *material, double rho);
 /*
  * Boundary condition solver: given (rho1, u1) in material 1, find (rho2, u2)
  * in material 2 with equal pressure and T2 = T1 - Tjump. Converges to
- * EOS_SOLVEBC_TOL in density and EOS_SOLVEBC_PTOL in pressure. Returns 0 on
- * success, -1 on failure (no bracket, state outside the table, or P2(rho, T2)
- * discontinuous at the root, which happens where u(T) of material 2 is not
- * monotonic, e.g. at a melt transition of a defective table). On failure
- * *prho2 and *pu2 are untouched.
+ * EOS_SOLVEBC_TOL in density and EOS_SOLVEBC_PTOL in pressure. Returns
+ * EOS_SUCCESS (0), or EOS_FAIL on failure (no bracket, state outside the
+ * table, or P2(rho, T2) discontinuous at the root, which happens where u(T)
+ * of material 2 is not monotonic, e.g. at a melt transition of a defective
+ * table), with a message under EOSLIB_VERBOSE. On failure *prho2 and *pu2
+ * are untouched.
  */
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,
  double *prho2, double *pu2, double Tjump);
 
-// Woolfson correction f_ij = rho_1(P,T)/rho_2(P,T). Returns -1.0 if the
-// density inversion fails; callers must check for a negative result.
+/*
+ * Woolfson correction f_ij = rho_1(P,T)/rho_2(P,T). Returns EOS_FAIL_VALUE
+ * if a density inversion fails; callers must check for a negative result
+ * (EOSFailed or f < 0).
+ */
 double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P, double T);
 #ifdef __cplusplus
 }
