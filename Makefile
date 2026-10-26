@@ -1,4 +1,4 @@
-objects = EOSlib.o igeos.o ../ANEOSmaterial/ANEOSmaterial.o ../ANEOSmaterial/interpBilinear.o ../tillotson/tillotson.o ../tillotson/tillinitlookup.o ../tillotson/tillsplint.o ../tillotson/interpol/brent.o ../reos3/reos3.o ../scvh/scvheos.o
+objects = EOSlib.o igeos.o ../ANEOSmaterial/ANEOSmaterial.o ../tillotson/tillotson.o ../tillotson/tillinitlookup.o ../tillotson/tillsplint.o ../tillotson/interpol/brent.o ../reos3/reos3.o ../scvh/scvheos.o
 
 # Position-independent copies of the same objects for the shared library.
 pic_objects = $(objects:.o=.pic.o)

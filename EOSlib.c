@@ -114,13 +114,19 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
     } else if ((iMat >= MAT_REOS3_MIN) && (iMat <= MAT_REOS3_MAX)) {
 #ifdef HAVE_REOS3_H
         material->matType = EOSREOS3;
-        material->reos3material = reos3InitMaterial(iMat, dKpcUnit, dMsolUnit, TRUE);
+        /* The last argument shifts u so that the whole table is positive (bSetRefU). */
+        material->reos3material = reos3InitMaterial(iMat, dKpcUnit, dMsolUnit, 1);
+        /*
+         * rho0 of a REOS3 material is a convention (REOS3_RHO0_CGS, 1e-3 g/cc
+         * unless outside the table), see the SCvH branch below.
+         */
         material->rho0 = material->reos3material->rho0;
         material->rho0forInterfaceCorrection = 0.0; // Gas has no cutoff
         // So far we do not have entropy for REOS3.
         material->bEntropyTableInit = EOS_FALSE;
         // How do we define a minimum sound speed and reference density for H and He?
         material->minSoundSpeed = 0.0;
+        snprintf(material->MatString, sizeof(material->MatString), "%s", material->reos3material->MatString);
 #else
         fprintf(stderr,"Tried to initialize an reos3 material, but the reos3 library is absent.\n");
         assert(0);
@@ -463,9 +469,7 @@ double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c)
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            T = reos3TofRhoU(material->reos3material, rho, u);
-            P = reos3PofRhoT(material->reos3material, rho, T);
-            *c = reos3CsofRhoT(material->reos3material, rho, T);
+            P = reos3PCTofRhoU(material->reos3material, rho, u, c, &T);
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
@@ -509,9 +513,7 @@ double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, doub
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            *T = reos3TofRhoU(material->reos3material, rho, u);
-            P = reos3PofRhoT(material->reos3material, rho, *T);
-            *c = reos3CsofRhoT(material->reos3material, rho, *T);
+            P = reos3PCTofRhoU(material->reos3material, rho, u, c, T);
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
@@ -1025,12 +1027,24 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
 #ifdef HAVE_ANEOSMATERIAL_H
         case EOSANEOS:
         {
+            /*
+             * ANEOSmaterial has no status function, so the table bounds are
+             * checked here. Since 1.0.5 the table is closed at both ends with
+             * the relative roundoff tolerance ANEOS_EDGE_TOL (so that a state
+             * on the edge survives the code <-> cgs unit round trip); the same
+             * tolerance is used here so that this test and the lookups agree.
+             * The u bounds are the cold curve and the top row of the table.
+             */
             ANEOSMATERIAL *am = material->ANEOSmaterial;
             double rho_cgs = rho * am->CodeUnitstoCGSforRho;
-            if (rho_cgs < am->rhoAxis[0]) return EOS_OUTSIDE_RHOMIN;
-            if (rho_cgs >= am->rhoAxis[am->nRho-1]) return EOS_OUTSIDE_RHOMAX;
-            if (u < ANEOSUofRhoT(am, rho, am->TAxis[0])) return EOS_OUTSIDE_VMIN;
-            if (u > ANEOSUofRhoT(am, rho, am->TAxis[am->nT-1]*0.9999)) return EOS_OUTSIDE_VMAX;
+            double rhoMin = am->rhoAxis[0], rhoMax = am->rhoAxis[am->nRho-1];
+            double uMin, uMax;
+            if (!(rho_cgs >= rhoMin*(1.0 - ANEOS_EDGE_TOL))) return EOS_OUTSIDE_RHOMIN;   /* also NaN */
+            if (rho_cgs > rhoMax*(1.0 + ANEOS_EDGE_TOL)) return EOS_OUTSIDE_RHOMAX;
+            uMin = ANEOSUofRhoT(am, rho, am->TAxis[0]);
+            uMax = ANEOSUofRhoT(am, rho, am->TAxis[am->nT-1]);
+            if (!(u >= uMin - ANEOS_EDGE_TOL*fabs(uMin))) return EOS_OUTSIDE_VMIN;         /* also NaN */
+            if (u > uMax + ANEOS_EDGE_TOL*fabs(uMax)) return EOS_OUTSIDE_VMAX;
             return EOS_SUCCESS;
         }
 #endif
@@ -1368,8 +1382,9 @@ double EOSUCold(EOSMATERIAL *material, double rho)
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            // Lowest tabulated temperature.
-            ucold = reos3UofRhoT(material->reos3material, rho, material->reos3material->TAxis[0]);
+            // Lowest tabulated temperature: the library cannot be evaluated below T_min.
+            ucold = reos3UofRhoT(material->reos3material, rho,
+                                 pow(10.0, material->reos3material->LogTMin));
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H

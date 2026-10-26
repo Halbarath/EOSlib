@@ -31,6 +31,11 @@
  *          tables; MatString set for SCvH materials; EOSSofRhoU returns
  *          -1e50 for SCvH when T(rho, u) fails; EOSIsInTable returns
  *          EOS_FAIL instead of a raw sublibrary code for REOS3 and SCvH.
+ *   1.0.9  requires ANEOSmaterial 1.0.5, scvheos 1.2.0 and reos3 1.1.0, which
+ *          share the interpBilinear core (closed table intervals with a
+ *          roundoff tolerance at the edges, no GSL). EOSIsInTable treats
+ *          the ANEOS table as closed with the same tolerance, so a state on
+ *          the edge that the sublibrary evaluates is reported as inside.
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -48,18 +53,18 @@
     #include <ANEOSmaterial.h>
 #define ANEOS_VERSION_MAJOR_REQUIRED 1
 #define ANEOS_VERSION_MINOR_REQUIRED 0
-#define ANEOS_VERSION_PATCH_REQUIRED 4
+#define ANEOS_VERSION_PATCH_REQUIRED 5
 #endif
 #ifdef HAVE_REOS3_H
     #include <reos3.h>
 #define REOS3_VERSION_MAJOR_REQUIRED 1
-#define REOS3_VERSION_MINOR_REQUIRED 0
-#define REOS3_VERSION_PATCH_REQUIRED 1
+#define REOS3_VERSION_MINOR_REQUIRED 1
+#define REOS3_VERSION_PATCH_REQUIRED 0
 #endif
 #ifdef HAVE_SCVHEOS_H
     #include <scvheos.h>
 #define SCVHEOS_VERSION_MAJOR_REQUIRED 1
-#define SCVHEOS_VERSION_MINOR_REQUIRED 1
+#define SCVHEOS_VERSION_MINOR_REQUIRED 2
 #define SCVHEOS_VERSION_PATCH_REQUIRED 0
 #endif
 
@@ -68,10 +73,10 @@
 #define IGEOS_VERSION_MINOR_REQUIRED 0
 #define IGEOS_VERSION_PATCH_REQUIRED 2
 
-#define EOS_VERSION_TEXT    "1.0.7"
+#define EOS_VERSION_TEXT    "1.0.9"
 #define EOS_VERSION_MAJOR   1
 #define EOS_VERSION_MINOR   0
-#define EOS_VERSION_PATCH   7
+#define EOS_VERSION_PATCH   9
 
 #define WOOLFSON_MIN_PRESSURE 1e-3
 

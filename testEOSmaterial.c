@@ -24,16 +24,22 @@
  * condition solver. Everything is an invariant; no reference values are
  * hard-coded. Usage:
  *
- *   testEOSmaterial [iMatA iMatB] [dKpcUnit dMsolUnit] [iMatSCVH]
+ *   testEOSmaterial [iMatA iMatB] [dKpcUnit dMsolUnit] [iMatSCVH] [iMatREOS3]
  *
- * Defaults: ANEOS dunite (54) and ANEOS iron (55), Earth-like code units.
- * iMatA/iMatB must be ANEOS materials whose tables are in the working
- * directory; the Tillotson tests run only if HAVE_TILLOTSON_H is defined.
- * With HAVE_SCVHEOS_H and an iMatSCVH (e.g. 114) the SCvH path is tested too,
- * including the boundary condition solver for a gas envelope on material A;
- * the scvheos table must be in the working directory. Exit status is the
- * number of failed checks.
+ * Defaults: M-ANEOS iron (63) and forsterite (62), Earth-like code units,
+ * SCvH 114 and REOS3 104. iMatA/iMatB must be ANEOS materials whose tables
+ * are in the working directory; the Tillotson tests run only if
+ * HAVE_TILLOTSON_H is defined. With HAVE_SCVHEOS_H / HAVE_REOS3_H and a
+ * non-zero iMatSCVH / iMatREOS3 the SCvH and REOS3 paths are tested too
+ * (0 skips them), including the boundary condition solver for a gas envelope
+ * on the denser ANEOS material; the gas tables must be in the working
+ * directory. Exit status is the number of failed checks.
+ *
+ * The REOS3 tests only visit states inside the lookup limits (the library
+ * exits on out-of-range input unless built with -DREOS3_NOEXIT, which this
+ * test does not need).
  */
+#include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -223,13 +229,34 @@ static void testANEOSTableStatus(EOSMATERIAL *e)
     double uOk = EOSUofRhoT(e, rhoOk, sampleT(m, NSAMPLE / 2));
     double rhoLo = 0.5 * m->rhoAxis[0] * m->CGStoCodeUnitsforRho;
     double rhoHi = 2.0 * m->rhoAxis[m->nRho-1] * m->CGStoCodeUnitsforRho;
-    /* Just above the exclusive upper bound, with enough margin to survive the
-     * code<->cgs round trip (the exact node is one ulp ambiguous). */
+    /* The table is closed at both ends with the relative tolerance
+     * ANEOS_EDGE_TOL (1e-13): the nodes themselves are inside, even after the
+     * code<->cgs round trip, and 1e-12 beyond them is outside. */
+    double rhoMin = m->rhoAxis[0] * m->CGStoCodeUnitsforRho;
+    double rhoMax = m->rhoAxis[m->nRho-1] * m->CGStoCodeUnitsforRho;
     double rhoEdge = m->rhoAxis[m->nRho-1] * (1.0 + 1e-12) * m->CGStoCodeUnitsforRho;
+    double TMid = sampleT(m, NSAMPLE / 2);
 
     CHECK(EOSIsInTable(e, rhoLo, uOk) == EOS_OUTSIDE_RHOMIN, "below rhoMin");
     CHECK(EOSIsInTable(e, rhoHi, uOk) == EOS_OUTSIDE_RHOMAX, "above rhoMax");
     CHECK(EOSIsInTable(e, rhoEdge, uOk) == EOS_OUTSIDE_RHOMAX, "just above rhoMax");
+    /* The edge columns are tested only where their first table row really is
+     * the energy minimum: in a defective column (M-ANEOS forsterite above
+     * ~55 g/cc) EOSUCold lies above u(rho, T) and EOSIsInTable reports
+     * OUTSIDE_VMIN by construction, see EOSUCold. */
+    {
+        double uEdge = EOSUofRhoT(e, rhoMin, TMid);
+        if (uEdge >= EOSUCold(e, rhoMin)) CHECK(EOSIsInTable(e, rhoMin, uEdge) == EOS_SUCCESS, "on rhoMin (closed interval)");
+        else printf("\n    note: rhoMin column skipped (first table row above u(rho,T), table defect)\n  %-44s", "");
+        uEdge = EOSUofRhoT(e, rhoMax, TMid);
+        if (uEdge >= EOSUCold(e, rhoMax)) CHECK(EOSIsInTable(e, rhoMax, uEdge) == EOS_SUCCESS, "on rhoMax (closed interval)");
+        else printf("\n    note: rhoMax column skipped (first table row above u(rho,T), table defect)\n  %-44s", "");
+    }
+    CHECK(EOSIsInTable(e, rhoOk, EOSUofRhoT(e, rhoOk, m->TAxis[0])) == EOS_SUCCESS, "on the cold curve");
+    CHECK(EOSIsInTable(e, rhoOk, EOSUofRhoT(e, rhoOk, m->TAxis[m->nT-1])) == EOS_SUCCESS, "on the top row");
+    CHECK(EOSIsInTable(e, -1.0, uOk) == EOS_OUTSIDE_RHOMIN, "negative rho");
+    CHECK(EOSIsInTable(e, NAN, uOk) == EOS_OUTSIDE_RHOMIN, "NaN rho");
+    CHECK(EOSIsInTable(e, rhoOk, NAN) == EOS_OUTSIDE_VMIN, "NaN u");
     CHECK(EOSIsInTable(e, rhoOk, belowColdCurve(e, rhoOk)) == EOS_OUTSIDE_VMIN, "below cold curve");
     CHECK(EOSIsInTable(e, rhoOk, 1e6 * uOk) == EOS_OUTSIDE_VMAX, "huge u");
     CHECK(EOSIsUsable(e, rhoLo, uOk) == EOS_FALSE, "tabulated EOS unusable below rhoMin");
@@ -547,6 +574,250 @@ static void testSCVHSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
 
 #endif /* HAVE_SCVHEOS_H */
 
+/* ----------------------------------------------------------------- REOS3 */
+
+#ifdef HAVE_REOS3_H
+
+#define NSAMPLE_REOS3 300
+
+static double reos3Exp10(double x) { return exp(x * 2.302585092994045684); }
+
+/* Log-spaced samples in the interior of the REOS3 TABLE (not the
+ * extrapolation region), code units / Kelvin. */
+static double reos3SampleRho(REOS3MAT *r, int k)
+{
+    double f = 0.05 + 0.90 * (k + 0.5137) / NSAMPLE_REOS3;
+    return reos3Exp10(r->dLogRhoAxis[0] + f * (r->LogRhoMax - r->dLogRhoAxis[0]));
+}
+
+static double reos3SampleT(REOS3MAT *r, int k)
+{
+    double f = 0.05 + 0.90 * (k + 0.5137) / NSAMPLE_REOS3;
+    return reos3Exp10(r->LogTMin + f * (r->LogTMax - r->LogTMin));
+}
+
+/* Samples in the ideal-gas extrapolation region below the first rho node. */
+static int reos3HasExtrapolation(REOS3MAT *r) { return r->LogRhoMin < r->dLogRhoAxis[0]; }
+
+static double reos3SampleRhoExtrap(REOS3MAT *r, int k)
+{
+    double f = 0.05 + 0.90 * (k + 0.5137) / NSAMPLE_REOS3;
+    return reos3Exp10(r->LogRhoMin + f * (r->dLogRhoAxis[0] - r->LogRhoMin));
+}
+
+/* 1 if u(T) increases along both node columns of the rho cell containing rho
+ * (the first column for the extrapolation region). Elsewhere T(rho, u) fails
+ * by contract (table defect) and the identities through it are not invariants. */
+static int reos3EnergyMonotonic(REOS3MAT *r, double rho)
+{
+    double lr = log10(rho);
+    int j = 0;
+    while (j < r->nRho - 2 && r->dLogRhoAxis[j+1] <= lr) j++;
+    for (int i = 0; i < r->nT - 1; i++) {
+        if (!(r->uArray[(size_t)j * r->nT + i + 1] > r->uArray[(size_t)j * r->nT + i])) return 0;
+        if (!(r->uArray[(size_t)(j+1) * r->nT + i + 1] > r->uArray[(size_t)(j+1) * r->nT + i])) return 0;
+    }
+    return 1;
+}
+
+/* Cell containing lt on the T axis, and the relative amplification |u|/du
+ * of roundoff in the T(rho, u) inversion there: u is linear and carries the
+ * uRef offset, so where the cell's thermal energy is a tiny fraction of u the
+ * round trips are only accurate to eps*|u|/du. */
+static double reos3InversionTol(REOS3MAT *r, double rho, double T)
+{
+    double lr = log10(rho), lt = log10(T);
+    int j = 0, i = 0;
+    while (j < r->nRho - 2 && r->dLogRhoAxis[j+1] <= lr) j++;
+    while (i < r->nT - 2 && r->dLogTAxis[i+1] <= lt) i++;
+    double w = (lr - r->dLogRhoAxis[j]) / (r->dLogRhoAxis[j+1] - r->dLogRhoAxis[j]);
+    if (w < 0.0) w = 0.0;   /* extrapolation region: first column */
+    const double *c0 = r->uArray + (size_t)j * r->nT, *c1 = c0 + r->nT;
+    double u0 = (1.0 - w) * c0[i] + w * c1[i], u1 = (1.0 - w) * c0[i+1] + w * c1[i+1];
+    double du = fabs(u1 - u0);
+    if (!(du > 0.0)) return INFINITY;
+    return 1e-12 + 64.0 * DBL_EPSILON * fmax(fabs(u0), fabs(u1)) / du;
+}
+
+static void testREOS3Dispatch(EOSMATERIAL *e)
+{
+    int failsBefore = nFails;
+    TEST("REOS3 dispatch matches reos3 directly");
+    REOS3MAT *r = e->reos3material;
+    CHECK(e->matType == EOSREOS3, "matType");
+    CHECK(!e->bEntropy && !e->bEntropyTableInit, "REOS3 has no entropy");
+    CHECK_REL(e->rho0, r->rho0, 0.0, "rho0");
+    CHECK(e->rho0forInterfaceCorrection == 0.0, "gas has no interface-correction cutoff");
+    CHECK(strlen(e->MatString) > 0, "MatString empty");
+    CHECK(EOSYieldModel(e) == 0, "yield model for gas");
+    CHECK(EOSYieldStrength(e, reos3SampleRho(r, 1), 1.0) == 0.0, "yield strength for gas");
+    CHECK(EOSGammaofRhoT(e, reos3SampleRho(r, 1), reos3SampleT(r, 1)) == 0.0, "shear modulus for gas");
+    CHECK(EOSSofRhoU(e, reos3SampleRho(r, 1), 1.0) == -1e50, "entropy sentinel (rho,u)");
+    CHECK(EOSSofRhoT(e, reos3SampleRho(r, 1), reos3SampleT(r, 1)) == -1e50, "entropy sentinel (rho,T)");
+    /* EOSinitIsentropicLookup only warns for REOS3 (not implemented). */
+    EOSinitIsentropicLookup(e, NULL);
+    CHECK(!e->bEntropyTableInit, "isentropic lookup must stay uninitialised");
+
+    int nSkipped = 0;
+    for (int a = 0; a < NSAMPLE_REOS3; a++) for (int b = 0; b < NSAMPLE_REOS3; b++) {
+        double rho = reos3SampleRho(r, a), T = reos3SampleT(r, b);
+        if (!reos3EnergyMonotonic(r, rho)) { nSkipped++; continue; }
+        double tol = reos3InversionTol(r, rho, T);
+        double u = EOSUofRhoT(e, rho, T);
+        double c, Tf;
+        double P = EOSPCTofRhoU(e, rho, u, &c, &Tf);
+        CHECK_REL(u, reos3UofRhoT(r, rho, T), 0.0, "UofRhoT dispatch");
+        /* Closed-form inversion: the fused lookup reproduces the (rho, T)
+         * lookups to the (amplified) roundoff of the inversion. */
+        CHECK_REL(P, reos3PofRhoT(r, rho, T), 100.0 * tol, "PCTofRhoU P at rho=%g T=%g", rho, T);
+        CHECK_REL(c, reos3CsofRhoT(r, rho, T), 100.0 * tol, "PCTofRhoU c at rho=%g T=%g", rho, T);
+        CHECK_REL(Tf, T, tol, "PCTofRhoU T at rho=%g T=%g", rho, T);
+        CHECK_REL(EOSPofRhoU(e, rho, u), P, 0.0, "PofRhoU");
+        CHECK_REL(EOSCofRhoU(e, rho, u), c, 0.0, "CofRhoU");
+        CHECK_REL(EOSTofRhoU(e, rho, u), reos3TofRhoU(r, rho, u), 0.0, "TofRhoU");
+        CHECK_REL(EOSPofRhoT(e, rho, T), reos3PofRhoT(r, rho, T), 0.0, "PofRhoT");
+        double c2; double P2 = EOSPCofRhoU(e, rho, u, &c2);
+        CHECK_REL(P2, P, 0.0, "PCofRhoU P"); CHECK_REL(c2, c, 0.0, "PCofRhoU c");
+        CHECK_REL(EOSdPdRho(e, rho, u), reos3dPdRhoofRhoU(r, rho, u), 0.0, "dPdRho");
+        CHECK_REL(EOSdPdU(e, rho, u), reos3dPdUofRhoU(r, rho, u), 0.0, "dPdU");
+        CHECK_REL(EOSdUdRho(e, rho, u), P / (rho * rho), 1e-14, "dUdRho");
+        CHECK_REL(EOSdPdRhoofRhoT(e, rho, T), reos3dPdRhoofRhoT(r, rho, T), 0.0, "dPdRhoofRhoT");
+        CHECK_REL(EOSdPdT(e, rho, T), reos3dPdTofRhoT(r, rho, T), 0.0, "dPdT");
+        /* EOSUCold evaluates u at pow(10, LogTMin); an ulp in T is 1e-16 in u. */
+        CHECK_REL(EOSUCold(e, rho), reos3UofRhoT(r, rho, reos3Exp10(r->LogTMin)), 1e-13, "UCold");
+        CHECK(EOSisbelowColdCurve(e, rho, belowColdCurve(e, rho)) == 1, "below cold curve");
+        CHECK(EOSisbelowColdCurve(e, rho, u) == 0, "above cold curve (u at T=%g)", T);
+        CHECK(EOSIsInTable(e, rho, u) == EOS_SUCCESS, "in table at rho=%g T=%g", rho, T);
+        CHECK(EOSIsUsable(e, rho, u) == EOS_TRUE, "usable at rho=%g T=%g", rho, T);
+    }
+    /* rho(P, T) dispatch and round trip, where the row is monotonic (the
+     * library fails otherwise, by contract). */
+    for (int a = 0; a < NSAMPLE_REOS3; a += 7) for (int b = 0; b < NSAMPLE_REOS3; b += 7) {
+        double rho = reos3SampleRho(r, a), T = reos3SampleT(r, b);
+        double P = EOSPofRhoT(e, rho, T);
+        if (reos3IsInExtrapLimit(r, rho, EOSUofRhoT(e, rho, T)) != REOS3_SUCCESS) continue;
+        double lt = log10(T);
+        int i = 0; while (i < r->nT - 2 && r->dLogTAxis[i+1] <= lt) i++;
+        int mono = 1;
+        for (int j = 0; j < r->nRho - 1 && mono; j++)
+            if (!(r->dLogPArray[(size_t)(j+1) * r->nT + i] > r->dLogPArray[(size_t)j * r->nT + i]) ||
+                !(r->dLogPArray[(size_t)(j+1) * r->nT + i + 1] > r->dLogPArray[(size_t)j * r->nT + i + 1])) mono = 0;
+        if (!mono) continue;
+        CHECK_REL(EOSRhoofPT(e, P, T), reos3RhoofPT(r, P, T), 0.0, "RhoofPT dispatch");
+        CHECK_REL(EOSRhoofPT(e, P, T), rho, 1e-12, "rho(P,T) roundtrip at rho=%g T=%g", rho, T);
+    }
+    CHECK(r->nLookupFail == 0, "nLookupFail = %ld after in-table dispatch", r->nLookupFail);
+    if (nSkipped)
+        printf("\n    note: %d of %d states skipped (u(T) not monotonic, table defect)\n  %-44s",
+               nSkipped, NSAMPLE_REOS3 * NSAMPLE_REOS3, "");
+    END_TEST();
+}
+
+static void testREOS3Extrapolation(EOSMATERIAL *e)
+{
+    int failsBefore = nFails;
+    TEST("REOS3 ideal-gas extrapolation through EOSlib");
+    REOS3MAT *r = e->reos3material;
+    if (!reos3HasExtrapolation(r)) {
+        printf("\n    note: extrapolation disabled (REOS3_RHOMIN_CGS at or above the first node)\n  %-44s", "");
+        END_TEST();
+        return;
+    }
+    /* Below the first rho node EOSlib must report the state as inside the
+     * lookup limits (EOSIsInTable delegates to reos3IsInExtrapLimit) and
+     * evaluate it as the isothermal ideal gas the library defines. */
+    double rho0 = reos3Exp10(r->dLogRhoAxis[0]);
+    int nSkipped = 0;
+    for (int a = 0; a < NSAMPLE_REOS3; a += 3) for (int b = 0; b < NSAMPLE_REOS3; b += 3) {
+        double rho = reos3SampleRhoExtrap(r, a), T = reos3SampleT(r, b);
+        double u = EOSUofRhoT(e, rho, T);
+        CHECK_REL(u, EOSUofRhoT(e, rho0, T), 1e-12, "u of the first column at rho=%g T=%g", rho, T);
+        CHECK_REL(EOSPofRhoT(e, rho, T), EOSPofRhoT(e, rho0, T) * rho / rho0, 1e-12, "P scales with rho at rho=%g T=%g", rho, T);
+        CHECK(EOSIsInTable(e, rho, u) == EOS_SUCCESS, "extrapolation region is inside the lookup limits at rho=%g", rho);
+        CHECK(EOSIsUsable(e, rho, u) == EOS_TRUE, "extrapolation region usable at rho=%g", rho);
+        if (!reos3EnergyMonotonic(r, rho)) { nSkipped++; continue; }
+        double c, Tf;
+        double P = EOSPCTofRhoU(e, rho, u, &c, &Tf);
+        CHECK(!isSentinel(P) && !isSentinel(c) && !isSentinel(Tf), "fused lookup in the extrapolation region at rho=%g", rho);
+        CHECK_REL(Tf, T, reos3InversionTol(r, rho, T), "T(rho,u) in the extrapolation region at rho=%g T=%g", rho, T);
+        CHECK_REL(EOSdPdRho(e, rho, u), P / rho, 1e-12, "dP/drho|u = P/rho in the extrapolation region at rho=%g", rho);
+    }
+    if (nSkipped) printf("\n    note: %d states skipped (u(T) not monotonic in the first column)\n  %-44s", nSkipped, "");
+    END_TEST();
+}
+
+static void testREOS3TableStatus(EOSMATERIAL *e)
+{
+    int failsBefore = nFails;
+    TEST("REOS3 EOSIsInTable / EOSIsUsable codes");
+    REOS3MAT *r = e->reos3material;
+    double rhoOk = reos3SampleRho(r, NSAMPLE_REOS3 / 2);
+    double uOk = EOSUofRhoT(e, rhoOk, reos3SampleT(r, NSAMPLE_REOS3 / 2));
+    double rhoLo = 0.5 * reos3Exp10(r->LogRhoMin), rhoHi = 2.0 * reos3Exp10(r->LogRhoMax);
+    double uMin = EOSUofRhoT(e, rhoOk, reos3Exp10(r->LogTMin)), uMax = EOSUofRhoT(e, rhoOk, reos3Exp10(r->LogTMax));
+    double uLo = uMin - fabs(uMin) - 1.0, uHi = uMax + fabs(uMax) + 1.0;
+
+    CHECK(EOSIsInTable(e, rhoOk, uOk) == EOS_SUCCESS, "in table");
+    CHECK(EOSIsInTable(e, reos3Exp10(r->LogRhoMin), uOk) == EOS_SUCCESS, "on the lookup limit");
+    CHECK(EOSIsInTable(e, reos3Exp10(r->LogRhoMax), EOSUofRhoT(e, reos3Exp10(r->LogRhoMax), reos3SampleT(r, NSAMPLE_REOS3 / 2))) == EOS_SUCCESS, "on rhoMax");
+    CHECK(EOSIsInTable(e, rhoOk, uMin) == EOS_SUCCESS, "on the cold curve");
+    CHECK(EOSIsInTable(e, rhoOk, uMax) == EOS_SUCCESS, "on the top row");
+    CHECK(EOSIsInTable(e, rhoLo, uOk) == EOS_OUTSIDE_RHOMIN, "below the lookup limit");
+    CHECK(EOSIsInTable(e, rhoHi, uOk) == EOS_OUTSIDE_RHOMAX, "above rhoMax");
+    CHECK(EOSIsInTable(e, rhoOk, uLo) == EOS_OUTSIDE_VMIN, "below cold curve");
+    CHECK(EOSIsInTable(e, rhoOk, uHi) == EOS_OUTSIDE_VMAX, "above top row");
+    CHECK(EOSIsInTable(e, -1.0, uOk) == EOS_OUTSIDE_RHOMIN, "negative rho");
+    CHECK(EOSIsInTable(e, rhoOk, NAN) == EOS_OUTSIDE_VMIN, "NaN u");
+    CHECK(EOSIsUsable(e, rhoLo, uOk) == EOS_FALSE, "tabulated EOS unusable below the lookup limit");
+    CHECK(EOSIsUsable(e, rhoOk, uHi) == EOS_FALSE, "tabulated EOS unusable above u_max");
+    CHECK(EOSIsUsable(e, rhoOk, uLo) == EOS_FALSE, "tabulated EOS unusable below the cold curve");
+    /* Anything EOSIsInTable accepts must evaluate without a sentinel. */
+    for (int a = 0; a < NSAMPLE_REOS3; a++) for (int b = 0; b < NSAMPLE_REOS3; b++) {
+        double rho = reos3SampleRho(r, a);
+        if (!reos3EnergyMonotonic(r, rho)) continue;
+        double u = EOSUofRhoT(e, rho, reos3SampleT(r, b));
+        if (EOSIsInTable(e, rho, u) == EOS_SUCCESS) {
+            double c, T;
+            double P = EOSPCTofRhoU(e, rho, u, &c, &T);
+            CHECK(!isSentinel(P) && !isSentinel(c) && !isSentinel(T), "in-table state produced a sentinel at rho=%g", rho);
+        } else {
+            CHECK(0, "in-table state rejected at rho=%g u=%g", rho, u);
+        }
+    }
+    END_TEST();
+}
+
+#ifdef HAVE_ANEOSMATERIAL_H
+/* Gas envelope (REOS3, outer) on a condensed core (ANEOS, inner). */
+static void testREOS3SolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
+{
+    int failsBefore = nFails;
+    TEST("EOSSolveBC: REOS3 envelope on ANEOS core");
+    REOS3MAT *r = outer->reos3material;
+    int nSolved = 0;
+    for (int a = 2; a < NSAMPLE_REOS3 - 2; a += 4) for (int b = 1; b < NSAMPLE_REOS3 - 3; b += 4) {
+        /* Same conditions as the SCvH envelope test: the solver brackets from
+         * rho1 upwards in the inner material, and P must exceed the
+         * interface-correction floor. */
+        double rho1 = reos3SampleRho(r, a), T1 = reos3SampleT(r, b);
+        if (!reos3EnergyMonotonic(r, rho1)) continue;
+        double u1 = EOSUofRhoT(outer, rho1, T1);
+        double P1 = EOSPofRhoU(outer, rho1, u1);
+        if (P1 <= WOOLFSON_MIN_PRESSURE) continue;
+        double rho2, u2;
+        if (EOSSolveBC(outer, inner, rho1, u1, &rho2, &u2, 0.0) != 0) continue;
+        nSolved++;
+        CHECK_REL(EOSPofRhoU(inner, rho2, u2), P1, EOS_SOLVEBC_PTOL, "P continuity rho1=%g T1=%g", rho1, T1);
+        CHECK_REL(u2, EOSUofRhoT(inner, rho2, T1), 1e-10, "T continuity rho1=%g T1=%g", rho1, T1);
+        CHECK(EOSIsUsable(inner, rho2, u2) == EOS_TRUE, "solved state not usable");
+    }
+    if (nSolved == 0) printf("\n    note: no envelope state had a solution in the core table (table ranges do not overlap)\n  %-44s", "");
+    END_TEST();
+}
+#endif
+
+#endif /* HAVE_REOS3_H */
+
 /* ------------------------------------------------------------- Tillotson */
 
 #ifdef HAVE_TILLOTSON_H
@@ -574,12 +845,14 @@ int main(int argc, char *argv[])
 {
     int iMatA = 63, iMatB = 62;
     int iMatSCVH = 114;                /* 0: SCvH tests skipped */
+    int iMatREOS3 = 104;               /* 0: REOS3 tests skipped */
     double dKpcUnit = 2.06701e-13;   /* Earth radius */
     double dMsolUnit = 4.80438e-08;  /* Earth mass */
 
     if (argc > 2) { iMatA = atoi(argv[1]); iMatB = atoi(argv[2]); }
     if (argc > 4) { dKpcUnit = atof(argv[3]); dMsolUnit = atof(argv[4]); }
     if (argc > 5) iMatSCVH = atoi(argv[5]);
+    if (argc > 6) iMatREOS3 = atoi(argv[6]);
 
     printf("EOSlib %s test suite: materials %d and %d, dKpcUnit = %g, dMsolUnit = %g\n",
            EOS_VERSION_TEXT, iMatA, iMatB, dKpcUnit, dMsolUnit);
@@ -618,6 +891,18 @@ int main(int argc, char *argv[])
         testSCVHTableStatus(S);
         if (A->rho0 >= B->rho0) testSCVHSolveBC(A, S); else testSCVHSolveBC(B, S);
         EOSfinalizeMaterial(S);
+    }
+#endif
+
+#ifdef HAVE_REOS3_H
+    if (iMatREOS3 > 0) {
+        EOSMATERIAL *R = EOSinitMaterial(iMatREOS3, dKpcUnit, dMsolUnit, NULL);
+        printf("  R: %s\n", R->MatString);
+        testREOS3Dispatch(R);
+        testREOS3Extrapolation(R);
+        testREOS3TableStatus(R);
+        if (A->rho0 >= B->rho0) testREOS3SolveBC(A, R); else testREOS3SolveBC(B, R);
+        EOSfinalizeMaterial(R);
     }
 #endif
 
