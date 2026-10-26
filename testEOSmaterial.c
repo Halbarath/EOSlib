@@ -614,16 +614,16 @@ static int reos3EnergyMonotonic(REOS3MAT *r, double rho)
     int j = 0;
     while (j < r->nRho - 2 && r->dLogRhoAxis[j+1] <= lr) j++;
     for (int i = 0; i < r->nT - 1; i++) {
-        if (!(r->uArray[(size_t)j * r->nT + i + 1] > r->uArray[(size_t)j * r->nT + i])) return 0;
-        if (!(r->uArray[(size_t)(j+1) * r->nT + i + 1] > r->uArray[(size_t)(j+1) * r->nT + i])) return 0;
+        if (!(r->dLogUArray[(size_t)j * r->nT + i + 1] > r->dLogUArray[(size_t)j * r->nT + i])) return 0;
+        if (!(r->dLogUArray[(size_t)(j+1) * r->nT + i + 1] > r->dLogUArray[(size_t)(j+1) * r->nT + i])) return 0;
     }
     return 1;
 }
 
-/* Cell containing lt on the T axis, and the relative amplification |u|/du
- * of roundoff in the T(rho, u) inversion there: u is linear and carries the
- * uRef offset, so where the cell's thermal energy is a tiny fraction of u the
- * round trips are only accurate to eps*|u|/du. */
+/* Cell containing lt on the T axis, and the amplification 1/dlogu_cell of
+ * roundoff in the T(rho, u) inversion there: u carries the uRef offset, so
+ * where the cell's thermal energy is a tiny fraction of u the round trips
+ * are only accurate to eps*(1+|logu|)/dlogu. */
 static double reos3InversionTol(REOS3MAT *r, double rho, double T)
 {
     double lr = log10(rho), lt = log10(T);
@@ -632,11 +632,11 @@ static double reos3InversionTol(REOS3MAT *r, double rho, double T)
     while (i < r->nT - 2 && r->dLogTAxis[i+1] <= lt) i++;
     double w = (lr - r->dLogRhoAxis[j]) / (r->dLogRhoAxis[j+1] - r->dLogRhoAxis[j]);
     if (w < 0.0) w = 0.0;   /* extrapolation region: first column */
-    const double *c0 = r->uArray + (size_t)j * r->nT, *c1 = c0 + r->nT;
-    double u0 = (1.0 - w) * c0[i] + w * c1[i], u1 = (1.0 - w) * c0[i+1] + w * c1[i+1];
-    double du = fabs(u1 - u0);
-    if (!(du > 0.0)) return INFINITY;
-    return 1e-12 + 64.0 * DBL_EPSILON * fmax(fabs(u0), fabs(u1)) / du;
+    const double *c0 = r->dLogUArray + (size_t)j * r->nT, *c1 = c0 + r->nT;
+    double lu0 = (1.0 - w) * c0[i] + w * c1[i], lu1 = (1.0 - w) * c0[i+1] + w * c1[i+1];
+    double dlu = fabs(lu1 - lu0);
+    if (!(dlu > 0.0)) return INFINITY;
+    return 1e-12 + 64.0 * DBL_EPSILON * (1.0 + fmax(fabs(lu0), fabs(lu1))) / dlu;
 }
 
 static void testREOS3Dispatch(EOSMATERIAL *e)
