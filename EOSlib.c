@@ -372,6 +372,12 @@ double EOSPofRhoU(EOSMATERIAL *material, double rho, double u)
 /*
  * Calculates the pressure P(rho,T) for a material
  *
+ * Returns EOS_FAIL_VALUE if (rho, T) is outside the table of the material.
+ * For Tillotson this is the case where u(rho, T) needs the cold curve and rho
+ * lies outside the isentrope table (rho > rho_max): the failure value of
+ * tillURhoTemp must not be passed on to tillPressure, which would clip the
+ * resulting pressure to 0 and hide the failure.
+ *
  * Required: pkdgrav3 (interface correction), tipsytools/tipsyprofile
  */
 double EOSPofRhoT(EOSMATERIAL *material, double rho, double T)
@@ -385,8 +391,12 @@ double EOSPofRhoT(EOSMATERIAL *material, double rho, double T)
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            P = tillPressure(material->tillmaterial, rho, tillURhoTemp(material->tillmaterial, rho, T));
+        {
+            /* The failure is already counted in nLookupFail by tillColdULookup. */
+            double u = tillURhoTemp(material->tillmaterial, rho, T);
+            P = tillFailed(u) ? EOS_FAIL_VALUE : tillPressure(material->tillmaterial, rho, u);
             break;
+        }
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
         case EOSANEOS:
