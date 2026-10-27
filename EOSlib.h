@@ -55,6 +55,11 @@
  *          secant slope as the bracket closes (EOS_SOLVEBC_SLOPE_WIDTH,
  *          EOS_SOLVEBC_SLOPE_FAC) instead of the pressure gap alone, which
  *          rejected continuous stiff states (K/P > 1e4, rock below ~10 MPa).
+ *          The Woolfson pressure threshold is a physical pressure,
+ *          WOOLFSON_MIN_PRESSURE_CGS = 1.44 GPa, converted per material
+ *          (EOSWoolfsonMinPressure); WOOLFSON_MIN_PRESSURE (1e-3 in code units,
+ *          1.44 GPa in Earth units but 1e-4 Pa in cgs) is gone. EOSMATERIAL
+ *          records the unit factors dErgPerGmUnit and dGmPerCcUnit.
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -97,7 +102,13 @@
 #define EOS_VERSION_MINOR   2
 #define EOS_VERSION_PATCH   0
 
-#define WOOLFSON_MIN_PRESSURE 1e-3
+/*
+ * EOSWoolfsonCoeff does no correction below this pressure (cgs, dyn/cm^2 = 0.1 Pa). It is a
+ * physical pressure, converted with the unit system of the material (EOSWoolfsonMinPressure).
+ * Up to EOSlib 1.2.0 the threshold was WOOLFSON_MIN_PRESSURE = 1e-3 in code units, i.e. 1.44 GPa
+ * in Earth units but 1e-4 Pa in cgs; 1.44 GPa keeps the behaviour of Earth-unit runs.
+ */
+#define WOOLFSON_MIN_PRESSURE_CGS 1.44e10
 
 /* EOSSolveBC: bracket expansion limits and convergence tolerances. */
 #define EOS_SOLVEBC_MAX_EXPAND  100   /* 1.1^100 ~ 1.4e4, 0.9^100 ~ 2.7e-5 */
@@ -206,6 +217,9 @@ typedef struct EOSmaterial
     int bEntropyTableInit; // flag to signal if the entropy table is initialized
     int bEntropy; // flag to signal if the eos has entropy available (see EOSSofRhoU)
     double minSoundSpeed; // sound speed at reference values
+    /* Unit system: code energy per mass -> erg/g and code density -> g/cc (1 in cgs). */
+    double dErgPerGmUnit;
+    double dGmPerCcUnit;
     char MatString[256];
     IGEOSMAT *igeosmaterial; // Pointer to ideal gas material
 #ifdef HAVE_TILLOTSON_H
@@ -329,11 +343,14 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
  double *prho2, double *pu2, double Tjump);
 
 /*
- * Woolfson correction f_ij = rho_1(P,T)/rho_2(P,T). Returns EOS_FAIL_VALUE
- * if a density inversion fails; callers must check for a negative result
- * (EOSFailed or f < 0).
+ * Woolfson correction f_ij = rho_1(P,T)/rho_2(P,T). Returns 1 for the same
+ * material and for P < EOSWoolfsonMinPressure(material1), EOS_FAIL_VALUE if a
+ * density inversion fails; callers must check for a negative result
+ * (EOSFailed or f < 0). Both materials must use the same unit system.
  */
 double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P, double T);
+/* WOOLFSON_MIN_PRESSURE_CGS in the code units of the material. */
+double EOSWoolfsonMinPressure(EOSMATERIAL *material);
 #ifdef __cplusplus
 }
 #endif

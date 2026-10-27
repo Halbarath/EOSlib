@@ -370,7 +370,7 @@ static void testSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
         if (rho1 < 0.8 * outer->rho0) continue;
         double u1 = EOSUofRhoT(outer, rho1, T1);
         double P1 = EOSPofRhoU(outer, rho1, u1);
-        if (P1 <= WOOLFSON_MIN_PRESSURE) continue;
+        if (P1 <= EOSWoolfsonMinPressure(outer)) continue;
         /* The solver derives its own T1 from (rho1, u1). Where T(rho,u) does
          * not reproduce T1 the column is defective (another root in broken
          * cold rows or a melt transition) and the solver is handed a
@@ -415,7 +415,7 @@ static void testWoolfson(EOSMATERIAL *a, EOSMATERIAL *b)
     double rho = sampleRho(m, NSAMPLE / 2), T = sampleT(m, NSAMPLE / 2);
     double P = EOSPofRhoT(a, rho, T);
     CHECK(EOSWoolfsonCoeff(a, a, P, T) == 1.0, "same material");
-    CHECK(EOSWoolfsonCoeff(a, b, 0.5 * WOOLFSON_MIN_PRESSURE, T) == 1.0, "below minimum pressure");
+    CHECK(EOSWoolfsonCoeff(a, b, 0.5 * EOSWoolfsonMinPressure(a), T) == 1.0, "below minimum pressure");
     double f = EOSWoolfsonCoeff(a, b, P, T);
     CHECK(EOSFailed(f) || (f > 0.0 && isfinite(f)), "f_ij = %g", f);
     CHECK(EOSFailed(EOSWoolfsonCoeff(a, b, 1e6 * EOSPofRhoT(a, m->rhoAxis[m->nRho-1] * m->CGStoCodeUnitsforRho, T), T)), "f_ij above the table must be the sentinel");
@@ -582,7 +582,7 @@ static void testSCVHSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
         if (!scvhEnergyMonotonic(s, rho1)) continue;
         double u1 = EOSUofRhoT(outer, rho1, T1);
         double P1 = EOSPofRhoU(outer, rho1, u1);
-        if (P1 <= WOOLFSON_MIN_PRESSURE) continue;
+        if (P1 <= EOSWoolfsonMinPressure(outer)) continue;
         double rho2, u2;
         if (EOSSolveBC(outer, inner, rho1, u1, &rho2, &u2, 0.0) != 0) continue;
         nSolved++;
@@ -827,7 +827,7 @@ static void testREOS3SolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
         if (!reos3EnergyMonotonic(r, rho1)) continue;
         double u1 = EOSUofRhoT(outer, rho1, T1);
         double P1 = EOSPofRhoU(outer, rho1, u1);
-        if (P1 <= WOOLFSON_MIN_PRESSURE) continue;
+        if (P1 <= EOSWoolfsonMinPressure(outer)) continue;
         double rho2, u2;
         if (EOSSolveBC(outer, inner, rho1, u1, &rho2, &u2, 0.0) != 0) continue;
         nSolved++;
@@ -1067,7 +1067,7 @@ static void testTillotsonSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
         if (rho1 < outer->rho0 || rho1 > 3.0 * outer->rho0) continue;   /* condensed interface states */
         double u1 = EOSUofRhoT(outer, rho1, T1);
         double P1 = EOSPofRhoU(outer, rho1, u1);
-        if (P1 <= WOOLFSON_MIN_PRESSURE) continue;
+        if (P1 <= EOSWoolfsonMinPressure(outer)) continue;
         double rho2, u2;
         for (int jump = 0; jump < 2; jump++) {
             double Tjump = jump ? 0.05 * T1 : 0.0;
@@ -1092,7 +1092,7 @@ static void testTillotsonSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
     CHECK(nSolved > 0, "EOSSolveBC never succeeded");
     CHECK(nWoolfson > 0, "EOSWoolfsonCoeff never corrected");
     CHECK(EOSWoolfsonCoeff(outer, outer, 1.0, 300.0) == 1.0, "same material");
-    CHECK(EOSWoolfsonCoeff(outer, inner, 0.5 * WOOLFSON_MIN_PRESSURE, 300.0) == 1.0, "below minimum pressure");
+    CHECK(EOSWoolfsonCoeff(outer, inner, 0.5 * EOSWoolfsonMinPressure(outer), 300.0) == 1.0, "below minimum pressure");
     /* Failure path: a negative target temperature. */
     {
         double rho1 = 1.5 * outer->rho0, u1 = EOSUofRhoT(outer, rho1, 1000.0);
@@ -1197,6 +1197,48 @@ static void testTillotsonSolveBCJump(EOSMATERIAL *iron, EOSMATERIAL *granite)
     END_TEST();
 }
 
+/*
+ * The Woolfson pressure threshold is a physical pressure: the same physical (P, T) gives the same
+ * f_ij in every unit system, no correction just below WOOLFSON_MIN_PRESSURE_CGS and the correction
+ * just above it. Up to EOSlib 1.2.0 it was 1e-3 in code units (1.44 GPa in Earth units, 1e-4 Pa
+ * in cgs). The unit factors of EOSMATERIAL must agree with those of the sublibraries.
+ */
+static void testWoolfsonUnits(void)
+{
+    int failsBefore = nFails;
+    TEST("EOSWoolfsonCoeff threshold in every unit system");
+    const double units[3][2] = {
+        {0.0, 0.0},                           /* cgs */
+        {2.06701e-13, 4.80438e-08},           /* Earth radius and mass */
+        {1.3e8 / 3.085678e21, 1.0},           /* one solar mass in 1300 km */
+    };
+    const double T = 300.0;
+    double fAbove[3];
+    for (int iu = 0; iu < 3; iu++) {
+        EOSMATERIAL *granite = EOSinitMaterial(1, units[iu][0], units[iu][1], NULL);
+        EOSMATERIAL *iron = EOSinitMaterial(2, units[iu][0], units[iu][1], NULL);
+        struct igeosParam gp = {5.0 / 3.0, 1.0};
+        EOSMATERIAL *gas = EOSinitMaterial(0, units[iu][0], units[iu][1], &gp);
+        const double Punit = granite->dErgPerGmUnit * granite->dGmPerCcUnit;
+        CHECK_REL(granite->dErgPerGmUnit, granite->tillmaterial->dErgPerGmUnit, 1e-15, "dErgPerGmUnit vs tillotson (units %d)", iu);
+        CHECK_REL(granite->dGmPerCcUnit, granite->tillmaterial->dGmPerCcUnit, 1e-15, "dGmPerCcUnit vs tillotson (units %d)", iu);
+        CHECK_REL(gas->dErgPerGmUnit, gas->igeosmaterial->dErgPerGmUnit, 1e-15, "dErgPerGmUnit vs igeos (units %d)", iu);
+        CHECK_REL(gas->dGmPerCcUnit, gas->igeosmaterial->dGmPerCcUnit, 1e-15, "dGmPerCcUnit vs igeos (units %d)", iu);
+        CHECK_REL(EOSWoolfsonMinPressure(granite) * Punit, WOOLFSON_MIN_PRESSURE_CGS, 1e-14, "threshold in cgs (units %d)", iu);
+        CHECK(EOSWoolfsonCoeff(granite, iron, WOOLFSON_MIN_PRESSURE_CGS * (1.0 - 1e-6) / Punit, T) == 1.0, "no correction just below the threshold (units %d)", iu);
+        fAbove[iu] = EOSWoolfsonCoeff(granite, iron, WOOLFSON_MIN_PRESSURE_CGS * (1.0 + 1e-6) / Punit, T);
+        CHECK(!EOSFailed(fAbove[iu]) && fAbove[iu] > 0.0 && fAbove[iu] < 1.0, "correction just above the threshold (units %d): f= %g", iu, fAbove[iu]);
+        /* The physical f at a high pressure, also independent of the units. */
+        CHECK_REL(EOSWoolfsonCoeff(granite, iron, 1e11 / Punit, T),
+                  EOSRhoofPT(granite, 1e11 / Punit, T) / EOSRhoofPT(iron, 1e11 / Punit, T), 1e-14, "f = rho1/rho2 at 10 GPa (units %d)", iu);
+        EOSfinalizeMaterial(granite);
+        EOSfinalizeMaterial(iron);
+        EOSfinalizeMaterial(gas);
+    }
+    for (int iu = 1; iu < 3; iu++) CHECK_REL(fAbove[iu], fAbove[0], 1e-8, "f above the threshold in unit system %d", iu);
+    END_TEST();
+}
+
 static void testTillotson(double dKpcUnit, double dMsolUnit)
 {
     /* Iron (2) and granite (1): the two Tillotson materials with a unique
@@ -1214,6 +1256,7 @@ static void testTillotson(double dKpcUnit, double dMsolUnit)
     testTillotsonSolveBCJump(iron, granite);
     EOSfinalizeMaterial(iron);
     EOSfinalizeMaterial(granite);
+    testWoolfsonUnits();
 }
 #endif
 

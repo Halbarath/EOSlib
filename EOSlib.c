@@ -66,6 +66,21 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
     material->bEntropyTableInit = EOS_FALSE;
     material->bEntropy = EOS_FALSE;
 
+    /*
+     * Unit factors (code -> cgs), with the constants and the rule of the tabulated
+     * sublibraries: both units positive, or cgs.
+     */
+    if (dKpcUnit > 0.0 && dMsolUnit > 0.0) {
+        const double MSOLG = 1.99e33;        /* solar mass in grams */
+        const double GCGS = 6.67e-8;         /* G in cgs */
+        const double KPCCM = 3.085678e21;    /* kiloparsec in centimeters */
+        material->dErgPerGmUnit = GCGS*dMsolUnit*MSOLG/(dKpcUnit*KPCCM);
+        material->dGmPerCcUnit = (dMsolUnit*MSOLG)/pow(dKpcUnit*KPCCM, 3.0);
+    } else {
+        material->dErgPerGmUnit = 1.0;
+        material->dGmPerCcUnit = 1.0;
+    }
+
     if (iMat == MAT_IDEALGAS)
     {
         if (additional_data == NULL) EOS_FATAL("EOSinitMaterial: the ideal gas (iMat= 0) needs a struct igeosParam as additional_data.\n");
@@ -1579,6 +1594,14 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
 }
 
 /*
+ * WOOLFSON_MIN_PRESSURE_CGS (a physical pressure) in the code units of the material.
+ */
+double EOSWoolfsonMinPressure(EOSMATERIAL *material)
+{
+    return WOOLFSON_MIN_PRESSURE_CGS/(material->dErgPerGmUnit*material->dGmPerCcUnit);
+}
+
+/*
  * Calculate the coefficient
  *
  * f_ij := rho_mat1(P, T)/rho_mat2(P, T)
@@ -1601,7 +1624,7 @@ double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P
      * is one in this case.
      */
 
-    if (P < WOOLFSON_MIN_PRESSURE) {
+    if (P < EOSWoolfsonMinPressure(material1)) {
         EOS_WARN("EOSWoolfsonCoeff: P= %g is close to zero, no density correction is done.\n", P);
         return 1.0;
     }
