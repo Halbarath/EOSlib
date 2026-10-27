@@ -13,6 +13,8 @@
  *          undefined for an ideal gas, not a lookup failure). igeosInitMat
  *          rejects an inconsistent unit pair (fatal): both units > 0 is code
  *          units, both <= 0 is cgs (exactly one <= 0 divided by zero).
+ *          nLookupFail and IGEOS_WARN like the other libraries: the entropy
+ *          failures (rho <= 0 or T <= 0) are counted.
  */
 #define IGEOS_VERSION_TEXT    "1.1.0"
 #define IGEOS_VERSION_MAJOR   1
@@ -29,15 +31,27 @@
 /*
  * Failure contract (the EOSlib convention, shared by all EOS libraries).
  * The ideal gas is analytic and its lookups cannot fail; the only sentinel
- * is returned by igeosSofRhoT/igeosSofRhoU for rho <= 0 or T <= 0, where
- * the entropy is undefined. Test a returned value with igeosFailed(x).
- * Unimplemented functions (igeosRhoofUT) are fatal.
+ * is returned by igeosSofRhoT/igeosSofRhoU for rho <= 0 or T <= 0 (also
+ * NaN), where the entropy is undefined. Every such failure is counted in
+ * Mat->nLookupFail and reported on stderr only with -DEOSLIB_VERBOSE
+ * (IGEOS_WARN). Test a returned value with igeosFailed(x). Unimplemented
+ * functions (igeosRhoofUT) are fatal.
  */
 #define IGEOS_FAIL_VALUE (-1e50)
 
 static inline int igeosFailed(double x) {
     return !(x > -1e40);
 }
+
+/*
+ * Diagnostic messages, only with -DEOSLIB_VERBOSE. The silent variant still
+ * type-checks the arguments but compiles to nothing.
+ */
+#ifdef EOSLIB_VERBOSE
+#define IGEOS_WARN(...) fprintf(stderr, __VA_ARGS__)
+#else
+#define IGEOS_WARN(...) do { if (0) fprintf(stderr, __VA_ARGS__); } while (0)
+#endif
 
 typedef struct igeosMat {
     /* Units. */
@@ -59,6 +73,9 @@ typedef struct igeosMat {
 
     /* Specific heat capacity. */
     double cv;
+
+    /* Diagnostics: number of failed evaluations since init (the entropy for rho <= 0 or T <= 0). */
+    long nLookupFail;
 } IGEOSMAT;
 
 IGEOSMAT *igeosInitMat(int iMat, double dConstGamma, double dMeanMolMass, double dKpcUnit, double dMsolUnit);

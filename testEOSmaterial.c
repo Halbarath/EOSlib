@@ -155,6 +155,18 @@ static void testIdealGas(double dKpcUnit, double dMsolUnit)
         CHECK(EOSIsUsable(g, rho, u) == EOS_TRUE, "ideal gas always usable");
         CHECK(EOSUCold(g, rho) == 0.0, "ucold = 0 for gas");
     }
+    /* The only failures of the ideal gas, the entropy at rho <= 0 or T <= 0, are counted like in
+     * every other library; the analytic lookups never count. */
+    {
+        long nf = g->igeosmaterial->nLookupFail;
+        CHECK(nf == 0, "igeos nLookupFail = %ld after init and valid lookups", nf);
+        CHECK(EOSFailed(EOSSofRhoT(g, -1.0, 300.0)), "gas: s(rho < 0, T)");
+        CHECK(EOSFailed(EOSSofRhoT(g, 1.0, 0.0)), "gas: s(rho, T = 0)");
+        CHECK(EOSFailed(EOSSofRhoT(g, NAN, 300.0)), "gas: s(NaN rho, T)");
+        CHECK(EOSFailed(EOSSofRhoU(g, 1.0, -1.0)), "gas: s(rho, u < 0)");
+        CHECK(g->igeosmaterial->nLookupFail == nf + 4, "gas: entropy failures counted (%ld -> %ld)", nf, g->igeosmaterial->nLookupFail);
+        CHECK(!EOSFailed(EOSSofRhoT(g, 1.0, 300.0)) && g->igeosmaterial->nLookupFail == nf + 4, "gas: a valid entropy is not counted");
+    }
     /* The cold curve of a gas is u = 0 everywhere; a non-finite u is undecidable. */
     CHECK(EOSisbelowColdCurve(g, 1.0, -1.0) == EOS_TRUE && EOSisbelowColdCurve(g, 1.0, 1.0) == EOS_FALSE, "gas: isbelowColdCurve");
     CHECK(EOSisbelowColdCurve(g, 1.0, NAN) == EOS_FAIL, "gas: isbelowColdCurve for a NaN u");

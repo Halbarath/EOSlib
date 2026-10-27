@@ -160,13 +160,17 @@ double igeosdPdU(IGEOSMAT *Mat, double rho, double u) {
  * where (gamma-1)*cv = k_B/(mu*m_H). The result is returned in cgs
  * (erg/g/K), consistent with the tabulated EOS libraries, and the additive
  * constant is set to zero. Only entropy differences are meaningful.
- * Returns IGEOS_FAIL_VALUE for rho <= 0 or T <= 0.
+ * Returns IGEOS_FAIL_VALUE (counted in nLookupFail) for rho <= 0 or T <= 0.
  */
 double igeosSofRhoT(IGEOSMAT *Mat, double rho, double T) {
     double cv_cgs = Mat->cv * Mat->dErgPerGmUnit;
     double rho_cgs = rho * Mat->dGmPerCcUnit;
 
-    if (!(rho_cgs > 0.0) || !(T > 0.0)) return IGEOS_FAIL_VALUE;
+    if (!(rho_cgs > 0.0) || !(T > 0.0)) {
+        Mat->nLookupFail++;
+        IGEOS_WARN("igeosSofRhoT: entropy undefined for rho= %g T= %g (iMat= %i).\n", rho, T, Mat->iMat);
+        return IGEOS_FAIL_VALUE;
+    }
 
     return cv_cgs * (log(T) - (Mat->dConstGamma - 1.0) * log(rho_cgs));
 }
