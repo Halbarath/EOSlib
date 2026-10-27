@@ -207,6 +207,7 @@ static void testANEOSDispatch(EOSMATERIAL *e)
         double c, Tf;
         double P = EOSPCTofRhoU(e, rho, u, &c, &Tf);
         CHECK_REL(u, ANEOSUofRhoT(m, rho, T), 0.0, "UofRhoT dispatch");
+        CHECK_REL(EOSUCold(e, rho), ANEOSUCold(m, rho), 0.0, "UCold dispatch");
         /* The separate calls recompute the cell coordinate from T, so P and c
          * differ from the fused lookup by amplified roundoff. */
         CHECK_REL(P, ANEOSPofRhoU(m, rho, u), 1e-12, "PCTofRhoU P");
@@ -219,6 +220,12 @@ static void testANEOSDispatch(EOSMATERIAL *e)
         CHECK_REL(EOSPofRhoT(e, rho, T), ANEOSPofRhoT(m, rho, T), 0.0, "PofRhoT");
         CHECK_REL(EOSCofRhoU(e, rho, u), c, 1e-12, "CofRhoU");
         CHECK_REL(EOSTofRhoU(e, rho, u), Tf, 0.0, "TofRhoU");
+        {
+            /* EOSIsInTable is ANEOSIsInTable with the EOS_* codes. */
+            int st = ANEOSIsInTable(m, rho, u), ste = EOSIsInTable(e, rho, u);
+            CHECK((st == ANEOS_SUCCESS && ste == EOS_SUCCESS) || (st == ANEOS_OUTSIDE_TMIN && ste == EOS_OUTSIDE_VMIN) ||
+                  (st == ANEOS_OUTSIDE_TMAX && ste == EOS_OUTSIDE_VMAX), "EOSIsInTable dispatch: %d vs %d", ste, st);
+        }
         double c2; double P2 = EOSPCofRhoU(e, rho, u, &c2);
         CHECK_REL(P2, P, 0.0, "PCofRhoU P"); CHECK_REL(c2, c, 0.0, "PCofRhoU c");
         CHECK_REL(EOSSofRhoU(e, rho, u), ANEOSSofRhoU(m, rho, u), 0.0, "SofRhoU");
@@ -497,6 +504,7 @@ static void testSCVHDispatch(EOSMATERIAL *e)
         double c, Tf;
         double P = EOSPCTofRhoU(e, rho, u, &c, &Tf);
         CHECK_REL(u, scvheosUofRhoT(s, rho, T), 0.0, "UofRhoT dispatch");
+        CHECK_REL(EOSUCold(e, rho), scvheosUCold(s, rho), 0.0, "UCold dispatch");
         /* The inversion is closed-form on the bilinear interpolant, so the
          * fused lookup reproduces the (rho, T) lookups to roundoff. */
         CHECK_REL(P, scvheosPofRhoT(s, rho, T), 1e-12, "PCTofRhoU P at rho=%g T=%g", rho, T);
@@ -699,6 +707,7 @@ static void testREOS3Dispatch(EOSMATERIAL *e)
         double c, Tf;
         double P = EOSPCTofRhoU(e, rho, u, &c, &Tf);
         CHECK_REL(u, reos3UofRhoT(r, rho, T), 0.0, "UofRhoT dispatch");
+        CHECK_REL(EOSUCold(e, rho), reos3UCold(r, rho), 0.0, "UCold dispatch");
         /* Closed-form inversion: the fused lookup reproduces the (rho, T)
          * lookups to the (amplified) roundoff of the inversion. */
         CHECK_REL(P, reos3PofRhoT(r, rho, T), 100.0 * tol, "PCTofRhoU P at rho=%g T=%g", rho, T);

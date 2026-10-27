@@ -72,7 +72,10 @@
  *          interpBilinear 1.0.3; their headers check at compile time that the
  *          copy in effect in this translation unit has their type layout
  *          (INTERP_ABI_VERSION), so EOSlib and the libraries cannot disagree on
- *          the embedded INTERPGRID.
+ *          the embedded INTERPGRID. EOSlib no longer reads table internals of
+ *          the sublibraries: EOSIsInTable uses ANEOSIsInTable, EOSUCold uses
+ *          ANEOSUCold/reos3UCold/scvheosUCold, the init uses ANEOSTmin (requires
+ *          ANEOSmaterial, reos3 and scvheos with these functions).
  */
 
 #ifndef EOSLIB_HINCLUDED

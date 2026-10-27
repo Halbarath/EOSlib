@@ -136,7 +136,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         // The entropy look up table is initialized in ANEOSinitMaterial
         material->bEntropyTableInit = EOS_TRUE;
         material->bEntropy = EOS_TRUE;
-        material->minSoundSpeed = ANEOSCofRhoT(material->ANEOSmaterial, material->rho0, material->ANEOSmaterial->TAxis[0]);
+        material->minSoundSpeed = ANEOSCofRhoT(material->ANEOSmaterial, material->rho0, ANEOSTmin(material->ANEOSmaterial));
         strcpy(material->MatString, material->ANEOSmaterial->matName);
 #else
         fprintf(stderr,"Tried to initialize an ANEOSmaterial material, but the ANEOSmaterial library is absent.\n");
@@ -1064,27 +1064,13 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
         case EOSANEOS:
-        {
-            /*
-             * ANEOSmaterial has no status function, so the table bounds are
-             * checked here. Since 1.0.5 the table is closed at both ends with
-             * the relative roundoff tolerance ANEOS_EDGE_TOL (so that a state
-             * on the edge survives the code <-> cgs unit round trip); the same
-             * tolerance is used here so that this test and the lookups agree.
-             * The u bounds are the cold curve and the top row of the table.
-             */
-            ANEOSMATERIAL *am = material->ANEOSmaterial;
-            double rho_cgs = rho * am->CodeUnitstoCGSforRho;
-            double rhoMin = am->rhoAxis[0], rhoMax = am->rhoAxis[am->nRho-1];
-            double uMin, uMax;
-            if (!(rho_cgs >= rhoMin*(1.0 - ANEOS_EDGE_TOL))) return EOS_OUTSIDE_RHOMIN;   /* also NaN */
-            if (rho_cgs > rhoMax*(1.0 + ANEOS_EDGE_TOL)) return EOS_OUTSIDE_RHOMAX;
-            uMin = ANEOSUofRhoT(am, rho, am->TAxis[0]);
-            uMax = ANEOSUofRhoT(am, rho, am->TAxis[am->nT-1]);
-            if (!(u >= uMin - ANEOS_EDGE_TOL*fabs(uMin))) return EOS_OUTSIDE_VMIN;         /* also NaN */
-            if (u > uMax + ANEOS_EDGE_TOL*fabs(uMax)) return EOS_OUTSIDE_VMAX;
-            return EOS_SUCCESS;
-        }
+            iret = ANEOSIsInTable(material->ANEOSmaterial, rho, u);
+            if (iret == ANEOS_SUCCESS) return EOS_SUCCESS;
+            if (iret == ANEOS_OUTSIDE_RHOMIN) return EOS_OUTSIDE_RHOMIN;
+            if (iret == ANEOS_OUTSIDE_RHOMAX) return EOS_OUTSIDE_RHOMAX;
+            if (iret == ANEOS_OUTSIDE_TMIN) return EOS_OUTSIDE_VMIN;
+            if (iret == ANEOS_OUTSIDE_TMAX) return EOS_OUTSIDE_VMAX;
+            return EOS_FAIL;
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
@@ -1417,21 +1403,19 @@ double EOSUCold(EOSMATERIAL *material, double rho)
 #ifdef HAVE_ANEOSMATERIAL_H
         case EOSANEOS:
             // Lowest tabulated temperature: ANEOS cannot be evaluated below T_min.
-            ucold = ANEOSUofRhoT(material->ANEOSmaterial, rho, material->ANEOSmaterial->TAxis[0]);
+            ucold = ANEOSUCold(material->ANEOSmaterial, rho);
             break;
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
             // Lowest tabulated temperature: the library cannot be evaluated below T_min.
-            ucold = reos3UofRhoT(material->reos3material, rho,
-                                 pow(10.0, material->reos3material->LogTMin));
+            ucold = reos3UCold(material->reos3material, rho);
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
             // Lowest tabulated temperature: the library cannot be evaluated below T_min.
-            ucold = scvheosUofRhoT(material->scvheosmaterial, rho,
-                                   pow(10.0, material->scvheosmaterial->LogTMin));
+            ucold = scvheosUCold(material->scvheosmaterial, rho);
             break;
 #endif
         default: EOS_UNKNOWN_MATERIAL(material);
