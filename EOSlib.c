@@ -1002,14 +1002,24 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
 }
 
 /*
- * Tests if the given combination is below the cold curve, returns EOS_TRUE if so and EOS_FALSE if not
+ * Tests if the given combination is below the cold curve, returns EOS_TRUE if so and EOS_FALSE if not.
+ *
+ * Returns EOS_FAIL if the cold curve cannot be evaluated at rho (outside the table; the failure is
+ * counted in the sublibrary's nLookupFail) or u is not finite. Before, such a state was reported
+ * as "not below", because u < EOS_FAIL_VALUE is false. Compare with == EOS_TRUE; a caller that
+ * uses the truth value treats an undecidable state as below the cold curve, the safe side.
  *
  * Required: ballic
  */
 int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u)
 {
     double ucold = EOSUCold(material, rho);
-    return (u < ucold);
+
+    if (EOSFailed(ucold) || !isfinite(u)) {
+        EOS_WARN("EOSisbelowColdCurve: cold curve not available (rho= %g u= %g u_cold= %g, material %d).\n", rho, u, ucold, material->iMat);
+        return EOS_FAIL;
+    }
+    return (u < ucold) ? EOS_TRUE : EOS_FALSE;
 }
 
 /*

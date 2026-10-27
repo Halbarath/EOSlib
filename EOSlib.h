@@ -60,6 +60,8 @@
  *          (EOSWoolfsonMinPressure); WOOLFSON_MIN_PRESSURE (1e-3 in code units,
  *          1.44 GPa in Earth units but 1e-4 Pa in cgs) is gone. EOSMATERIAL
  *          records the unit factors dErgPerGmUnit and dGmPerCcUnit.
+ *          EOSisbelowColdCurve returns EOS_FAIL where the cold curve cannot be
+ *          evaluated or u is not finite (it answered EOS_FALSE there).
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -295,6 +297,10 @@ double EOSRhoofPT(EOSMATERIAL *material, double p, double T);
 
 double EOSRhoofUT(EOSMATERIAL *material, double u, double T);
 
+/*
+ * EOS_TRUE if u < u_cold(rho), EOS_FALSE if not, EOS_FAIL if u_cold(rho) cannot be evaluated
+ * (rho outside the table) or u is not finite. Compare with == EOS_TRUE.
+ */
 int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u);
 
 /*

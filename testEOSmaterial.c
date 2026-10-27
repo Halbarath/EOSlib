@@ -150,6 +150,9 @@ static void testIdealGas(double dKpcUnit, double dMsolUnit)
         CHECK(EOSIsUsable(g, rho, u) == EOS_TRUE, "ideal gas always usable");
         CHECK(EOSUCold(g, rho) == 0.0, "ucold = 0 for gas");
     }
+    /* The cold curve of a gas is u = 0 everywhere; a non-finite u is undecidable. */
+    CHECK(EOSisbelowColdCurve(g, 1.0, -1.0) == EOS_TRUE && EOSisbelowColdCurve(g, 1.0, 1.0) == EOS_FALSE, "gas: isbelowColdCurve");
+    CHECK(EOSisbelowColdCurve(g, 1.0, NAN) == EOS_FAIL, "gas: isbelowColdCurve for a NaN u");
     EOSfinalizeMaterial(g);
     END_TEST();
 }
@@ -880,6 +883,15 @@ static void testFailureContract(EOSMATERIAL *e, double rhoOk, double uOk, double
     CHECK(!EOSFailed(P) && !EOSFailed(c), "fused lookup above the column: P=%g c=%g", P, c);
     CHECK_REL(T, TMin, 1e-12, "fused lookup above the column: T");
     if (e->bEntropy) CHECK(EOSFailed(EOSSofRhoU(e, rhoHi, uOk)), "s above rhoMax");
+    /* No cold curve outside the table: undecidable, not "above the cold curve". */
+    {
+        long nf = *pnLookupFail;
+        CHECK(EOSisbelowColdCurve(e, rhoHi, uOk) == EOS_FAIL, "isbelowColdCurve above rhoMax");
+        CHECK(*pnLookupFail == nf + 1, "isbelowColdCurve failure counted (%ld -> %ld)", nf, *pnLookupFail);
+        CHECK(EOSisbelowColdCurve(e, rhoOk, NAN) == EOS_FAIL, "isbelowColdCurve for a NaN u");
+        CHECK(EOSisbelowColdCurve(e, rhoOk, INFINITY) == EOS_FAIL, "isbelowColdCurve for an infinite u");
+        CHECK(EOSisbelowColdCurve(e, rhoOk, uOk) == EOS_FALSE, "isbelowColdCurve in the table");
+    }
     CHECK(*pnLookupFail > nf0, "failures not counted (%ld -> %ld)", nf0, *pnLookupFail);
     *pnLookupFail = nf0;
     END_TEST();
@@ -1013,8 +1025,17 @@ static void testTillotsonTableStatus(EOSMATERIAL *e)
     CHECK(EOSIsUsable(e, rhoOk, INFINITY) == EOS_FALSE, "not usable for +inf u");
     CHECK(isfinite(EOSPofRhoU(e, rhoOk, uHuge)), "P above the table is finite");
     CHECK(isfinite(EOSCofRhoU(e, rhoOk, uHuge)), "c above the table is finite");
-    CHECK(EOSisbelowColdCurve(e, rhoOk, 0.5 * ucold) == 1, "below cold curve");
-    CHECK(EOSisbelowColdCurve(e, rhoOk, uOk) == 0, "above cold curve");
+    CHECK(EOSisbelowColdCurve(e, rhoOk, 0.5 * ucold) == EOS_TRUE, "below cold curve");
+    CHECK(EOSisbelowColdCurve(e, rhoOk, uOk) == EOS_FALSE, "above cold curve");
+    CHECK(EOSisbelowColdCurve(e, rhoLo, -1.0) == EOS_TRUE, "below cold curve below rhomin (u_cold = 0)");
+    CHECK(EOSisbelowColdCurve(e, rhoOk, NAN) == EOS_FAIL, "isbelowColdCurve for a NaN u");
+    {
+        /* Above rhomax the cold curve is not tabulated: undecidable, counted (was "not below"). */
+        long nfb = m->nLookupFail;
+        CHECK(EOSisbelowColdCurve(e, rhoHi, uOk) == EOS_FAIL, "isbelowColdCurve above rhomax");
+        CHECK(EOSisbelowColdCurve(e, rhoHi, -1e30) == EOS_FAIL, "isbelowColdCurve above rhomax, u far below anything");
+        CHECK(m->nLookupFail == nfb + 2, "isbelowColdCurve failures counted (%ld -> %ld)", nfb, m->nLookupFail);
+    }
 
     /* Failure contract: outside the table in rho the cold curve is unknown;
      * the isentrope lookup integrates directly instead (a counted fallback). */
