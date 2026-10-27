@@ -790,6 +790,11 @@ static double EOSYieldStrengthCore(EOSMATERIAL *material, double rho, double T, 
      * strength vanishes. This also keeps the intact-strength denominator
      * 1 + mui*P/(YM-Y0) strictly positive.
      */
+    /*
+     * The parameters are validated when they are read (ANEOSReadStrengthParameters:
+     * YM > Y0, mui > 0, xi > 0, mud >= 0 for model 2, model 0..2), so the checks
+     * below cannot fire for a material from EOSinitMaterial.
+     */
     if (yieldStrengthModel > 0) {
         double Peff = fmax(P, 0.0);
         double Yi = Y0 + mui * Peff / (1.0 + mui * Peff / (YM - Y0));
