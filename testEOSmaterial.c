@@ -1403,6 +1403,20 @@ int main(int argc, char *argv[])
         int failsBefore = nFails;
         TEST("library versions");
         CHECK(EOSCheckVersions() == EOS_TRUE, "EOSCheckVersions failed");
+#if defined(HAVE_ANEOSMATERIAL_H) || defined(HAVE_SCVHEOS_H) || defined(HAVE_REOS3_H)
+        /* The interpBilinear copy in effect here is the one every library was written for (the
+         * headers stop the compilation otherwise; this records it in the test output). */
+        printf("    interpBilinear %s, type layout %d\n  %-44s", INTERP_VERSION_TEXT, INTERP_ABI_VERSION, "");
+#endif
+#ifdef HAVE_ANEOSMATERIAL_H
+        CHECK(INTERP_ABI_VERSION == ANEOS_INTERP_ABI_VERSION, "interpBilinear layout for ANEOSmaterial");
+#endif
+#ifdef HAVE_SCVHEOS_H
+        CHECK(INTERP_ABI_VERSION == SCVHEOS_INTERP_ABI_VERSION, "interpBilinear layout for scvheos");
+#endif
+#ifdef HAVE_REOS3_H
+        CHECK(INTERP_ABI_VERSION == REOS3_INTERP_ABI_VERSION, "interpBilinear layout for reos3");
+#endif
         END_TEST();
     }
 

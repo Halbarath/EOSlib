@@ -68,7 +68,11 @@
  *          asserted, ANEOS, SCvH and REOS3 silently used cgs).
  *          EOSIsUsable accepts Tillotson states below rho_min (rho > 0, u >= 0
  *          within roundoff): P, c and T are defined there and the isentrope is
- *          integrated directly.
+ *          integrated directly. ANEOSmaterial, scvheos and reos3 vendor
+ *          interpBilinear 1.0.3; their headers check at compile time that the
+ *          copy in effect in this translation unit has their type layout
+ *          (INTERP_ABI_VERSION), so EOSlib and the libraries cannot disagree on
+ *          the embedded INTERPGRID.
  */
 
 #ifndef EOSLIB_HINCLUDED
