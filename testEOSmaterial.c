@@ -978,7 +978,9 @@ static void testTillotsonTableStatus(EOSMATERIAL *e)
     CHECK(EOSIsInTable(e, NAN, uOk) == EOS_OUTSIDE_RHOMIN, "NaN rho");
     CHECK(EOSIsInTable(e, rhoOk, 0.5 * ucold) == EOS_OUTSIDE_VMIN, "below the cold curve");
     CHECK(EOSIsInTable(e, rhoOk, uHuge) == EOS_OUTSIDE_VMAX, "above the table");
-    CHECK(EOSIsInTable(e, rhoOk, NAN) == EOS_OUTSIDE_VMAX, "NaN u");
+    /* A non-finite u is no state at all: EOS_FAIL, not OUTSIDE_VMAX (which EOSIsUsable tolerates). */
+    CHECK(EOSIsInTable(e, rhoOk, NAN) == EOS_FAIL, "NaN u");
+    CHECK(EOSIsInTable(e, rhoOk, INFINITY) == EOS_FAIL, "+inf u");
 
     /* Policy: the pressure is analytic, only u above the table is tolerated. */
     CHECK(EOSIsUsable(e, rhoOk, uOk) == EOS_TRUE, "usable in table");
@@ -986,6 +988,8 @@ static void testTillotsonTableStatus(EOSMATERIAL *e)
     CHECK(EOSIsUsable(e, rhoOk, 0.5 * ucold) == EOS_FALSE, "not usable below the cold curve");
     CHECK(EOSIsUsable(e, rhoLo, uOk) == EOS_FALSE, "not usable below rhomin");
     CHECK(EOSIsUsable(e, rhoHi, uOk) == EOS_FALSE, "not usable above rhomax");
+    CHECK(EOSIsUsable(e, rhoOk, NAN) == EOS_FALSE, "not usable for NaN u");
+    CHECK(EOSIsUsable(e, rhoOk, INFINITY) == EOS_FALSE, "not usable for +inf u");
     CHECK(isfinite(EOSPofRhoU(e, rhoOk, uHuge)), "P above the table is finite");
     CHECK(isfinite(EOSCofRhoU(e, rhoOk, uHuge)), "c above the table is finite");
     CHECK(EOSisbelowColdCurve(e, rhoOk, 0.5 * ucold) == 1, "below cold curve");
@@ -995,12 +999,15 @@ static void testTillotsonTableStatus(EOSMATERIAL *e)
      * the isentrope lookup integrates directly instead (not a failure). */
     long nf = m->nLookupFail;
     CHECK(EOSFailed(EOSUofRhoT(e, rhoHi, 300.0)), "u(rho, T) above rhomax");
+    /* P(rho, T) needs u(rho, T): the failure must reach the caller, not be clipped to P = 0. */
+    CHECK(EOSFailed(EOSPofRhoT(e, rhoHi, 300.0)), "P(rho, T) above rhomax");
     CHECK(EOSFailed(EOSUCold(e, rhoHi)), "u_cold above rhomax");
     CHECK(EOSTofRhoU(e, rhoHi, uOk) == 0.0, "T(rho, u) above rhomax falls back to T = 0");
     CHECK(EOSUCold(e, rhoLo) == 0.0, "u_cold below rhomin is zero (rho < rho0)");
     CHECK(EOSFailed(EOSRhoofPT(e, -1.0, 300.0)), "rho(P < 0, T)");
     CHECK(EOSFailed(EOSIsentropic(e, rhoOk, 0.5 * ucold, rhoOk)), "isentrope from below the cold curve");
-    CHECK(m->nLookupFail == nf + 5, "failures not counted (%ld -> %ld)", nf, m->nLookupFail);
+    CHECK(EOSFailed(EOSIsentropic(e, rhoOk, NAN, rhoOk)), "isentrope from a NaN u");
+    CHECK(m->nLookupFail == nf + 7, "failures not counted (%ld -> %ld)", nf, m->nLookupFail);
     CHECK(isfinite(EOSIsentropic(e, rhoHi, uOk, rhoOk)), "isentrope from above rhomax integrates directly");
     {
         double c = 1.0, T = 1.0;
