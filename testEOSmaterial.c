@@ -1024,7 +1024,42 @@ static void testTillotsonTableStatus(EOSMATERIAL *e)
     CHECK(EOSIsUsable(e, rhoOk, uOk) == EOS_TRUE, "usable in table");
     CHECK(EOSIsUsable(e, rhoOk, uHuge) == EOS_TRUE, "usable above the table (analytic P)");
     CHECK(EOSIsUsable(e, rhoOk, 0.5 * ucold) == EOS_FALSE, "not usable below the cold curve");
-    CHECK(EOSIsUsable(e, rhoLo, uOk) == EOS_FALSE, "not usable below rhomin");
+    /* Below rhomin the cold curve is 0: valid states (rho > 0, u >= 0) are usable, also above the table. */
+    CHECK(EOSIsUsable(e, rhoLo, uOk) == EOS_TRUE, "usable below rhomin");
+    CHECK(EOSIsUsable(e, rhoLo, 0.0) == EOS_TRUE, "usable below rhomin on the cold curve (u = 0)");
+    CHECK(EOSIsUsable(e, rhoLo, -0.1 * tillUTol(m, 0.0)) == EOS_TRUE, "usable below rhomin within roundoff of u = 0");
+    CHECK(EOSIsUsable(e, rhoLo, uHuge) == EOS_TRUE, "usable below rhomin above the table");
+    CHECK(EOSIsUsable(e, rhoLo, -1e-3 * uOk) == EOS_FALSE, "not usable below rhomin below the cold curve (u < 0)");
+    CHECK(EOSIsUsable(e, rhoLo, NAN) == EOS_FALSE, "not usable below rhomin for a NaN u");
+    CHECK(EOSIsUsable(e, rhoLo, INFINITY) == EOS_FALSE, "not usable below rhomin for an infinite u");
+    CHECK(EOSIsUsable(e, 0.0, uOk) == EOS_FALSE, "not usable at rho = 0");
+    CHECK(EOSIsUsable(e, -1.0, uOk) == EOS_FALSE, "not usable for rho < 0");
+    CHECK(EOSIsUsable(e, NAN, uOk) == EOS_FALSE, "not usable for a NaN rho");
+    /* The policy is continuous at rhomin: the same answer just inside and just outside. */
+    CHECK(EOSIsUsable(e, m->rhomin * (1.0 + 1e-6), -1e-3 * uOk) == EOS_FALSE && EOSIsUsable(e, m->rhomin * (1.0 - 1e-6), -1e-3 * uOk) == EOS_FALSE, "u < 0 unusable on both sides of rhomin");
+    CHECK(EOSIsUsable(e, m->rhomin * (1.0 + 1e-6), uOk) == EOS_TRUE && EOSIsUsable(e, m->rhomin * (1.0 - 1e-6), uOk) == EOS_TRUE, "u > 0 usable on both sides of rhomin");
+    /* Whatever is usable below rhomin evaluates: finite P >= 0, c > 0, T = u/cv (cold curve 0), and the isentrope. */
+    {
+        long nfu = m->nLookupFail;
+        int nUsable = 0;
+        for (int a = 0; a < 20; a++) for (int b = 0; b < 20; b++) {
+            double rho = m->rhomin * pow(10.0, -8.0 + 7.9 * a / 19.0);
+            double u = (b == 0) ? 0.0 : uOk * pow(10.0, -6.0 + 9.0 * b / 19.0);
+            double c = -1.0, T = -1.0, P;
+            if (EOSIsUsable(e, rho, u) != EOS_TRUE) { CHECK(0, "valid state below rhomin not usable: rho=%g u=%g", rho, u); continue; }
+            nUsable++;
+            P = EOSPCTofRhoU(e, rho, u, &c, &T);
+            CHECK(isfinite(P) && P >= 0.0 && isfinite(c) && c > 0.0, "P, c below rhomin: rho=%g u=%g P=%g c=%g", rho, u, P, c);
+            CHECK_REL(T, u / m->cv, 1e-14, "T = u/cv below rhomin: rho=%g u=%g", rho, u);
+            {
+                double u2 = EOSIsentropic(e, rho, u, 2.0 * rho);
+                CHECK(isfinite(u2) && u2 >= u, "isentrope from below rhomin (compression): rho=%g u=%g u2=%g", rho, u, u2);
+            }
+        }
+        CHECK(nUsable == 400, "usable states below rhomin: %d of 400", nUsable);
+        /* Only the direct integration of the isentrope is a counted fallback (one per state). */
+        CHECK(m->nLookupFail == nfu + nUsable, "below rhomin only the isentrope integration is counted (%ld -> %ld)", nfu, m->nLookupFail);
+    }
     CHECK(EOSIsUsable(e, rhoHi, uOk) == EOS_FALSE, "not usable above rhomax");
     CHECK(EOSIsUsable(e, rhoOk, NAN) == EOS_FALSE, "not usable for NaN u");
     CHECK(EOSIsUsable(e, rhoOk, INFINITY) == EOS_FALSE, "not usable for +inf u");

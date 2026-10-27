@@ -1119,6 +1119,14 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
  * isentropic evolution, so u above the table is tolerated. Tabulated EOS
  * (ANEOS, REOS3, SCvH) cannot be evaluated outside the table at all.
  *
+ * Tillotson below rho_min is usable as well: the cold curve is zero there (as
+ * everywhere below rho0), so T(rho, u) = u/cv, and P and c are analytic; the
+ * isentrope is integrated directly (tillLookupU). The state must still be valid:
+ * rho > 0 and finite, u finite and not below the cold curve u = 0 (with the same
+ * roundoff tolerance as tillIsInTable, so that the policy is continuous at rho_min).
+ * Above rho_max the cold curve, u(rho, T) and T(rho, u) are not available, so
+ * such states stay unusable.
+ *
  * Required: pkdgrav3, gasoline, ballic
  */
 int EOSIsUsable(EOSMATERIAL *material, double rho, double u)
@@ -1135,7 +1143,12 @@ int EOSIsUsable(EOSMATERIAL *material, double rho, double u)
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
             /* Pressure is analytic; only the isentrope lookup needs u <= u_max. */
-            return (iret == EOS_OUTSIDE_VMAX) ? EOS_TRUE : EOS_FALSE;
+            if (iret == EOS_OUTSIDE_VMAX) return EOS_TRUE;
+            /* Below rho_min (see above): the cold curve is u = 0. */
+            if (iret == EOS_OUTSIDE_RHOMIN)
+                return ((rho > 0.0) && isfinite(rho) && isfinite(u) &&
+                        (u >= -tillUTol(material->tillmaterial, u))) ? EOS_TRUE : EOS_FALSE;
+            return EOS_FALSE;
 #endif
         default:
             /* Tabulated EOS: any out-of-table state is unusable. */

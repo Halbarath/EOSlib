@@ -66,6 +66,9 @@
  *          dKpcUnit and dMsolUnit > 0 (and finite) is code units, both <= 0 is
  *          cgs, anything else is fatal (igeos divided by zero, Tillotson only
  *          asserted, ANEOS, SCvH and REOS3 silently used cgs).
+ *          EOSIsUsable accepts Tillotson states below rho_min (rho > 0, u >= 0
+ *          within roundoff): P, c and T are defined there and the isentrope is
+ *          integrated directly.
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -314,8 +317,8 @@ int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u);
  *
  * EOSIsUsable applies the library policy: returns EOS_TRUE if P(rho, u),
  * c(rho, u) and T(rho, u) can be evaluated for this material even if the
- * state lies outside the lookup table (e.g. u > u_max for an analytic EOS such
- * as Tillotson), EOS_FALSE otherwise. Use this in the hydro code; use
+ * state lies outside the lookup table (for Tillotson: u > u_max, and rho <
+ * rho_min with u >= 0, where the cold curve is zero), EOS_FALSE otherwise. Use this in the hydro code; use
  * EOSIsInTable when you need to know *why* a state is out of range or whether
  * isentropic lookups (EOSIsentropic) are available.
  */
