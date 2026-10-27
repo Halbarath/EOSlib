@@ -127,6 +127,7 @@ double igeosRhoofPT(IGEOSMAT *Mat, double P, double T) {
  */
 double igeosRhoofUT(IGEOSMAT *Mat, double U, double T) {
     fprintf(stderr, "igeosRhoofUT: rho(u, T) is undefined for an ideal gas (iMat= %i, u= %g, T= %g).\n", Mat->iMat, U, T);
+    assert(0);
     exit(1);
     return IGEOS_FAIL_VALUE;   /* not reached */
 }

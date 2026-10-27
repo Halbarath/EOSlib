@@ -46,7 +46,11 @@
  *          (still negative); EOSTofRhoU never fails (T_min of the table,
  *          0 for Tillotson); EOSYieldStrength returns EOS_FAIL_VALUE for an
  *          invalid T or T_melt instead of exiting; per-call diagnostics only
- *          with -DEOSLIB_VERBOSE; no GSL, no brent.o.
+ *          with -DEOSLIB_VERBOSE; no GSL, no brent.o. The Tillotson isentrope
+ *          table is the library's standard table (tillInitLookupDefault:
+ *          1e-4..100 rho0, 1 K..1e7 K at rho0, 1200 x 1200), built once in
+ *          EOSinitMaterial, the same physical table in every unit system
+ *          (was 1e-4..200 and v_max = 1200 in code units, built twice).
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -151,12 +155,16 @@
  * each sublibrary). Test a returned value with EOSFailed(x), which is true
  * for the sentinel and for NaN.
  *
- * Fatal (message and exit(1)): initialisation errors (unknown material,
- * missing or defective table, version mismatch) and calling a function that
- * is not implemented for the material (EOSRhoofUT for all but ANEOS,
- * EOSIsentropic for REOS3, EOSdPdRhoofRhoT/EOSdPdT for the analytic EOS,
- * EOSGammaofRhoT/EOSYieldStrength for Tillotson); those are programming
- * errors, not lookup failures.
+ * Fatal (message on stderr, then assert(0); exit(1)): initialisation errors
+ * (unknown material, missing or defective table, version mismatch) and
+ * calling a function that is not implemented for the material (EOSRhoofUT
+ * for all but ANEOS, EOSIsentropic for REOS3, EOSdPdRhoofRhoT/EOSdPdT for the
+ * analytic EOS, EOSGammaofRhoT/EOSYieldStrength for Tillotson); those are
+ * programming errors, not lookup failures. The assert(0) comes first on
+ * purpose: in an MPI run a plain exit() on one rank can leave the others
+ * waiting in a collective and the job hangs, while SIGABRT makes the
+ * launcher kill the whole job (the exit(1) is for -DNDEBUG builds). All
+ * sublibraries do the same.
  */
 #define EOS_FAIL_VALUE (-1e50)
 

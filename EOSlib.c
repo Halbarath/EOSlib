@@ -32,10 +32,12 @@
 #include "EOSlib.h"
 
 /*
- * Fatal errors (see "Failure contract" in EOSlib.h): a message and exit(1),
- * for programming errors (unknown material, function not implemented for
- * the material) and for initialisation failures. Lookup failures never come
- * here; they return EOS_FAIL_VALUE.
+ * Fatal errors (see "Failure contract" in EOSlib.h): a message, assert(0)
+ * (SIGABRT, so an MPI launcher kills the whole job) and exit(1) for NDEBUG
+ * builds, for programming errors (unknown
+ * material, function not implemented for the material) and for
+ * initialisation failures. Lookup failures never come here; they return
+ * EOS_FAIL_VALUE.
  */
 #define EOS_FATAL(...) do { fprintf(stderr, __VA_ARGS__); assert(0); exit(1); } while (0)
 #define EOS_UNKNOWN_MATERIAL(material) EOS_FATAL("%s was called for the unknown material %d.\n", __func__, (material)->iMat)
@@ -90,8 +92,12 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->rho0forInterfaceCorrection = material->rho0;
         material->minSoundSpeed = sqrt(material->tillmaterial->A/material->tillmaterial->rho0);
         tilliMatString(material->tillmaterial, material->MatString);
-        // Needed to convert internal energy to temperature
-        tillInitLookup(material->tillmaterial, 1000, 1000, 1e-4, 200.0, 1200.0);
+        /*
+         * The isentrope table (TILL_TABLE_* in tillotson.h: 1e-4..100 rho0, 1 K..1e7 K at
+         * rho0) is built here, not in EOSinitIsentropicLookup, because T(rho, u) needs its
+         * cold curve. 46 MB and ~2 s per material.
+         */
+        tillInitLookupDefault(material->tillmaterial);
         material->bEntropyTableInit = EOS_TRUE;
 #else
         fprintf(stderr,"Tried to initialize a Tillotson material, but the Tillotson library is absent.\n");
@@ -186,8 +192,7 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            tillInitLookup(material->tillmaterial, 1000, 1000, 1e-4, 200.0, 1200.0);
-            material->bEntropyTableInit = EOS_TRUE;
+            /* Built in EOSinitMaterial (bEntropyTableInit is already EOS_TRUE, so not reached). */
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
