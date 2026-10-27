@@ -1436,6 +1436,8 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
     double a, ua, Pa;   /* upper bracket: Pa >= P */
     double b, ub, Pb;   /* lower bracket: Pb <= P */
     double c, uc, Pc;
+    double slope0 = 0.0; /* secant slope of P2(rho) once the bracket is EOS_SOLVEBC_SLOPE_WIDTH wide */
+    int bHaveSlope = 0;
     int i;
 
     /* State in material 1. */
@@ -1509,9 +1511,17 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
     if (Pa == P) { *prho2 = a; *pu2 = ua; return EOS_SUCCESS; }
     if (Pb == P) { *prho2 = b; *pu2 = ub; return EOS_SUCCESS; }
 
-    /* Bisection. c is always set at least once because b < a here. */
+    /*
+     * Bisection. c is always set at least once because b < a here. The secant slope
+     * (Pa - Pb)/(a - b) is recorded when the bracket first becomes narrower than
+     * EOS_SOLVEBC_SLOPE_WIDTH; it is the reference for the discontinuity test below.
+     */
     c = 0.5*(a + b);
     uc = ub;
+    if (2.0*(a - b)/(a + b) <= EOS_SOLVEBC_SLOPE_WIDTH) {
+        slope0 = (Pa - Pb)/(a - b);
+        bHaveSlope = 1;
+    }
     for (i = 0; 2.0*(a - b)/(a + b) > EOS_SOLVEBC_TOL; i++) {
         if (i >= EOS_SOLVEBC_MAX_BISECT) {
             EOS_WARN("EOSSolveBC: bisection did not converge "
@@ -1529,18 +1539,34 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
         } else {
             a = c; ua = uc; Pa = Pc;
         }
+        if (!bHaveSlope && 2.0*(a - b)/(a + b) <= EOS_SOLVEBC_SLOPE_WIDTH) {
+            slope0 = (Pa - Pb)/(a - b);
+            bHaveSlope = 1;
+        }
     }
 
     /*
-     * On a continuous P2(rho, T) the pressure bracket closes with the density
-     * bracket. If it has not, P2 jumps at the root: T(rho, u) switches between
-     * roots of a non-monotonic u(T) column (melt transition in a defective
-     * table), and no density matches P. Report that rather than returning the
-     * location of the jump.
+     * Discontinuity test. On a continuous P2(rho, T) the pressure bracket closes
+     * with the density bracket, Pa - Pb ~ (dP/drho) (a - b), so the secant slope
+     * stays at the local dP/drho. Where P2 jumps by dP at the root (T(rho, u)
+     * switches between roots of a non-monotonic u(T) column, e.g. at a melt
+     * transition of a defective table), no density matches P and the slope grows
+     * like dP/(a - b): by EOS_SOLVEBC_SLOPE_WIDTH/EOS_SOLVEBC_TOL = 1e4 between
+     * the reference and the end. Fail if it grew by more than EOS_SOLVEBC_SLOPE_FAC.
+     *
+     * A test on the pressure gap alone would reject continuous stiff states: at
+     * the end Pa - Pb ~ (dlnP/dlnrho) EOS_SOLVEBC_TOL P, which exceeds
+     * EOS_SOLVEBC_PTOL P for K/P > 1e4 (rock below ~10 MPa). A gap below
+     * EOS_SOLVEBC_PTOL P is accepted regardless of the slope, so jumps that small
+     * pass as before, and roundoff in Pa - Pb at low K/P cannot cause a failure.
+     * A continuous P2 can only fail if the root lies within EOS_SOLVEBC_SLOPE_WIDTH
+     * of a kink where dP/drho increases by more than EOS_SOLVEBC_SLOPE_FAC.
      */
-    if (Pa - Pb > EOS_SOLVEBC_PTOL * fabs(P)) {
+    if (Pa - Pb > EOS_SOLVEBC_PTOL * fabs(P) &&
+        !(bHaveSlope && (Pa - Pb)/(a - b) <= EOS_SOLVEBC_SLOPE_FAC*slope0)) {
         EOS_WARN("EOSSolveBC: P2(rho, T) is discontinuous at the root "
-                "(P= %g T= %g rho= %g Pb= %g Pa= %g).\n", P, T, c, Pb, Pa);
+                "(P= %g T= %g rho= %g Pb= %g Pa= %g slope= %g slope0= %g).\n",
+                P, T, c, Pb, Pa, (Pa - Pb)/(a - b), slope0);
         return EOS_FAIL;
     }
 

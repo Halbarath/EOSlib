@@ -77,6 +77,24 @@ static const char *currentTest = "";
     } \
 } while (0)
 
+/*
+ * Pressure residual EOSSolveBC guarantees at a solved state (rho2, T2) of material e
+ * (see EOSlib.h): EOS_SOLVEBC_PTOL |P1|, or EOS_SOLVEBC_SLOPE_FAC times the local
+ * slope across the final density bracket (EOS_SOLVEBC_TOL rho2 wide). The slope is the
+ * larger one-sided difference over the reference width, along the path the solver
+ * uses (u(rho, T), then P(rho, u)); a factor 2 covers the midpoint and roundoff.
+ */
+static double solveBCPResidualBound(EOSMATERIAL *e, double rho2, double T2, double P1)
+{
+    double h = EOS_SOLVEBC_SLOPE_WIDTH * rho2;
+    double P0 = EOSPofRhoU(e, rho2, EOSUofRhoT(e, rho2, T2));
+    double Pp = EOSPofRhoU(e, rho2 + h, EOSUofRhoT(e, rho2 + h, T2));
+    double Pm = EOSPofRhoU(e, rho2 - h, EOSUofRhoT(e, rho2 - h, T2));
+    double slope = fmax(fabs(Pp - P0), fabs(P0 - Pm)) / h;
+    if (!isfinite(slope)) slope = 0.0;
+    return EOS_SOLVEBC_PTOL * fabs(P1) + 2.0 * EOS_SOLVEBC_SLOPE_FAC * slope * EOS_SOLVEBC_TOL * rho2;
+}
+
 #define TEST(name) do { currentTest = name; printf("  %-44s", name); fflush(stdout); } while (0)
 #define END_TEST() do { printf("%s\n", nFails == failsBefore ? "ok" : "FAILED"); } while (0)
 
@@ -364,8 +382,9 @@ static void testSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
             double Tjump = jump ? 0.05 * T1 : 0.0;
             if (EOSSolveBC(outer, inner, rho1, u1, &rho2, &u2, Tjump) != 0) continue;
             nSolved++;
-            /* The solver guarantees the pressure bracket closed to EOS_SOLVEBC_PTOL. */
-            CHECK_REL(EOSPofRhoU(inner, rho2, u2), P1, EOS_SOLVEBC_PTOL, "P continuity rho1=%g T1=%g jump=%g", rho1, T1, Tjump);
+            /* The pressure residual the solver guarantees (see solveBCPResidualBound). */
+            CHECK(fabs(EOSPofRhoU(inner, rho2, u2) - P1) <= solveBCPResidualBound(inner, rho2, T1 - Tjump, P1),
+                  "P continuity rho1=%g T1=%g jump=%g: %.15e vs %.15e", rho1, T1, Tjump, EOSPofRhoU(inner, rho2, u2), P1);
             /* T continuity is checked through the forward lookup, since
              * T(rho2,u2) in the inner material may pick another root. */
             CHECK_REL(u2, EOSUofRhoT(inner, rho2, T1 - Tjump), 1e-10, "T continuity rho1=%g T1=%g jump=%g", rho1, T1, Tjump);
@@ -567,7 +586,8 @@ static void testSCVHSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
         double rho2, u2;
         if (EOSSolveBC(outer, inner, rho1, u1, &rho2, &u2, 0.0) != 0) continue;
         nSolved++;
-        CHECK_REL(EOSPofRhoU(inner, rho2, u2), P1, EOS_SOLVEBC_PTOL, "P continuity rho1=%g T1=%g", rho1, T1);
+        CHECK(fabs(EOSPofRhoU(inner, rho2, u2) - P1) <= solveBCPResidualBound(inner, rho2, T1, P1),
+              "P continuity rho1=%g T1=%g: %.15e vs %.15e", rho1, T1, EOSPofRhoU(inner, rho2, u2), P1);
         CHECK_REL(u2, EOSUofRhoT(inner, rho2, T1), 1e-10, "T continuity rho1=%g T1=%g", rho1, T1);
         CHECK(EOSIsUsable(inner, rho2, u2) == EOS_TRUE, "solved state not usable");
     }
@@ -811,7 +831,8 @@ static void testREOS3SolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
         double rho2, u2;
         if (EOSSolveBC(outer, inner, rho1, u1, &rho2, &u2, 0.0) != 0) continue;
         nSolved++;
-        CHECK_REL(EOSPofRhoU(inner, rho2, u2), P1, EOS_SOLVEBC_PTOL, "P continuity rho1=%g T1=%g", rho1, T1);
+        CHECK(fabs(EOSPofRhoU(inner, rho2, u2) - P1) <= solveBCPResidualBound(inner, rho2, T1, P1),
+              "P continuity rho1=%g T1=%g: %.15e vs %.15e", rho1, T1, EOSPofRhoU(inner, rho2, u2), P1);
         CHECK_REL(u2, EOSUofRhoT(inner, rho2, T1), 1e-10, "T continuity rho1=%g T1=%g", rho1, T1);
         CHECK(EOSIsUsable(inner, rho2, u2) == EOS_TRUE, "solved state not usable");
     }
@@ -1039,7 +1060,8 @@ static void testTillotsonSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
             CHECK(ret == EOS_SUCCESS || ret == EOS_FAIL, "SolveBC: bad return %d", ret);
             if (ret != EOS_SUCCESS) continue;
             nSolved++;
-            CHECK_REL(EOSPofRhoU(inner, rho2, u2), P1, EOS_SOLVEBC_PTOL, "P continuity rho1=%g T1=%g jump=%g", rho1, T1, Tjump);
+            CHECK(fabs(EOSPofRhoU(inner, rho2, u2) - P1) <= solveBCPResidualBound(inner, rho2, T1 - Tjump, P1),
+                  "P continuity rho1=%g T1=%g jump=%g: %.15e vs %.15e", rho1, T1, Tjump, EOSPofRhoU(inner, rho2, u2), P1);
             CHECK_REL(EOSTofRhoU(inner, rho2, u2), T1 - Tjump, 1e-8, "T continuity rho1=%g T1=%g jump=%g", rho1, T1, Tjump);
             CHECK(EOSIsUsable(inner, rho2, u2) == EOS_TRUE, "solved state not usable");
         }
@@ -1067,6 +1089,99 @@ static void testTillotsonSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
     END_TEST();
 }
 
+/*
+ * Stiff, low-pressure interface: granite on iron at small compression and very low T, where
+ * K/P is 1e4..1e7. The pressure gap of the final density bracket, ~ (K/P) EOS_SOLVEBC_TOL P,
+ * then exceeds EOS_SOLVEBC_PTOL P although P2(rho, T) is continuous; the solver must succeed
+ * (it rejected these states as discontinuous up to EOSlib 1.2.0 before the slope test).
+ */
+static void testTillotsonSolveBCStiff(EOSMATERIAL *inner, EOSMATERIAL *outer)
+{
+    int failsBefore = nFails;
+    TEST("EOSSolveBC: stiff low-pressure interface");
+    static const double dmu[] = {0.0, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3};
+    static const double Ts[] = {1e-3, 1e-2, 0.1, 1.0, 10.0};
+    int nStiff = 0;
+    for (size_t i = 0; i < sizeof(dmu)/sizeof(dmu[0]); i++) for (size_t j = 0; j < sizeof(Ts)/sizeof(Ts[0]); j++) {
+        double rho1 = outer->rho0 * (1.0 + dmu[i]), T1 = Ts[j];
+        double u1 = EOSUofRhoT(outer, rho1, T1);
+        double P1 = EOSPofRhoU(outer, rho1, u1);
+        CHECK(P1 > 0.0, "P1 = %g at rho1=%g T1=%g", P1, rho1, T1);
+        double rho2 = -1.0, u2 = -1.0;
+        int ret = EOSSolveBC(outer, inner, rho1, u1, &rho2, &u2, 0.0);
+        CHECK(ret == EOS_SUCCESS, "SolveBC failed for a continuous P2: rho1=%g T1=%g P1=%g (ret=%d)", rho1, T1, P1, ret);
+        if (ret != EOS_SUCCESS) continue;
+        double P2 = EOSPofRhoU(inner, rho2, u2);
+        /* Stiffness of the inner material at the solution, K/P = dlnP/dlnrho. */
+        double h = 1e-6 * rho2;
+        double K = rho2 * (EOSPofRhoT(inner, rho2 + h, T1) - EOSPofRhoT(inner, rho2 - h, T1)) / (2.0 * h);
+        if (K > 1e4 * P1) nStiff++;
+        CHECK(fabs(P2 - P1) <= solveBCPResidualBound(inner, rho2, T1, P1),
+              "P continuity rho1=%g T1=%g K/P=%g: %.15e vs %.15e", rho1, T1, K / P1, P2, P1);
+        CHECK_REL(EOSTofRhoU(inner, rho2, u2), T1, 1e-8, "T continuity rho1=%g T1=%g", rho1, T1);
+        CHECK(EOSIsUsable(inner, rho2, u2) == EOS_TRUE, "solved state not usable");
+    }
+    /* The test is only meaningful if it reaches the regime the old gap test rejected. */
+    CHECK(nStiff >= 10, "only %d interface states with K/P > 1e4", nStiff);
+    END_TEST();
+}
+
+/*
+ * A genuine discontinuity must still be detected. With TILL_PRESS_MELOSH the cold term of
+ * expanded cold states is cut below 0.8 rho0, so for a hot enough (but still cold-region)
+ * state P(rho, T) of granite jumps from P+ > 0 to 0 at 0.8 rho0. A target pressure P+/2,
+ * taken from an iron state at the same T, has no root: EOSSolveBC must fail. Without the
+ * flag the same P(rho, T) is continuous and the solver must succeed.
+ */
+static void testTillotsonSolveBCJump(EOSMATERIAL *iron, EOSMATERIAL *granite)
+{
+    int failsBefore = nFails;
+    TEST("EOSSolveBC: discontinuous P2(rho, T)");
+    TILLMATERIAL *g = granite->tillmaterial;
+    /* u = cv T below us everywhere below rho0 (the cold curve is zero there). */
+    double T = 0.5 * g->us / g->cv;
+    double rhoJ = 0.8 * granite->rho0;
+    double Pplus = EOSPofRhoT(granite, rhoJ * (1.0 + 1e-9), T);
+    double Pminus = EOSPofRhoT(granite, rhoJ * (1.0 - 1e-9), T);
+    CHECK(Pplus > 0.0, "P(0.8 rho0+) = %g must be positive for this test", Pplus);
+#ifdef TILL_PRESS_MELOSH
+    CHECK(Pminus == 0.0, "P(0.8 rho0-) = %g, expected the Melosh cut", Pminus);
+#else
+    CHECK_REL(Pminus, Pplus, 1e-6, "P(rho, T) continuous at 0.8 rho0");
+#endif
+    /* P(rho, T) increases on (0.8, 1) rho0, so the only crossing of P+/2 is at the jump. */
+    {
+        double Pprev = Pplus;
+        for (int k = 1; k <= 100; k++) {
+            double rho = rhoJ * (1.0 + 0.2499 * k / 100.0);
+            double Pk = EOSPofRhoT(granite, rho, T);
+            CHECK(Pk > Pprev, "P(rho, T) not increasing at rho=%g: %g after %g", rho, Pk, Pprev);
+            Pprev = Pk;
+        }
+    }
+    double P = 0.5 * Pplus;
+    double rho1 = EOSRhoofPT(iron, P, T);
+    CHECK(!EOSFailed(rho1) && rho1 > granite->rho0, "iron rho(P=%g, T=%g) = %g", P, T, rho1);
+    if (!EOSFailed(rho1)) {
+        double u1 = EOSUofRhoT(iron, rho1, T);
+        CHECK_REL(EOSPofRhoU(iron, rho1, u1), P, 1e-8, "iron state P");
+        double rho2 = -1.0, u2 = -1.0;
+        int ret = EOSSolveBC(iron, granite, rho1, u1, &rho2, &u2, 0.0);
+#ifdef TILL_PRESS_MELOSH
+        CHECK(ret == EOS_FAIL, "SolveBC across a pressure jump must fail (ret=%d, rho2=%g)", ret, rho2);
+        CHECK(rho2 == -1.0 && u2 == -1.0, "outputs touched on failure");
+#else
+        CHECK(ret == EOS_SUCCESS, "SolveBC on a continuous P2 failed (ret=%d)", ret);
+        if (ret == EOS_SUCCESS) {
+            CHECK(rho2 < granite->rho0, "rho2 = %g should be expanded", rho2);
+            CHECK(fabs(EOSPofRhoU(granite, rho2, u2) - P) <= solveBCPResidualBound(granite, rho2, T, P),
+                  "P continuity: %.15e vs %.15e", EOSPofRhoU(granite, rho2, u2), P);
+        }
+#endif
+    }
+    END_TEST();
+}
+
 static void testTillotson(double dKpcUnit, double dMsolUnit)
 {
     /* Iron (2) and granite (1): the two Tillotson materials with a unique
@@ -1080,6 +1195,8 @@ static void testTillotson(double dKpcUnit, double dMsolUnit)
     testTillotsonTableStatus(iron);
     CHECK(iron->rho0 > granite->rho0, "iron must be denser than granite");
     testTillotsonSolveBC(iron, granite);
+    testTillotsonSolveBCStiff(iron, granite);
+    testTillotsonSolveBCJump(iron, granite);
     EOSfinalizeMaterial(iron);
     EOSfinalizeMaterial(granite);
 }

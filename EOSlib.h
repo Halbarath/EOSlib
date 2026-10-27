@@ -51,6 +51,10 @@
  *          1e-4..100 rho0, 1 K..1e7 K at rho0, 1200 x 1200), built once in
  *          EOSinitMaterial, the same physical table in every unit system
  *          (was 1e-4..200 and v_max = 1200 in code units, built twice).
+ *          EOSSolveBC detects a discontinuous P2(rho, T) by the growth of the
+ *          secant slope as the bracket closes (EOS_SOLVEBC_SLOPE_WIDTH,
+ *          EOS_SOLVEBC_SLOPE_FAC) instead of the pressure gap alone, which
+ *          rejected continuous stiff states (K/P > 1e4, rock below ~10 MPa).
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -99,7 +103,9 @@
 #define EOS_SOLVEBC_MAX_EXPAND  100   /* 1.1^100 ~ 1.4e4, 0.9^100 ~ 2.7e-5 */
 #define EOS_SOLVEBC_MAX_BISECT  200
 #define EOS_SOLVEBC_TOL         1e-10 /* relative, in density */
-#define EOS_SOLVEBC_PTOL        1e-6  /* relative, in pressure: the bracket must close to this */
+#define EOS_SOLVEBC_PTOL        1e-6  /* relative, in pressure: a gap below this always passes */
+#define EOS_SOLVEBC_SLOPE_WIDTH 1e-6  /* relative bracket width of the reference secant slope */
+#define EOS_SOLVEBC_SLOPE_FAC   10.0  /* the final secant slope may exceed the reference by this */
 
 #define EOS_N_MATERIAL_MAX 130
 
@@ -305,12 +311,17 @@ double EOSUCold(EOSMATERIAL *material, double rho);
 /*
  * Boundary condition solver: given (rho1, u1) in material 1, find (rho2, u2)
  * in material 2 with equal pressure and T2 = T1 - Tjump. Converges to
- * EOS_SOLVEBC_TOL in density and EOS_SOLVEBC_PTOL in pressure. Returns
- * EOS_SUCCESS (0), or EOS_FAIL on failure (no bracket, state outside the
+ * EOS_SOLVEBC_TOL in density; the pressure residual is then at most
+ * max(EOS_SOLVEBC_PTOL |P|, EOS_SOLVEBC_SLOPE_FAC (dP2/drho) EOS_SOLVEBC_TOL rho2),
+ * i.e. ~ (dlnP/dlnrho) EOS_SOLVEBC_TOL relative for stiff, low-pressure states.
+ * Returns EOS_SUCCESS (0), or EOS_FAIL on failure (no bracket, state outside the
  * table, or P2(rho, T2) discontinuous at the root, which happens where u(T)
  * of material 2 is not monotonic, e.g. at a melt transition of a defective
- * table), with a message under EOSLIB_VERBOSE. On failure *prho2 and *pu2
- * are untouched.
+ * table), with a message under EOSLIB_VERBOSE. A discontinuity is detected by
+ * the growth of the secant slope of P2(rho) as the bracket closes (see
+ * EOSSolveBC in EOSlib.c), not by the pressure gap, which for a continuous but
+ * stiff P2 can exceed EOS_SOLVEBC_PTOL |P|. On failure *prho2 and *pu2 are
+ * untouched.
  */
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,
  double *prho2, double *pu2, double Tjump);
