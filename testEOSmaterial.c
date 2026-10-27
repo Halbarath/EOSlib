@@ -1037,6 +1037,15 @@ static void testTillotsonTableStatus(EOSMATERIAL *e)
     CHECK(EOSFailed(EOSIsentropic(e, rhoOk, uOk, INFINITY)), "isentrope to an infinite rho2");
     CHECK(EOSFailed(EOSIsentropic(e, NAN, uOk, rhoOk)), "isentrope from a NaN rho1");
     CHECK(m->nLookupFail == nf + 12, "invalid densities counted (%ld -> %ld)", nf, m->nLookupFail);
+    /* u < 0 (below the cold curve) at the former singularity w0 = 0 of the Tillotson Gamma: finite. */
+    {
+        double uneg = -m->u0 * (rhoOk / m->rho0) * (rhoOk / m->rho0);
+        double c = -1.0, T = -1.0;
+        double P = EOSPCTofRhoU(e, rhoOk, uneg, &c, &T);
+        CHECK(isfinite(P) && P >= 0.0 && isfinite(c) && c > 0.0, "P, c at u = -u0 eta^2: P=%g c=%g", P, c);
+        CHECK(isfinite(EOSPofRhoU(e, 2.0 * rhoOk, 2.0 * uneg)), "P at u < -u0 eta^2");
+    }
+    CHECK(EOSFailed(EOSUofRhoT(e, -1.0, 300.0)), "u(rho < 0, T)");
     {
         double c = 1.0, T = 1.0;
         double P = EOSPCTofRhoU(e, rhoHi, uOk, &c, &T);
