@@ -14,7 +14,8 @@
  *          rejects an inconsistent unit pair (fatal): both units > 0 is code
  *          units, both <= 0 is cgs (exactly one <= 0 divided by zero).
  *          nLookupFail and IGEOS_WARN like the other libraries: the entropy
- *          failures (rho <= 0 or T <= 0) are counted.
+ *          failures (rho <= 0 or T <= 0) are counted and printed by
+ *          igeosPrintMat.
  */
 #define IGEOS_VERSION_TEXT    "1.1.0"
 #define IGEOS_VERSION_MAJOR   1

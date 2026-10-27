@@ -115,6 +115,27 @@ static double belowColdCurve(EOSMATERIAL *e, double rho)
 
 /* ---------------------------------------------------------- ideal gas EOS */
 
+/*
+ * EOSPrintMat must print the sublibrary's nLookupFail for every library (only reos3 did up to
+ * EOSlib 1.2.0). The output goes to a temporary file and is searched for the counter line.
+ */
+static void checkPrintMatCounter(EOSMATERIAL *e, long nLookupFail)
+{
+    FILE *fp = tmpfile();
+    CHECK(fp != NULL, "tmpfile");
+    if (fp == NULL) return;
+    EOSPrintMat(e, fp);
+    rewind(fp);
+    char line[512], want[128];
+    snprintf(want, sizeof(want), "(nLookupFail): %ld", nLookupFail);
+    int found = 0;
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        if (strstr(line, want) != NULL) found = 1;
+    }
+    fclose(fp);
+    CHECK(found, "EOSPrintMat of %s does not print \"%s\"", e->MatString, want);
+}
+
 static void testIdealGas(double dKpcUnit, double dMsolUnit)
 {
     int failsBefore = nFails;
@@ -170,6 +191,7 @@ static void testIdealGas(double dKpcUnit, double dMsolUnit)
     /* The cold curve of a gas is u = 0 everywhere; a non-finite u is undecidable. */
     CHECK(EOSisbelowColdCurve(g, 1.0, -1.0) == EOS_TRUE && EOSisbelowColdCurve(g, 1.0, 1.0) == EOS_FALSE, "gas: isbelowColdCurve");
     CHECK(EOSisbelowColdCurve(g, 1.0, NAN) == EOS_FAIL, "gas: isbelowColdCurve for a NaN u");
+    checkPrintMatCounter(g, g->igeosmaterial->nLookupFail);
     EOSfinalizeMaterial(g);
     END_TEST();
 }
@@ -1340,6 +1362,7 @@ static void testTillotson(double dKpcUnit, double dMsolUnit)
     printf("  T1: %s  T2: %s\n", granite->MatString, iron->MatString);
     testTillotsonDispatch(granite);
     testTillotsonDispatch(iron);
+    checkPrintMatCounter(granite, granite->tillmaterial->nLookupFail);
     testTillotsonTableStatus(granite);
     testTillotsonTableStatus(iron);
     CHECK(iron->rho0 > granite->rho0, "iron must be denser than granite");
@@ -1463,6 +1486,10 @@ int main(int argc, char *argv[])
         double uOk = EOSUofRhoT(A, rhoOk, sampleT(m, NSAMPLE / 2));
         double uHi = 2.0 * fabs(EOSUofRhoT(A, rhoOk, m->TAxis[m->nT-1])) + 1.0;
         testFailureContract(A, rhoOk, uOk, uHi, 2.0 * m->rhoAxis[m->nRho-1] * m->CGStoCodeUnitsforRho, TMin, &m->nLookupFail);
+        int failsBefore = nFails;
+        TEST("ANEOS: EOSPrintMat prints nLookupFail");
+        checkPrintMatCounter(A, m->nLookupFail);
+        END_TEST();
     }
     /* Convention: the denser material is the inner one. */
     if (A->rho0 >= B->rho0) { testSolveBC(A, B); testWoolfson(B, A); }
@@ -1480,6 +1507,10 @@ int main(int argc, char *argv[])
             double uOk = EOSUofRhoT(S, rhoOk, scvhSampleT(s, 1));
             double uHi = 2.0 * EOSUofRhoT(S, rhoOk, pow(10.0, s->LogTMax));
             testFailureContract(S, rhoOk, uOk, uHi, 2.0 * pow(10.0, s->LogRhoMax), TMin, &s->nLookupFail);
+            int failsBefore = nFails;
+            TEST("SCvH: EOSPrintMat prints nLookupFail");
+            checkPrintMatCounter(S, s->nLookupFail);
+            END_TEST();
         }
         if (A->rho0 >= B->rho0) testSCVHSolveBC(A, S); else testSCVHSolveBC(B, S);
         EOSfinalizeMaterial(S);
@@ -1499,6 +1530,10 @@ int main(int argc, char *argv[])
             double uOk = EOSUofRhoT(R, rhoOk, reos3SampleT(r, 1));
             double uHi = 2.0 * EOSUofRhoT(R, rhoOk, pow(10.0, r->LogTMax));
             testFailureContract(R, rhoOk, uOk, uHi, 2.0 * pow(10.0, r->LogRhoMax), TMin, &r->nLookupFail);
+            int failsBefore = nFails;
+            TEST("REOS3: EOSPrintMat prints nLookupFail");
+            checkPrintMatCounter(R, r->nLookupFail);
+            END_TEST();
         }
         if (A->rho0 >= B->rho0) testREOS3SolveBC(A, R); else testREOS3SolveBC(B, R);
         EOSfinalizeMaterial(R);

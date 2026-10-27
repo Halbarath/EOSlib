@@ -87,6 +87,7 @@ void igeosPrintMat(IGEOSMAT *Mat, FILE *fp) {
     fprintf(fp,"# dMeanMolMass: %g\n", Mat->dMeanMolMass);
     fprintf(fp,"# rho0:         %g\n", Mat->rho0);
     fprintf(fp,"# cv:           %g\n", Mat->cv);
+    fprintf(fp,"# Failed lookups and fallbacks (nLookupFail): %ld\n", Mat->nLookupFail);
 }
 
 /* Calculate P(rho, u). */
