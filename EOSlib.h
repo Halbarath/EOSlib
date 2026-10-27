@@ -236,6 +236,13 @@ double EOSPofRhoT(EOSMATERIAL *material, double rho, double T);
 double EOSCofRhoU(EOSMATERIAL *material, double rho, double u);
 double EOSPCofRhoU(EOSMATERIAL *material, double rho, double u, double *c);
 double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, double *T);
+/*
+ * u2 on the isentrope through (rho1, u1) at rho2. If (rho1, u1) is below the
+ * cold curve (the lowest tabulated temperature), all libraries follow the
+ * coldest isentrope, i.e. return the cold curve at rho2 (counted in
+ * nLookupFail); EOS_FAIL_VALUE only for an invalid input or rho2 outside a
+ * tabulated EOS. Not implemented (fatal) for REOS3.
+ */
 double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2);
 
 /*

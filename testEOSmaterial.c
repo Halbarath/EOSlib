@@ -1005,7 +1005,8 @@ static void testTillotsonTableStatus(EOSMATERIAL *e)
     CHECK(EOSTofRhoU(e, rhoHi, uOk) == 0.0, "T(rho, u) above rhomax falls back to T = 0");
     CHECK(EOSUCold(e, rhoLo) == 0.0, "u_cold below rhomin is zero (rho < rho0)");
     CHECK(EOSFailed(EOSRhoofPT(e, -1.0, 300.0)), "rho(P < 0, T)");
-    CHECK(EOSFailed(EOSIsentropic(e, rhoOk, 0.5 * ucold, rhoOk)), "isentrope from below the cold curve");
+    /* Below the cold curve the isentrope is the cold curve (the ANEOS/SCvH convention), counted. */
+    CHECK(EOSIsentropic(e, rhoOk, 0.5 * ucold, 1.5 * rhoOk) == EOSUCold(e, 1.5 * rhoOk), "isentrope from below the cold curve clamps to u_cold(rho2)");
     CHECK(EOSFailed(EOSIsentropic(e, rhoOk, NAN, rhoOk)), "isentrope from a NaN u");
     CHECK(m->nLookupFail == nf + 7, "failures not counted (%ld -> %ld)", nf, m->nLookupFail);
     CHECK(isfinite(EOSIsentropic(e, rhoHi, uOk, rhoOk)), "isentrope from above rhomax integrates directly");
