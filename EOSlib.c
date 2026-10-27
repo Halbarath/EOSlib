@@ -67,9 +67,16 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
     material->bEntropy = EOS_FALSE;
 
     /*
-     * Unit factors (code -> cgs), with the constants and the rule of the tabulated
-     * sublibraries: both units positive, or cgs.
+     * Unit system (the same rule in EOSlib and every sublibrary): both units > 0 and finite are code
+     * units, both <= 0 is cgs; anything else (exactly one of them <= 0, NaN, inf) is a caller error.
      */
+    if (!(((dKpcUnit > 0.0) && (dMsolUnit > 0.0) && isfinite(dKpcUnit) && isfinite(dMsolUnit)) || ((dKpcUnit <= 0.0) && (dMsolUnit <= 0.0)))) {
+        fprintf(stderr, "EOSinitMaterial: invalid unit system dKpcUnit= %g dMsolUnit= %g (give both > 0 for code units or both <= 0 for cgs).\n", dKpcUnit, dMsolUnit);
+        assert(0);
+        exit(1);
+    }
+
+    /* Unit factors (code -> cgs), with the constants of the sublibraries. */
     if (dKpcUnit > 0.0 && dMsolUnit > 0.0) {
         const double MSOLG = 1.99e33;        /* solar mass in grams */
         const double GCGS = 6.67e-8;         /* G in cgs */

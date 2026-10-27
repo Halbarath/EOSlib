@@ -62,6 +62,10 @@
  *          records the unit factors dErgPerGmUnit and dGmPerCcUnit.
  *          EOSisbelowColdCurve returns EOS_FAIL where the cold curve cannot be
  *          evaluated or u is not finite (it answered EOS_FALSE there).
+ *          One rule for the unit pair in EOSlib and every sublibrary: both
+ *          dKpcUnit and dMsolUnit > 0 (and finite) is code units, both <= 0 is
+ *          cgs, anything else is fatal (igeos divided by zero, Tillotson only
+ *          asserted, ANEOS, SCvH and REOS3 silently used cgs).
  */
 
 #ifndef EOSLIB_HINCLUDED
