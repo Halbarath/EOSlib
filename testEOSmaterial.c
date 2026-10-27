@@ -1037,12 +1037,22 @@ static void testTillotsonTableStatus(EOSMATERIAL *e)
     CHECK(EOSFailed(EOSIsentropic(e, rhoOk, uOk, INFINITY)), "isentrope to an infinite rho2");
     CHECK(EOSFailed(EOSIsentropic(e, NAN, uOk, rhoOk)), "isentrope from a NaN rho1");
     CHECK(m->nLookupFail == nf + 12, "invalid densities counted (%ld -> %ld)", nf, m->nLookupFail);
+    /* T(rho, u) below the cold curve falls back to T = 0 (contract), counted, never negative. */
+    CHECK(EOSTofRhoU(e, rhoOk, 0.5 * ucold) == 0.0, "T(rho, u) below the cold curve falls back to T = 0");
+    {
+        double c = -1.0, T = -1.0;
+        double P = EOSPCTofRhoU(e, rhoOk, 0.5 * ucold, &c, &T);
+        CHECK(T == 0.0 && isfinite(P) && isfinite(c), "fused lookup below the cold curve: T=%g (expected 0)", T);
+    }
+    CHECK(EOSTofRhoU(e, rhoOk, ucold) == 0.0, "T(rho, u) on the cold curve is 0");
+    CHECK(m->nLookupFail == nf + 14, "T fallback below the cold curve counted (%ld -> %ld)", nf, m->nLookupFail);
     /* u < 0 (below the cold curve) at the former singularity w0 = 0 of the Tillotson Gamma: finite. */
     {
         double uneg = -m->u0 * (rhoOk / m->rho0) * (rhoOk / m->rho0);
         double c = -1.0, T = -1.0;
         double P = EOSPCTofRhoU(e, rhoOk, uneg, &c, &T);
         CHECK(isfinite(P) && P >= 0.0 && isfinite(c) && c > 0.0, "P, c at u = -u0 eta^2: P=%g c=%g", P, c);
+        CHECK(T == 0.0, "T at u = -u0 eta^2 is 0, not negative: T=%g", T);
         CHECK(isfinite(EOSPofRhoU(e, 2.0 * rhoOk, 2.0 * uneg)), "P at u < -u0 eta^2");
     }
     CHECK(EOSFailed(EOSUofRhoT(e, -1.0, 300.0)), "u(rho < 0, T)");
