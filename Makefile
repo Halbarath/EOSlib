@@ -18,8 +18,24 @@ CFLAGS ?= -O3 -Wall $(DEFS) $(INCLUDES)
 FFLAGS ?= $(CFLAGS)
 LIBS ?= -lm
 
-default: 
-	@echo "Please specify which tool you want to make."	
+# Header dependencies, so that no object compiled against an older header survives:
+#  - DEPFLAGS: the compiler writes a .d file next to every object (foo.o -> foo.d, foo.pic.o ->
+#    foo.pic.d) listing the headers it actually included; -MP adds empty rules for them, so a
+#    deleted or renamed header does not stop make.
+#  - headers: every header of EOSlib and the sublibraries (including the vendored interpBilinear
+#    copies). All objects depend on all of them, which also covers an object that was compiled
+#    elsewhere (e.g. by a sublibrary's own Makefile) and has no .d file yet. The libraries are
+#    small, so rebuilding everything after a header change costs little.
+#  - The Makefile itself is a prerequisite as well, so changed flags rebuild the objects.
+DEPFLAGS = -MMD -MP
+headers = $(wildcard *.h \
+                     ../ANEOSmaterial/*.h ../ANEOSmaterial/interpBilinear/*.h \
+                     ../tillotson/*.h \
+                     ../reos3/*.h ../reos3/interpBilinear/*.h \
+                     ../scvh/*.h ../scvh/interpBilinear/*.h)
+
+default:
+	@echo "Please specify which tool you want to make."
 
 all: default
 
@@ -29,18 +45,22 @@ libEOSlib: libEOSlib.so
 libEOSlib.so: $(pic_objects)
 	$(CC) $(LDFLAGS) -shared -o $@ $^ $(LIBS)
 
-%.pic.o: %.c
-	$(CC) $(CFLAGS) -fPIC -c $< -o $@
+# Objects are built next to their sources (no separate build directory).
+%.o: %.c $(headers) Makefile
+	$(CC) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
+
+%.pic.o: %.c $(headers) Makefile
+	$(CC) $(CFLAGS) $(DEPFLAGS) -fPIC -c $< -o $@
 
 testEOSmaterial: testEOSmaterial.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-testigeos: testigeos.o $(objects) 
+testigeos: testigeos.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 timingTest: timingTest.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
-	
+
 calcPressureRhoU: calcPressureRhoU.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
@@ -52,13 +72,13 @@ calcPressureRhoT: calcPressureRhoT.o $(objects)
 
 calcEnergyRhoT: calcEnergyRhoT.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
-    
+
 calcSoundSpeed: calcSoundSpeed.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 calcColdcurveEnergy: calcColdcurveEnergy.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
-	
+
 writeColdCurve: writeColdCurve.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
@@ -68,10 +88,13 @@ callEOSlibforMixing: callEOSlibforMixing.o $(objects)
 callEOSlibRhoofPT: callEOSlibRhoofPT.o $(objects)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
+# The dependency files written by DEPFLAGS (missing ones are ignored).
+-include $(objects:.o=.d) $(pic_objects:.o=.d) $(wildcard *.d)
+
 .PHONY: default all libEOSlib clean cleanall
 
 clean:
-	rm -f $(execs) $(objects) $(pic_objects) libEOSlib.so
+	rm -f $(execs) $(objects) $(pic_objects) libEOSlib.so $(objects:.o=.d) $(pic_objects:.o=.d) *.d
 
 cleanall:
-	rm -f $(execs) *.txt *.mat *.o *.pdf libEOSlib.so $(pic_objects)
+	rm -f $(execs) *.txt *.mat *.o *.d *.pdf libEOSlib.so $(pic_objects) $(objects) $(objects:.o=.d) $(pic_objects:.o=.d)

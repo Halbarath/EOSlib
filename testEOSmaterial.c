@@ -1446,7 +1446,7 @@ int main(int argc, char *argv[])
     {
         int failsBefore = nFails;
         TEST("library versions");
-        CHECK(EOSCheckVersions() == EOS_TRUE, "EOSCheckVersions failed");
+        /* The sublibrary versions are checked at compile time (#error in EOSlib.h). */
 #if defined(HAVE_ANEOSMATERIAL_H) || defined(HAVE_SCVHEOS_H) || defined(HAVE_REOS3_H)
         /* The interpBilinear copy in effect here is the one every library was written for (the
          * headers stop the compilation otherwise; this records it in the test output). */

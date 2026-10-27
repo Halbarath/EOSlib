@@ -76,6 +76,14 @@
  *          the sublibraries: EOSIsInTable uses ANEOSIsInTable, EOSUCold uses
  *          ANEOSUCold/reos3UCold/scvheosUCold, the init uses ANEOSTmin (requires
  *          ANEOSmaterial, reos3 and scvheos with these functions).
+ *          EOSPrintMat prints nLookupFail for every library (only reos3 did).
+ *          EOSYieldModel documents -2 (Tillotson: no strength model).
+ *          The sublibrary versions are checked at compile time (#error in this header);
+ *          EOSCheckVersions is removed (callers: drop the call; an outdated sublibrary header
+ *          now stops the compilation). Its static "checked" flag in EOSinitMaterial was also
+ *          unsynchronised shared state between threads.
+ *          EOSYieldStrength gathers the yield parameters once per call (EOSYieldModel and the
+ *          core each called ANEOSYieldParameters).
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -83,35 +91,60 @@
 
 #include <stdio.h>   /* FILE in EOSPrintMat */
 
+/*
+ * Minimum versions of the sublibraries. They are compile-time constants on both sides, so they
+ * are checked here with #error (as the sublibraries check interpBilinear) instead of at run time
+ * (EOSCheckVersions did that up to EOSlib 1.2.0 and has been removed).
+ */
 #ifdef HAVE_TILLOTSON_H
     #include <tillotson.h>
 #define TILL_VERSION_MAJOR_REQUIRED 4
 #define TILL_VERSION_MINOR_REQUIRED 0
 #define TILL_VERSION_PATCH_REQUIRED 0
+#if (TILL_VERSION_MAJOR * 10000 + TILL_VERSION_MINOR * 100 + TILL_VERSION_PATCH) < \
+    (TILL_VERSION_MAJOR_REQUIRED * 10000 + TILL_VERSION_MINOR_REQUIRED * 100 + TILL_VERSION_PATCH_REQUIRED)
+#error "EOSlib: the Tillotson library (tillotson.h) is older than the version EOSlib requires (TILL_VERSION_*_REQUIRED)"
+#endif
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
     #include <ANEOSmaterial.h>
 #define ANEOS_VERSION_MAJOR_REQUIRED 1
 #define ANEOS_VERSION_MINOR_REQUIRED 2
 #define ANEOS_VERSION_PATCH_REQUIRED 0
+#if (ANEOS_VERSION_MAJOR * 10000 + ANEOS_VERSION_MINOR * 100 + ANEOS_VERSION_PATCH) < \
+    (ANEOS_VERSION_MAJOR_REQUIRED * 10000 + ANEOS_VERSION_MINOR_REQUIRED * 100 + ANEOS_VERSION_PATCH_REQUIRED)
+#error "EOSlib: the ANEOS library (ANEOSmaterial.h) is older than the version EOSlib requires (ANEOS_VERSION_*_REQUIRED)"
+#endif
 #endif
 #ifdef HAVE_REOS3_H
     #include <reos3.h>
 #define REOS3_VERSION_MAJOR_REQUIRED 1
 #define REOS3_VERSION_MINOR_REQUIRED 3
 #define REOS3_VERSION_PATCH_REQUIRED 0
+#if (REOS3_VERSION_MAJOR * 10000 + REOS3_VERSION_MINOR * 100 + REOS3_VERSION_PATCH) < \
+    (REOS3_VERSION_MAJOR_REQUIRED * 10000 + REOS3_VERSION_MINOR_REQUIRED * 100 + REOS3_VERSION_PATCH_REQUIRED)
+#error "EOSlib: the REOS3 library (reos3.h) is older than the version EOSlib requires (REOS3_VERSION_*_REQUIRED)"
+#endif
 #endif
 #ifdef HAVE_SCVHEOS_H
     #include <scvheos.h>
 #define SCVHEOS_VERSION_MAJOR_REQUIRED 1
 #define SCVHEOS_VERSION_MINOR_REQUIRED 3
 #define SCVHEOS_VERSION_PATCH_REQUIRED 0
+#if (SCVHEOS_VERSION_MAJOR * 10000 + SCVHEOS_VERSION_MINOR * 100 + SCVHEOS_VERSION_PATCH) < \
+    (SCVHEOS_VERSION_MAJOR_REQUIRED * 10000 + SCVHEOS_VERSION_MINOR_REQUIRED * 100 + SCVHEOS_VERSION_PATCH_REQUIRED)
+#error "EOSlib: the SCvH library (scvheos.h) is older than the version EOSlib requires (SCVHEOS_VERSION_*_REQUIRED)"
+#endif
 #endif
 
 #include "igeos.h"
 #define IGEOS_VERSION_MAJOR_REQUIRED 1
 #define IGEOS_VERSION_MINOR_REQUIRED 1
 #define IGEOS_VERSION_PATCH_REQUIRED 0
+#if (IGEOS_VERSION_MAJOR * 10000 + IGEOS_VERSION_MINOR * 100 + IGEOS_VERSION_PATCH) < \
+    (IGEOS_VERSION_MAJOR_REQUIRED * 10000 + IGEOS_VERSION_MINOR_REQUIRED * 100 + IGEOS_VERSION_PATCH_REQUIRED)
+#error "EOSlib: the ideal gas library (igeos.h) is older than the version EOSlib requires (IGEOS_VERSION_*_REQUIRED)"
+#endif
 
 #define EOS_VERSION_TEXT    "1.2.0"
 #define EOS_VERSION_MAJOR   1
@@ -183,7 +216,7 @@
  * functions return EOS_FAIL or an EOS_OUTSIDE_* code.
  *
  * Every failure and every fallback is counted in the sublibrary's
- * nLookupFail (printed by EOSPrintMat) and reported on stderr only when the
+ * nLookupFail (printed by EOSPrintMat for every library) and reported on stderr only when the
  * libraries are compiled with -DEOSLIB_VERBOSE (EOS_WARN and the *_WARN of
  * each sublibrary). Test a returned value with EOSFailed(x), which is true
  * for the sentinel and for NaN.
@@ -262,7 +295,6 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data);
 void EOSfinalizeMaterial(EOSMATERIAL *material);
 void EOSPrintMat(EOSMATERIAL *material, FILE *fp);
-int EOSCheckVersions(void);   /* EOS_TRUE if every sublibrary is recent enough (fatal in EOSinitMaterial otherwise) */
 
 // Access functions
 
@@ -296,6 +328,10 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
 double EOSSofRhoU(EOSMATERIAL *material, double rho, double u);
 double EOSSofRhoT(EOSMATERIAL *material, double rho, double T);
 
+/*
+ * Yield strength model: -2 no strength model for this EOS (Tillotson, EOSYieldStrength is
+ * fatal), -1 no yield stress, 0 no limiter, 1 intact, 2 damaged material (see EOSlib.c).
+ */
 int EOSYieldModel(EOSMATERIAL *material);
 double EOSYieldStrength(EOSMATERIAL *material, double rho, double u);
 /*

@@ -53,12 +53,6 @@
  */
 EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const void * additional_data)
 {
-    static int bVersionsChecked = 0;
-    if (!bVersionsChecked) {
-        if (EOSCheckVersions() != EOS_TRUE) EOS_FATAL("EOSinitMaterial: sublibrary version mismatch (see above).\n");
-        bVersionsChecked = 1;
-    }
-
     EOSMATERIAL *material;
     material = (EOSMATERIAL *) calloc(1, sizeof(EOSMATERIAL));
     assert(material != NULL);
@@ -309,46 +303,6 @@ void EOSPrintMat(EOSMATERIAL *material, FILE *fp)
 #endif
         default: EOS_UNKNOWN_MATERIAL(material);
     }
-}
-
-/*
- * Check if all sublibraries have the correct version
- */
-int EOSCheckVersions(void) {
-    int result = EOS_TRUE;
-    if ((IGEOS_VERSION_MAJOR * 10000 + IGEOS_VERSION_MINOR * 100 + IGEOS_VERSION_PATCH) < (IGEOS_VERSION_MAJOR_REQUIRED * 10000 + IGEOS_VERSION_MINOR_REQUIRED * 100 + IGEOS_VERSION_PATCH_REQUIRED)) {
-        fprintf(stderr, "EOSCheckVersions: Ideal gas EOS library version (%s) is outdated. At least version %d.%d.%d is required.\n", IGEOS_VERSION_TEXT,IGEOS_VERSION_MAJOR_REQUIRED,IGEOS_VERSION_MINOR_REQUIRED,IGEOS_VERSION_PATCH_REQUIRED);
-        result = EOS_FALSE;
-    }
-#ifdef HAVE_TILLOTSON_H
-    /* Check if the Tillotson library has the right version. */
-    if ((TILL_VERSION_MAJOR * 10000 + TILL_VERSION_MINOR * 100 + TILL_VERSION_PATCH) < (TILL_VERSION_MAJOR_REQUIRED * 10000 + TILL_VERSION_MINOR_REQUIRED * 100 + TILL_VERSION_PATCH_REQUIRED)) {
-        fprintf(stderr, "EOSCheckVersions: Tillotson library version (%s) is outdated. At least version %d.%d.%d is required.\n", TILL_VERSION_TEXT,TILL_VERSION_MAJOR_REQUIRED,TILL_VERSION_MINOR_REQUIRED,TILL_VERSION_PATCH_REQUIRED);
-        result = EOS_FALSE;
-    }
-#endif
-#ifdef HAVE_ANEOSMATERIAL_H
-    /* Check if the ANEOS library has the right version. */
-    if ((ANEOS_VERSION_MAJOR * 10000 + ANEOS_VERSION_MINOR * 100 + ANEOS_VERSION_PATCH) < (ANEOS_VERSION_MAJOR_REQUIRED * 10000 + ANEOS_VERSION_MINOR_REQUIRED * 100 + ANEOS_VERSION_PATCH_REQUIRED)) {
-        fprintf(stderr, "EOSCheckVersions: ANEOS library version (%s) is outdated. At least version %d.%d.%d is required.\n", ANEOS_VERSION_TEXT,ANEOS_VERSION_MAJOR_REQUIRED,ANEOS_VERSION_MINOR_REQUIRED,ANEOS_VERSION_PATCH_REQUIRED);
-        result = EOS_FALSE;
-    }
-#endif
-#ifdef HAVE_REOS3_H
-    /* Check if the REOS3 library has the right version. */
-    if ((REOS3_VERSION_MAJOR * 10000 + REOS3_VERSION_MINOR * 100 + REOS3_VERSION_PATCH) < (REOS3_VERSION_MAJOR_REQUIRED * 10000 + REOS3_VERSION_MINOR_REQUIRED * 100 + REOS3_VERSION_PATCH_REQUIRED)) {
-        fprintf(stderr, "EOSCheckVersions: REOS3 library version (%s) is outdated. At least version %d.%d.%d is required.\n", REOS3_VERSION_TEXT,REOS3_VERSION_MAJOR_REQUIRED,REOS3_VERSION_MINOR_REQUIRED,REOS3_VERSION_PATCH_REQUIRED);
-        result = EOS_FALSE;
-    }
-#endif
-#ifdef HAVE_SCVHEOS_H
-    /* Check if the SCVHEOS library has the right version. */
-    if ((SCVHEOS_VERSION_MAJOR * 10000 + SCVHEOS_VERSION_MINOR * 100 + SCVHEOS_VERSION_PATCH) < (SCVHEOS_VERSION_MAJOR_REQUIRED * 10000 + SCVHEOS_VERSION_MINOR_REQUIRED * 100 + SCVHEOS_VERSION_PATCH_REQUIRED)) {
-        fprintf(stderr, "EOSCheckVersions: SCvH EOS library version (%s) is outdated. At least version %d.%d.%d is required.\n",SCVHEOS_VERSION_TEXT,SCVHEOS_VERSION_MAJOR_REQUIRED,SCVHEOS_VERSION_MINOR_REQUIRED,SCVHEOS_VERSION_PATCH_REQUIRED);
-        result = EOS_FALSE;
-    }
-#endif
-    return result;
 }
 
 /*
@@ -702,91 +656,76 @@ double EOSSofRhoT(EOSMATERIAL *material, double rho, double T)
 }
 
 /*
- * Return yield model
+ * Yield strength parameters of a material in code units, gathered once per evaluation. Returns the
+ * yield strength model:
+ *   -2: no strength model exists for this EOS (Tillotson); EOSYieldStrength is fatal
+ *   -1: no yield stress (ANEOS material without strength parameters or melt curve)
+ *    0: no limiter (gases, or a strength file with model 0)
+ *    1: pressure-dependent yield strength of intact material (Collins et al. 2004)
+ *    2: pressure-dependent yield strength of damaged material
  */
-int EOSYieldModel(EOSMATERIAL *material){
-    int yieldStrengthModel = 0;
+typedef struct {
+    double Y0;    // Yield strength at 0 pressure
+    double YM;    // Yield strength at infinite pressure
+    double mui;   // coefficient of internal friction for intact material
+    double mud;   // coefficient of internal friction for damaged material (-1: not defined)
+    double xi;    // thermal softening parameter
+} EOSYIELDPARAMS;
+
+static int EOSYieldParams(EOSMATERIAL *material, EOSYIELDPARAMS *p)
+{
+    p->Y0 = 0.0;
+    p->YM = 0.0;
+    p->mui = 0.0;
+    p->mud = -1.0;
+    p->xi = 0.0;
 
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            yieldStrengthModel = 0;
-            break;
+            return 0;   // No yield strength for gas type EOS
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            yieldStrengthModel = -2; // Change this if/when yield is added to tillotson
-            break;
+            return -2;  // Change this if/when yield is added to tillotson
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
         case EOSANEOS:
-            yieldStrengthModel = ANEOSYieldParameters(material->ANEOSmaterial, NULL, NULL, NULL, NULL, NULL);
-            break;
+            return ANEOSYieldParameters(material->ANEOSmaterial, &p->Y0, &p->YM, &p->mui, &p->mud, &p->xi);
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            yieldStrengthModel = 0;
-            break;
+            return 0;   // No yield strength for gas type EOS
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
-            yieldStrengthModel = 0;
-            break;
+            return 0;   // No yield strength for gas type EOS
 #endif
         default: EOS_UNKNOWN_MATERIAL(material);
     }
-
-    return yieldStrengthModel;
+    return 0;   /* not reached */
 }
 
 /*
- * Strength limiter from (rho, T, P). The parameter gathering and the yield
- * model are here; the two public entry points differ only in how T and P
- * are obtained.
+ * Return the yield strength model of the material (see EOSYieldParams for the codes).
  */
-static double EOSYieldStrengthCore(EOSMATERIAL *material, double rho, double T, double P)
+int EOSYieldModel(EOSMATERIAL *material){
+    EOSYIELDPARAMS p;
+    return EOSYieldParams(material, &p);
+}
+
+/*
+ * Strength limiter from (rho, T, P) for the model and parameters from EOSYieldParams. The two
+ * public entry points gather the parameters once (they did it twice in EOSYieldStrength: once in
+ * EOSYieldModel and once here) and differ only in how T and P are obtained.
+ */
+static double EOSYieldStrengthCore(EOSMATERIAL *material, int yieldStrengthModel, const EOSYIELDPARAMS *p,
+                                   double rho, double T, double P)
 {
     double Y = 0.0;
-    int yieldStrengthModel = 0;
-    double Y0 = 0.0;    // Yield strength at 0 pressure
-    double YM = 0.0;    // Yield strength at infinite pressure
-    double mui = 0.0;   // coefficient of internal friction for intact material
-    double mud = -1.0;  // coefficient of internal friction for damaged material (-1: not defined)
-    double xi = 0.0;    // thermal softening parameter
-    double Tmelt = 0.0;
-
-    switch(material->matType)
-    {
-        case EOSIDEALGAS:
-            yieldStrengthModel = 0; // No yield strength for gas type EOS
-            break;
-#ifdef HAVE_TILLOTSON_H
-        case EOSTILLOTSON:
-            EOS_NOT_IMPLEMENTED(material);   /* no strength model for Tillotson yet */
-            break;
-#endif
-#ifdef HAVE_ANEOSMATERIAL_H
-        case EOSANEOS:
-            yieldStrengthModel = ANEOSYieldParameters(material->ANEOSmaterial, &Y0, &YM, &mui, &mud, &xi);
-            if (yieldStrengthModel > 0) {
-                Tmelt = ANEOSTmeltofRho(material->ANEOSmaterial, rho);
-            }
-            break;
-#endif
-#ifdef HAVE_REOS3_H
-        case EOSREOS3:
-            yieldStrengthModel = 0; // No yield strength for gas type EOS
-            break;
-#endif
-#ifdef HAVE_SCVHEOS_H
-        case EOSSCVHEOS:
-            yieldStrengthModel = 0; // No yield strength for gas type EOS
-            break;
-#endif
-        default: EOS_UNKNOWN_MATERIAL(material);
-    }
 
     /*
-     * Yield strength models:
+     * Yield strength models (EOSYieldModel):
+     * -2: No strength model for this EOS (Tillotson): fatal
      * -1: No yield stress
      *  0: No limiter, so the yield strength returned is irrelevant (not called).
      *  1: Pressure dependent yield strength for intact material (Collins et al. 2004)
@@ -797,6 +736,8 @@ static double EOSYieldStrengthCore(EOSMATERIAL *material, double rho, double T, 
      * strength vanishes. This also keeps the intact-strength denominator
      * 1 + mui*P/(YM-Y0) strictly positive.
      */
+    if (yieldStrengthModel == -2) EOS_NOT_IMPLEMENTED(material);   /* no strength model for Tillotson yet */
+
     /*
      * The parameters are validated when they are read (ANEOSReadStrengthParameters:
      * YM > Y0, mui > 0, xi > 0, mud >= 0 for model 2, model 0..2), so the checks
@@ -804,16 +745,22 @@ static double EOSYieldStrengthCore(EOSMATERIAL *material, double rho, double T, 
      */
     if (yieldStrengthModel > 0) {
         double Peff = fmax(P, 0.0);
-        double Yi = Y0 + mui * Peff / (1.0 + mui * Peff / (YM - Y0));
+        double Yi = p->Y0 + p->mui * Peff / (1.0 + p->mui * Peff / (p->YM - p->Y0));
+        double Tmelt = 0.0;
 
         if (yieldStrengthModel == 1) {
             Y = Yi;
         } else if (yieldStrengthModel == 2) {
-            if (mud < 0.0) EOS_FATAL("EOSYieldStrength: yieldStrengthModel 2 requested for material %d, but mud not defined.\n", material->iMat);
-            Y = fmin(Yi, mud * Peff);
+            if (p->mud < 0.0) EOS_FATAL("EOSYieldStrength: yieldStrengthModel 2 requested for material %d, but mud not defined.\n", material->iMat);
+            Y = fmin(Yi, p->mud * Peff);
         } else {
             EOS_FATAL("EOSYieldStrength: yieldStrengthModel = %d not supported (material %d).\n", yieldStrengthModel, material->iMat);
         }
+
+#ifdef HAVE_ANEOSMATERIAL_H
+        /* Only ANEOS materials have a model > 0. */
+        Tmelt = ANEOSTmeltofRho(material->ANEOSmaterial, rho);
+#endif
 
         /*
          * Thermal softening (Ohnaka 1995), zero at and above the melt
@@ -826,7 +773,7 @@ static double EOSYieldStrengthCore(EOSMATERIAL *material, double rho, double T, 
             EOS_WARN("EOSYieldStrength: invalid T= %g or Tmelt= %g for material %d (rho= %g P= %g).\n", T, Tmelt, material->iMat, rho, P);
             return EOS_FAIL_VALUE;
         }
-        Y *= fmax(tanh(xi * (Tmelt / T - 1.0)), 0.0);
+        Y *= fmax(tanh(p->xi * (Tmelt / T - 1.0)), 0.0);
 
         /* Guard against roundoff; the strength is never negative. */
         Y = fmax(Y, 0.0);
@@ -841,12 +788,14 @@ static double EOSYieldStrengthCore(EOSMATERIAL *material, double rho, double T, 
  */
 double EOSYieldStrength(EOSMATERIAL *material, double rho, double u)
 {
+    EOSYIELDPARAMS p;
     double T = 0.0, P = 0.0, c;
+    int yieldStrengthModel = EOSYieldParams(material, &p);
 
-    if (EOSYieldModel(material) > 0) {
+    if (yieldStrengthModel > 0) {
         P = EOSPCTofRhoU(material, rho, u, &c, &T);
     }
-    return EOSYieldStrengthCore(material, rho, T, P);
+    return EOSYieldStrengthCore(material, yieldStrengthModel, &p, rho, T, P);
 }
 
 /*
@@ -854,7 +803,10 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u)
  */
 double EOSYieldStrengthofRhoTP(EOSMATERIAL *material, double rho, double T, double P)
 {
-    return EOSYieldStrengthCore(material, rho, T, P);
+    EOSYIELDPARAMS p;
+    int yieldStrengthModel = EOSYieldParams(material, &p);
+
+    return EOSYieldStrengthCore(material, yieldStrengthModel, &p, rho, T, P);
 }
 
 /*
