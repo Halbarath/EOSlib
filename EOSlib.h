@@ -247,7 +247,9 @@ double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, doub
  * cold curve (the lowest tabulated temperature), all libraries follow the
  * coldest isentrope, i.e. return the cold curve at rho2 (counted in
  * nLookupFail); EOS_FAIL_VALUE only for an invalid input or rho2 outside a
- * tabulated EOS. Not implemented (fatal) for REOS3.
+ * tabulated EOS. Tillotson has an analytic P and integrates the ODE directly
+ * where (rho1, u1) or rho2 is outside its table (counted as a fallback).
+ * Not implemented (fatal) for REOS3.
  */
 double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2);
 

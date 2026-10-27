@@ -1017,7 +1017,7 @@ static void testTillotsonTableStatus(EOSMATERIAL *e)
     CHECK(EOSisbelowColdCurve(e, rhoOk, uOk) == 0, "above cold curve");
 
     /* Failure contract: outside the table in rho the cold curve is unknown;
-     * the isentrope lookup integrates directly instead (not a failure). */
+     * the isentrope lookup integrates directly instead (a counted fallback). */
     long nf = m->nLookupFail;
     CHECK(EOSFailed(EOSUofRhoT(e, rhoHi, 300.0)), "u(rho, T) above rhomax");
     /* P(rho, T) needs u(rho, T): the failure must reach the caller, not be clipped to P = 0. */
@@ -1031,6 +1031,12 @@ static void testTillotsonTableStatus(EOSMATERIAL *e)
     CHECK(EOSFailed(EOSIsentropic(e, rhoOk, NAN, rhoOk)), "isentrope from a NaN u");
     CHECK(m->nLookupFail == nf + 7, "failures not counted (%ld -> %ld)", nf, m->nLookupFail);
     CHECK(isfinite(EOSIsentropic(e, rhoHi, uOk, rhoOk)), "isentrope from above rhomax integrates directly");
+    CHECK(isfinite(EOSIsentropic(e, rhoOk, uOk, rhoHi)), "isentrope to above rhomax integrates directly");
+    CHECK(m->nLookupFail == nf + 9, "direct integration counted as a fallback (%ld -> %ld)", nf, m->nLookupFail);
+    CHECK(EOSFailed(EOSIsentropic(e, rhoOk, uOk, NAN)), "isentrope to a NaN rho2");
+    CHECK(EOSFailed(EOSIsentropic(e, rhoOk, uOk, INFINITY)), "isentrope to an infinite rho2");
+    CHECK(EOSFailed(EOSIsentropic(e, NAN, uOk, rhoOk)), "isentrope from a NaN rho1");
+    CHECK(m->nLookupFail == nf + 12, "invalid densities counted (%ld -> %ld)", nf, m->nLookupFail);
     {
         double c = 1.0, T = 1.0;
         double P = EOSPCTofRhoU(e, rhoHi, uOk, &c, &T);
