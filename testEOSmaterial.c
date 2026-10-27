@@ -83,6 +83,24 @@ static const char *currentTest = "";
 } while (0)
 
 /*
+ * Relative tolerance with a floor: the error is measured against max(|a|, |b|, scale). Used for
+ * ANEOS pressures with the scale pressureScale(): where P crosses zero its roundoff is relative to
+ * the table values it is interpolated from, not to P.
+ */
+#define CHECK_NEAR(a, b, tol, scale, ...) do { \
+    double _a = (a), _b = (b); \
+    double _den = fmax(fmax(fabs(_a), fabs(_b)), (scale)); \
+    double _err = fabs(_a - _b) / _den; \
+    nChecks++; \
+    if (!(_err <= (tol))) { \
+        nFails++; \
+        fprintf(stderr, "FAIL [%s] %s:%d: ", currentTest, __FILE__, __LINE__); \
+        fprintf(stderr, __VA_ARGS__); \
+        fprintf(stderr, " (got %.15e vs %.15e, err %.3e > %.1e relative to %.3e)\n", _a, _b, _err, (double)(tol), _den); \
+    } \
+} while (0)
+
+/*
  * Pressure residual EOSSolveBC guarantees at a solved state (rho2, T2) of material e
  * (see EOSlib.h): EOS_SOLVEBC_PTOL |P1|, or EOS_SOLVEBC_SLOPE_FAC times the local
  * slope across the final density bracket (EOS_SOLVEBC_TOL rho2 wide). The slope is the
@@ -219,6 +237,19 @@ static double sampleT(ANEOSMATERIAL *m, int k)
     return exp(lo + f * (hi - lo));
 }
 
+/*
+ * Pressure scale at (rho, T), code units: the largest |P| at the four table nodes of the cell
+ * (the same scale as in testANEOSmaterial).
+ */
+static double pressureScale(ANEOSMATERIAL *m, double rho, double T)
+{
+    int i = interpFindIndex(rho * m->CodeUnitstoCGSforRho, m->rhoAxis, m->nRho);
+    int j = interpFindIndex(T, m->TAxis, m->nT);
+    double s = fmax(fmax(fabs(m->pArray[i][j]), fabs(m->pArray[i+1][j])),
+                    fmax(fabs(m->pArray[i][j+1]), fabs(m->pArray[i+1][j+1])));
+    return s * m->CGStoCodeUnitsforP;
+}
+
 static void testANEOSDispatch(EOSMATERIAL *e)
 {
     int failsBefore = nFails;
@@ -244,13 +275,13 @@ static void testANEOSDispatch(EOSMATERIAL *e)
         CHECK_REL(EOSUCold(e, rho), ANEOSUCold(m, rho), 0.0, "UCold dispatch");
         /* The separate calls recompute the cell coordinate from T, so P and c
          * differ from the fused lookup by amplified roundoff. */
-        CHECK_REL(P, ANEOSPofRhoU(m, rho, u), 1e-12, "PCTofRhoU P");
+        CHECK_NEAR(P, ANEOSPofRhoU(m, rho, u), 1e-12, pressureScale(m, rho, T), "PCTofRhoU P");
         CHECK_REL(c, ANEOSCofRhoU(m, rho, u), 1e-12, "PCTofRhoU c");
         /* T(rho,u) may return another root where u(T) is not monotonic (melt
          * transition, a table defect tested in ANEOSmaterial), so only require
          * that the returned T reproduces u. */
         CHECK_REL(EOSUofRhoT(e, rho, Tf), u, 1e-10, "u(rho, T(rho,u)) at rho=%g T=%g", rho, T);
-        CHECK_REL(EOSPofRhoU(e, rho, u), P, 1e-12, "PofRhoU");
+        CHECK_NEAR(EOSPofRhoU(e, rho, u), P, 1e-12, pressureScale(m, rho, T), "PofRhoU");
         CHECK_REL(EOSPofRhoT(e, rho, T), ANEOSPofRhoT(m, rho, T), 0.0, "PofRhoT");
         CHECK_REL(EOSCofRhoU(e, rho, u), c, 1e-12, "CofRhoU");
         CHECK_REL(EOSTofRhoU(e, rho, u), Tf, 0.0, "TofRhoU");
