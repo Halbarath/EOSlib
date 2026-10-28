@@ -1442,6 +1442,27 @@ static void testTillotsonSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
         CHECK(ret == EOS_FAIL, "SolveBC with T < 0 must fail (ret=%d)", ret);
         CHECK(rho2 == -1.0 && u2 == -1.0, "outputs touched on failure");
     }
+    /*
+     * T2 = 0 is a valid target (the cold curve, T_min = 0 for Tillotson): a compressed state on the
+     * cold curve of granite (T1 = 0 exactly; rejected up to EOSlib 1.2.0, which required T2 > 0),
+     * and a warm state with Tjump = T1 (T2 = 0 up to roundoff). Both must solve onto the cold curve
+     * of iron.
+     */
+    for (int q = 0; q < 2; q++) {
+        double rho1 = 1.3 * outer->rho0, T1 = q ? 500.0 : 0.0;
+        double u1 = EOSUofRhoT(outer, rho1, T1), P1 = EOSPofRhoU(outer, rho1, u1);
+        double rho2 = -1.0, u2 = -1.0;
+        CHECK(EOSIsUsable(outer, rho1, u1) == EOS_TRUE && P1 > 0.0, "cold-curve state (q=%d) usable with P > 0", q);
+        int ret = EOSSolveBC(outer, inner, rho1, u1, &rho2, &u2, T1);
+        CHECK(ret == EOS_SUCCESS, "SolveBC with T2 = 0 (q=%d) failed (ret=%d)", q, ret);
+        if (ret == EOS_SUCCESS) {
+            CHECK(fabs(EOSPofRhoU(inner, rho2, u2) - P1) <= solveBCPResidualBound(inner, rho2, 0.0, P1),
+                  "P continuity with T2 = 0 (q=%d): %.15e vs %.15e", q, EOSPofRhoU(inner, rho2, u2), P1);
+            CHECK(fabs(u2 - EOSUCold(inner, rho2)) <= tillUTol(inner->tillmaterial, u2), "u2 on the cold curve of material 2 (q=%d)", q);
+            /* T1 - Tjump is 0 only up to the roundoff of T(rho1, u1) for q = 1. */
+            CHECK(EOSTofRhoU(inner, rho2, u2) <= 1e-12 * (1.0 + T1), "T2 = %g, expected 0 (q=%d)", EOSTofRhoU(inner, rho2, u2), q);
+        }
+    }
     /* Failure path: (rho1, u1) below the cold curve (not usable; T falls back to 0). */
     {
         double rho1 = 1.5 * outer->rho0, u1 = 0.5 * EOSUCold(outer, rho1);

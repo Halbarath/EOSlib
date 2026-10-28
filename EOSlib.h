@@ -123,7 +123,8 @@
  *          EOSSolveBC fails at once for a state (rho1, u1) that is not usable in material 1
  *          (EOSIsUsable): u above the column or below the cold curve has a finite P and T, those
  *          of the fallback (rho1, T_min), and the solver matched that wrong target and reported
- *          success.
+ *          success. EOSSolveBC accepts a target temperature T2 = T1 - Tjump = 0 (the cold curve of
+ *          Tillotson and the ideal gas); only T2 < 0 is rejected (it rejected T2 <= 0).
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -461,7 +462,9 @@ double EOSUCold(EOSMATERIAL *material, double rho);
 
 /*
  * Boundary condition solver: given (rho1, u1) in material 1, find (rho2, u2)
- * in material 2 with equal pressure and T2 = T1 - Tjump. Converges to
+ * in material 2 with equal pressure and T2 = T1 - Tjump >= 0 (T2 = 0 is the
+ * cold curve of Tillotson and the ideal gas; below T_min of a tabulated
+ * material 2 the solver fails). Converges to
  * EOS_SOLVEBC_TOL in density; the pressure residual is then at most
  * max(EOS_SOLVEBC_PTOL |P|, EOS_SOLVEBC_SLOPE_FAC (dP2/drho) EOS_SOLVEBC_TOL rho2),
  * i.e. ~ (dlnP/dlnrho) EOS_SOLVEBC_TOL relative for stiff, low-pressure states.

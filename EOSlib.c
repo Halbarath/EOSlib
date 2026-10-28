@@ -1476,8 +1476,13 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
      * the wrong target and reported success. EOSIsUsable is exactly the test whether P, c and T
      * are those of the state. It is checked after the lookups, which count the failure or the
      * fallback in nLookupFail (EOSIsUsable, a status query, counts nothing).
+     *
+     * T2 = T1 - Tjump = 0 is a valid target: the cold curve of Tillotson and the ideal gas
+     * (T_min = 0), e.g. a cold compressed interface (it was rejected with T <= 0 up to 1.2.0).
+     * A tabulated material 2 has T_min > 0, and EOSSolveBCEval fails cleanly there, because
+     * u(rho, T2) of material 2 fails below its table. Only T2 < 0 is invalid input.
      */
-    if (EOSFailed(P) || !isfinite(P) || !isfinite(T) || T <= 0.0 ||
+    if (EOSFailed(P) || !isfinite(P) || !isfinite(T) || T < 0.0 ||
         EOSIsUsable(material1, rho1, u1) != EOS_TRUE) {
         EOS_WARN("EOSSolveBC: invalid state in material 1 "
                 "(rho1= %g u1= %g P= %g T= %g, usable= %d).\n", rho1, u1, P, T, EOSIsUsable(material1, rho1, u1));
