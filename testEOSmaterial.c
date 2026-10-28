@@ -385,6 +385,9 @@ static void testANEOSYield(EOSMATERIAL *e)
     if (model <= 0) {
         double rho = sampleRho(m, NSAMPLE / 2), u = EOSUofRhoT(e, rho, sampleT(m, 1));
         CHECK(EOSYieldStrength(e, rho, u) == 0.0, "no strength model but Y != 0");
+        /* Say so: an "ok" here covers only Y = 0, not the strength model. */
+        printf("\n    note: yield model %d (%s), strength checks skipped; provide %s_strength and _tmelt to run them\n  %-44s",
+               model, model == -1 ? "no strength file or melt curve" : "no limiter", m->matName, "");
         END_TEST();
         return;
     }
@@ -421,14 +424,45 @@ static void testANEOSYield(EOSMATERIAL *e)
         }
         /* At and above the melt temperature the strength vanishes. Needs a melt
          * temperature inside the table; the melt curve is 0 where the material
-         * has no condensed phase (low-density vapour region). */
-        if (Tm > m->TAxis[0] && Tm < m->TAxis[m->nT-1]) {
+         * has no condensed phase (low-density vapour region). The bound is
+         * 0.99 T_max, not T_max: for T_melt in (0.99 T_max, T_max) the state
+         * at fmin(1.5 T_melt, 0.99 T_max) lies below the melt temperature and
+         * has a positive strength (seen on the synthetic tables at the
+         * highest densities, T_melt = 997272 K for T_max = 1e6 K). */
+        if (Tm > m->TAxis[0] && Tm < 0.99 * m->TAxis[m->nT-1]) {
             double Tabove = fmin(1.5 * Tm, 0.99 * m->TAxis[m->nT-1]);
             double Pm = EOSPofRhoT(e, rho, Tabove);
             double Ym = EOSYieldStrengthofRhoTP(e, rho, Tabove, Pm);
             CHECK(Ym == 0.0, "Y above melt = %g at rho=%g", Ym, rho);
         }
         CHECK(EOSGammaofRhoT(e, rho, T) > 0.0, "shear modulus at rho=%g", rho);
+    }
+
+    /*
+     * A failed lookup gives the sentinel, not a strength: the tension clamp
+     * fmax(P, 0) turned P = EOS_FAIL_VALUE into P_eff = 0 and Y = Y0 * f(T)
+     * (up to EOSlib 1.2.0 before this fix).
+     */
+    {
+        double rhoMid = sampleRho(m, NSAMPLE / 2);
+        double T = sampleT(m, 1);
+        double rhoOut = 10.0 * m->rhoAxis[m->nRho-1] * m->CGStoCodeUnitsforRho;
+        double uOut = EOSUofRhoT(e, rhoMid, T);
+        long nFail0 = m->nLookupFail;
+        CHECK(EOSPofRhoU(e, rhoOut, uOut) == EOS_FAIL_VALUE, "P outside the table is not the sentinel");
+        CHECK(EOSYieldStrength(e, rhoOut, uOut) == EOS_FAIL_VALUE,
+              "Y(rho,u) outside the table = %g, expected EOS_FAIL_VALUE", EOSYieldStrength(e, rhoOut, uOut));
+        CHECK(EOSYieldStrengthofRhoTP(e, rhoMid, T, EOS_FAIL_VALUE) == EOS_FAIL_VALUE,
+              "Y(rho,T,P = EOS_FAIL_VALUE) = %g", EOSYieldStrengthofRhoTP(e, rhoMid, T, EOS_FAIL_VALUE));
+        CHECK(EOSYieldStrengthofRhoTP(e, rhoMid, T, NAN) == EOS_FAIL_VALUE,
+              "Y(rho,T,P = NaN) = %g", EOSYieldStrengthofRhoTP(e, rhoMid, T, NAN));
+        CHECK(EOSYieldStrengthofRhoTP(e, rhoMid, NAN, 0.0) == EOS_FAIL_VALUE, "Y(rho,T = NaN,P) is not the sentinel");
+        /* The lookups that produced the failed P were counted; the strength adds nothing for a passed-in P. */
+        long nFail1 = m->nLookupFail;
+        EOSYieldStrengthofRhoTP(e, rhoMid, T, EOS_FAIL_VALUE);
+        CHECK(m->nLookupFail == nFail1, "Y(rho,T,P) counted a failure the caller already had");
+        CHECK(nFail1 > nFail0, "the failed lookups were not counted");
+        m->nLookupFail = nFail0;
     }
     END_TEST();
 }

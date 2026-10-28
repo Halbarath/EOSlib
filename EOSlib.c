@@ -744,6 +744,17 @@ static double EOSYieldStrengthCore(EOSMATERIAL *material, int yieldStrengthModel
      * below cannot fire for a material from EOSinitMaterial.
      */
     if (yieldStrengthModel > 0) {
+        /*
+         * A failed pressure (EOS_FAIL_VALUE from a lookup outside the table, or a
+         * failed P passed to EOSYieldStrengthofRhoTP) must not reach the tension
+         * clamp below: fmax(-1e50, 0) = 0 turned it into the finite strength
+         * Y0*f(T). EOSFailed also catches NaN. Not counted in nLookupFail: the
+         * failed lookup that produced P was counted already.
+         */
+        if (EOSFailed(P)) {
+            EOS_WARN("EOSYieldStrength: failed pressure P= %g for material %d (rho= %g T= %g).\n", P, material->iMat, rho, T);
+            return EOS_FAIL_VALUE;
+        }
         double Peff = fmax(P, 0.0);
         double Yi = p->Y0 + p->mui * Peff / (1.0 + p->mui * Peff / (p->YM - p->Y0));
         double Tmelt = 0.0;
@@ -769,7 +780,7 @@ static double EOSYieldStrengthCore(EOSMATERIAL *material, int yieldStrengthModel
          * rho): an invalid pair is a lookup failure, so return the sentinel
          * rather than exit.
          */
-        if (!(T > 0.0) || !(Tmelt >= 0.0)) {
+        if (!(T > 0.0) || !(Tmelt >= 0.0) || !isfinite(T)) {
             EOS_WARN("EOSYieldStrength: invalid T= %g or Tmelt= %g for material %d (rho= %g P= %g).\n", T, Tmelt, material->iMat, rho, P);
             return EOS_FAIL_VALUE;
         }

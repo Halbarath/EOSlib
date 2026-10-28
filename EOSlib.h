@@ -84,6 +84,11 @@
  *          unsynchronised shared state between threads.
  *          EOSYieldStrength gathers the yield parameters once per call (EOSYieldModel and the
  *          core each called ANEOSYieldParameters).
+ *          EOSIsentropic documents the clamp of tabulated EOS (ANEOS, SCvH) to the table edge
+ *          the isentrope leaves through (ANEOS clamped to the cold curve on both sides).
+ *          EOSYieldStrength and EOSYieldStrengthofRhoTP return EOS_FAIL_VALUE for a failed
+ *          pressure (models 1 and 2): the tension clamp max(P, 0) turned P = EOS_FAIL_VALUE
+ *          into P_eff = 0 and a finite Y0 * f(T) for a state outside the table.
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -308,7 +313,10 @@ double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, doub
  * u2 on the isentrope through (rho1, u1) at rho2. If (rho1, u1) is below the
  * cold curve (the lowest tabulated temperature), all libraries follow the
  * coldest isentrope, i.e. return the cold curve at rho2 (counted in
- * nLookupFail); EOS_FAIL_VALUE only for an invalid input or rho2 outside a
+ * nLookupFail). Where the isentrope leaves a tabulated EOS (ANEOS, SCvH) at
+ * rho2, u2 is clamped to the edge it leaves through: the cold curve u(rho2,
+ * T_min) below, the top row u(rho2, T_max) above (counted as well);
+ * EOS_FAIL_VALUE only for an invalid input or rho2 outside a
  * tabulated EOS. Tillotson has an analytic P and integrates the ODE directly
  * where (rho1, u1) or rho2 is outside its table (counted as a fallback).
  * Not implemented (fatal) for REOS3.
@@ -333,10 +341,16 @@ double EOSSofRhoT(EOSMATERIAL *material, double rho, double T);
  * fatal), -1 no yield stress, 0 no limiter, 1 intact, 2 damaged material (see EOSlib.c).
  */
 int EOSYieldModel(EOSMATERIAL *material);
+/*
+ * Yield strength for models 1 and 2 (0 for models -1 and 0). Returns EOS_FAIL_VALUE if the
+ * pressure lookup fails (rho outside the table) or T, T_melt is invalid; test with EOSFailed.
+ */
 double EOSYieldStrength(EOSMATERIAL *material, double rho, double u);
 /*
  * Same as EOSYieldStrength, but takes T and P the caller already has (e.g.
- * from EOSPCTofRhoU) instead of re-deriving them from (rho, u).
+ * from EOSPCTofRhoU) instead of re-deriving them from (rho, u). A failed P
+ * (EOSFailed(P), NaN included) gives EOS_FAIL_VALUE; it is not counted again
+ * in nLookupFail.
  */
 double EOSYieldStrengthofRhoTP(EOSMATERIAL *material, double rho, double T, double P);
 
