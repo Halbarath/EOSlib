@@ -108,6 +108,13 @@
  *          EOS_N_MATERIAL_MAX is the size of an array indexed by iMat, MAT_SCVHEOS_MAX + 1 = 131
  *          (it was 130, the largest id: such an array overflowed by one), like
  *          TILL_N_MATERIAL_MAX. Loops over ids must use iMat < EOS_N_MATERIAL_MAX.
+ *          Tillotson: EOSinitMaterial builds only the cold curve and the top isentrope of the
+ *          standard table (77 kB, ~1 ms, tillInitColdCurveDefault), the full isentrope table
+ *          (46 MB, ~0.6 s) is built by EOSinitIsentropicLookup. EOSIsentropic for a Tillotson
+ *          material is fatal without EOSinitIsentropicLookup (callers that relied on
+ *          EOSinitMaterial building the table must add the call); bEntropyTableInit is
+ *          EOS_FALSE until then. Everything else is bit-identical. Requires the
+ *          tillInitColdCurve of the Tillotson library (raise the required version when bumped).
  *          EOSYieldStrength and EOSYieldStrengthofRhoTP return EOS_FAIL_VALUE for a failed
  *          pressure (models 1 and 2): the tension clamp max(P, 0) turned P = EOS_FAIL_VALUE
  *          into P_eff = 0 and a finite Y0 * f(T) for a state outside the table.
@@ -340,6 +347,12 @@ extern "C" {
 // Initialization and finalization
 
 EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const void * additional_data);
+/*
+ * Builds what EOSIsentropic needs beyond EOSinitMaterial: for Tillotson the full isentrope table
+ * (46 MB, ~0.6 s per material instance; EOSinitMaterial builds only its cold curve and top
+ * isentrope). Call it once per material instance that uses EOSIsentropic; the other libraries
+ * need nothing (REOS3: not implemented, a warning). Sets bEntropyTableInit.
+ */
 void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data);
 void EOSfinalizeMaterial(EOSMATERIAL *material);
 void EOSPrintMat(EOSMATERIAL *material, FILE *fp);
@@ -361,8 +374,9 @@ double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, doub
  * T_min) below, the top row u(rho2, T_max) above (counted as well);
  * EOS_FAIL_VALUE only for an invalid input or rho2 outside a
  * tabulated EOS. Tillotson has an analytic P and integrates the ODE directly
- * where (rho1, u1) or rho2 is outside its table (counted as a fallback).
- * Not implemented (fatal) for REOS3.
+ * where (rho1, u1) or rho2 is outside its table (counted as a fallback); it
+ * needs EOSinitIsentropicLookup first (fatal without). Not implemented (fatal)
+ * for REOS3.
  */
 double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2);
 

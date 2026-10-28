@@ -109,12 +109,16 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->minSoundSpeed = sqrt(material->tillmaterial->A/material->tillmaterial->rho0);
         tilliMatString(material->tillmaterial, material->MatString);
         /*
-         * The isentrope table (TILL_TABLE_* in tillotson.h: 1e-4..100 rho0, 1 K..1e7 K at
-         * rho0) is built here, not in EOSinitIsentropicLookup, because T(rho, u) needs its
-         * cold curve. 46 MB and ~2 s per material.
+         * Only the grid of the standard table (TILL_TABLE_* in tillotson.h: 1e-4..100 rho0,
+         * 1 K..1e7 K at rho0) and its two edge isentropes, the cold curve and the top isentrope:
+         * all that P, c, T(rho, u), u(rho, T), rho(P, T) and the table status need (77 kB, ~1 ms).
+         * The full isentrope table (46 MB, ~0.6 s), which only EOSIsentropic needs, is built by
+         * EOSinitIsentropicLookup. Up to 1.2.0 it was built here, for every material instance:
+         * with one instance per thread 6 GB and over a minute of startup for 64 threads x 2
+         * materials, also in codes that never call EOSIsentropic.
          */
-        tillInitLookupDefault(material->tillmaterial);
-        material->bEntropyTableInit = EOS_TRUE;
+        tillInitColdCurveDefault(material->tillmaterial);
+        material->bEntropyTableInit = EOS_FALSE;
 #else
         fprintf(stderr,"Tried to initialize a Tillotson material, but the Tillotson library is absent.\n");
         assert(0);
@@ -208,7 +212,9 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            /* Built in EOSinitMaterial (bEntropyTableInit is already EOS_TRUE, so not reached). */
+            /* The full isentrope table on the grid of the cold curve built in EOSinitMaterial. */
+            tillInitLookupDefault(material->tillmaterial);
+            material->bEntropyTableInit = EOS_TRUE;
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
@@ -538,6 +544,14 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
+            /* The isentrope table is built by EOSinitIsentropicLookup, not by EOSinitMaterial: without it this is a programming error. */
+            if (material->bEntropyTableInit != EOS_TRUE) {
+                fprintf(stderr, "EOSIsentropic: the isentrope table of material %d (%s) is not built. "
+                        "Call EOSinitIsentropicLookup after EOSinitMaterial for a Tillotson material.\n",
+                        material->iMat, material->MatString);
+                assert(0);
+                exit(1);
+            }
             u2 = tillLookupU(material->tillmaterial, rho1, u1, rho2, 0); // last argument is actually a particle number
             break;
 #endif

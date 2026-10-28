@@ -45,6 +45,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include <float.h>
 #include <math.h>
+#include <time.h>   /* clock in testTillotsonColdCurveOnly */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -120,6 +121,7 @@ static double solveBCPResidualBound(EOSMATERIAL *e, double rho2, double T2, doub
 
 #define TEST(name) do { currentTest = name; printf("  %-44s", name); fflush(stdout); } while (0)
 #define END_TEST() do { printf("%s\n", nFails == failsBefore ? "ok" : "FAILED"); } while (0)
+#define NOTE(...) do { printf("\n    note: "); printf(__VA_ARGS__); printf("\n  %-44s", ""); } while (0)
 
 static int isSentinel(double v) { return EOSFailed(v); }
 
@@ -1549,12 +1551,129 @@ static void testWoolfsonUnits(void)
     END_TEST();
 }
 
+/* EOSIsentropic in a child process. Returns 0 if it returned, 1 if it stopped the program (assert(0), or exit(1) with -DNDEBUG), -1 otherwise. */
+static int isentropicFatal(EOSMATERIAL *e, double rho1, double u1, double rho2)
+{
+    fflush(NULL);
+    pid_t pid = fork();
+    if (pid == 0) {
+        if (freopen("/dev/null", "w", stderr) == NULL) _exit(3);   /* the expected diagnostic */
+        (void) EOSIsentropic(e, rho1, u1, rho2);
+        _exit(0);
+    }
+    int status = 0;
+    if (pid < 0 || waitpid(pid, &status, 0) != pid) return -1;
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) return 0;
+    if ((WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT) || (WIFEXITED(status) && WEXITSTATUS(status) == 1)) return 1;
+    return -1;
+}
+
+/*
+ * EOSinitMaterial builds only the cold curve and the top isentrope of the Tillotson table (77 kB),
+ * EOSinitIsentropicLookup the full table (46 MB). Up to 1.2.0 EOSinitMaterial built the table for
+ * every instance (with one instance per thread 6 GB and over a minute for 64 threads x 2
+ * materials). Everything but the isentrope must be bit-identical before and after the table is
+ * built, the edge curves must be the first and last rows of the table, and EOSIsentropic without
+ * the table is fatal.
+ */
+static void testTillotsonColdCurveOnly(int iMat, double dKpcUnit, double dMsolUnit)
+{
+    int failsBefore = nFails;
+    TEST("Tillotson: cold curve at init, table on demand");
+    clock_t t0 = clock();
+    EOSMATERIAL *e = EOSinitMaterial(iMat, dKpcUnit, dMsolUnit, NULL);
+    const double tInit = (double) (clock() - t0) / CLOCKS_PER_SEC;
+    TILLMATERIAL *m = e->tillmaterial;
+    enum { NR = 157, NU = 41 };
+    static double P0[NR][NU], c0[NR][NU], T0[NR][NU], uT0[NR][NU], Pc0[NR][NU], Tc0[NR][NU];
+    static int st0[NR][NU], us0[NR][NU], bc0[NR][NU];
+    static double ucold0[NR], rhoPT0[NR];
+
+    CHECK(m->Lookup == NULL && m->ColdCurve != NULL && m->TopCurve != NULL, "after EOSinitMaterial: table %p, cold curve %p, top %p",
+          (void *) m->Lookup, (void *) m->ColdCurve, (void *) m->TopCurve);
+    CHECK(e->bEntropyTableInit == EOS_FALSE, "bEntropyTableInit before EOSinitIsentropicLookup");
+    CHECK(m->nTableRho == TILL_TABLE_NRHO && m->nTableV == TILL_TABLE_NV, "grid of the standard table");
+    CHECK(isentropicFatal(e, m->rho0, EOSUofRhoT(e, m->rho0, 1000.0), 2.0 * m->rho0) == 1, "EOSIsentropic without the table must be fatal");
+
+    /* Everything that does not need the table, on a grid of states (inside, below the cold curve, above the top, outside in rho). */
+    long nf = m->nLookupFail;
+    for (int a = 0; a < NR; a++) {
+        double rho = m->rho0 * exp(log(1e-5) + (log(300.0) - log(1e-5)) * (a + 0.37) / NR);   /* 1e-5 .. 300 rho0 */
+        ucold0[a] = EOSUCold(e, rho);
+        rhoPT0[a] = EOSRhoofPT(e, 1e-3 * (a + 1) * m->A, 300.0 + 37.0 * a);
+        for (int b = 0; b < NU; b++) {
+            double T = 10.0 * pow(10.0, 7.0 * b / (NU - 1));   /* 10 K .. 1e8 K at rho0 */
+            double u = EOSUofRhoT(e, rho, T);
+            if (EOSFailed(u)) u = m->cv * T;
+            if (b % 7 == 3) u = -0.5 * fabs(u) - 1.0;           /* below the cold curve */
+            P0[a][b] = EOSPofRhoU(e, rho, u);
+            c0[a][b] = EOSCofRhoU(e, rho, u);
+            T0[a][b] = EOSTofRhoU(e, rho, u);
+            uT0[a][b] = EOSUofRhoT(e, rho, T);
+            Pc0[a][b] = EOSPCTofRhoU(e, rho, u, &c0[a][b], &Tc0[a][b]);
+            st0[a][b] = EOSIsInTable(e, rho, u);
+            us0[a][b] = EOSIsUsable(e, rho, u);
+            bc0[a][b] = EOSisbelowColdCurve(e, rho, u);
+        }
+    }
+    const long nfCold = m->nLookupFail - nf;
+
+    t0 = clock();
+    EOSinitIsentropicLookup(e, NULL);
+    const double tTable = (double) (clock() - t0) / CLOCKS_PER_SEC;
+    CHECK(m->Lookup != NULL && e->bEntropyTableInit == EOS_TRUE, "after EOSinitIsentropicLookup");
+
+    /* The edge curves are rows 0 and nTableV-1 of the table, bit for bit. */
+    {
+        int nDiff = 0;
+        for (int i = 0; i < m->nTableRho; i++) {
+            const TILL_LOOKUP_ENTRY *r0 = &m->Lookup[TILL_INDEX(m, i, 0)], *rn = &m->Lookup[TILL_INDEX(m, i, m->nTableV - 1)];
+            if (r0->u != m->ColdCurve[i].u || r0->u1 != m->ColdCurve[i].u1 || rn->u != m->TopCurve[i].u || rn->u1 != m->TopCurve[i].u1) nDiff++;
+        }
+        CHECK(nDiff == 0, "edge curves differ from the table rows at %d densities", nDiff);
+    }
+    /* Bit-identical results with the table. */
+    nf = m->nLookupFail;
+    {
+        int nDiff = 0;
+        for (int a = 0; a < NR; a++) {
+            double rho = m->rho0 * exp(log(1e-5) + (log(300.0) - log(1e-5)) * (a + 0.37) / NR);
+            if (!(EOSUCold(e, rho) == ucold0[a] || (EOSFailed(ucold0[a]) && EOSFailed(EOSUCold(e, rho))))) nDiff++;
+            double r = EOSRhoofPT(e, 1e-3 * (a + 1) * m->A, 300.0 + 37.0 * a);
+            if (!(r == rhoPT0[a] || (EOSFailed(r) && EOSFailed(rhoPT0[a])))) nDiff++;
+            for (int b = 0; b < NU; b++) {
+                double T = 10.0 * pow(10.0, 7.0 * b / (NU - 1));
+                double u = EOSUofRhoT(e, rho, T), c, Tc;
+                if (EOSFailed(u)) u = m->cv * T;
+                if (b % 7 == 3) u = -0.5 * fabs(u) - 1.0;
+#define SAME(x, y) ((x) == (y) || (EOSFailed(x) && EOSFailed(y)))
+                double Pc = EOSPCTofRhoU(e, rho, u, &c, &Tc);
+                if (!SAME(EOSPofRhoU(e, rho, u), P0[a][b]) || !SAME(EOSCofRhoU(e, rho, u), c0[a][b]) || !SAME(EOSTofRhoU(e, rho, u), T0[a][b]) ||
+                    !SAME(EOSUofRhoT(e, rho, T), uT0[a][b]) || !SAME(Pc, Pc0[a][b]) || !SAME(Tc, Tc0[a][b]) ||
+                    EOSIsInTable(e, rho, u) != st0[a][b] || EOSIsUsable(e, rho, u) != us0[a][b] || EOSisbelowColdCurve(e, rho, u) != bc0[a][b]) nDiff++;
+#undef SAME
+            }
+        }
+        CHECK(nDiff == 0, "%d states differ between the cold-curve-only material and the full table", nDiff);
+    }
+    CHECK(m->nLookupFail - nf == nfCold, "failure count differs with the table (%ld vs %ld)", m->nLookupFail - nf, nfCold);
+    CHECK(isentropicFatal(e, m->rho0, EOSUofRhoT(e, m->rho0, 1000.0), 2.0 * m->rho0) == 0, "EOSIsentropic with the table must return");
+    NOTE("EOSinitMaterial %.3f s, EOSinitIsentropicLookup %.2f s (%.1f MB)", tInit, tTable,
+         (double) m->nTableRho * m->nTableV * sizeof(TILL_LOOKUP_ENTRY) / 1048576.0);
+    EOSfinalizeMaterial(e);
+    END_TEST();
+}
+
 static void testTillotson(double dKpcUnit, double dMsolUnit)
 {
+    testTillotsonColdCurveOnly(1, dKpcUnit, dMsolUnit);
     /* Iron (2) and granite (1): the two Tillotson materials with a unique
-     * rho(P, T) in the condensed region; ice and water are not (intermediate region). */
+     * rho(P, T) in the condensed region; ice and water are not (intermediate region).
+     * EOSIsentropic is used below, so the isentrope table is built (EOSinitIsentropicLookup). */
     EOSMATERIAL *iron = EOSinitMaterial(2, dKpcUnit, dMsolUnit, NULL);
     EOSMATERIAL *granite = EOSinitMaterial(1, dKpcUnit, dMsolUnit, NULL);
+    EOSinitIsentropicLookup(iron, NULL);
+    EOSinitIsentropicLookup(granite, NULL);
     printf("  T1: %s  T2: %s\n", granite->MatString, iron->MatString);
     testTillotsonDispatch(granite);
     testTillotsonDispatch(iron);
