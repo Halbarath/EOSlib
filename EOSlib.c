@@ -515,8 +515,12 @@ double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, doub
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
             P = tillPressureSound(material->tillmaterial, rho, u, c);
-            /* An invalid rho is counted once, by the pressure; T = 0 (the T_min fallback) without a second count. */
-            *T = tillFailed(P) ? 0.0 : tillTempRhoU(material->tillmaterial, rho, u);
+            /*
+             * An invalid rho is counted once, by the pressure; T = 0 (the T_min fallback) without a second
+             * count. Only the sentinel: a NaN P (from a NaN u) is not counted by the pressure, so T is
+             * inverted (and its fallback counted) as for every other state.
+             */
+            *T = (P == TILL_FAIL_VALUE) ? 0.0 : tillTempRhoU(material->tillmaterial, rho, u);
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H

@@ -1633,6 +1633,13 @@ static void testTillotsonTableStatus(EOSMATERIAL *e)
             CHECK(EOSisbelowColdCurve(e, r, uOk) == EOS_FAIL, "isbelowColdCurve at rho = %g", r);
         }
         CHECK(m->nLookupFail > nIn, "invalid densities counted");
+        /* A NaN u is not an invalid rho: EOSPCTofRhoU inverts T (fallback T = 0, counted once) like EOSTofRhoU. */
+        {
+            double c = 1.0, T = 1.0;
+            long n = m->nLookupFail;
+            (void) EOSPCTofRhoU(e, rhoOk, NAN, &c, &T);
+            CHECK(T == 0.0 && m->nLookupFail == n + 1, "PCT with a NaN u: T = %g, counted %ld times (as EOSTofRhoU)", T, m->nLookupFail - n);
+        }
     }
 
     /* Policy: the pressure is analytic, only u above the table is tolerated. */
