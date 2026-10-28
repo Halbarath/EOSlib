@@ -93,7 +93,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
         material->matType = EOSIDEALGAS;
         material->igeosmaterial = igeosInitMat(iMat, Param->dConstGamma, Param->dMeanMolMass, dKpcUnit, dMsolUnit);
         material->rho0 = material->igeosmaterial->rho0;
-        material->rho0forInterfaceCorrection = 0.0; // Gas has no cutoff
+        material->rho0forInterfaceCorrection = 0.0; // Not read by EOSlib; EOSWoolfsonCoeff cuts at 0.8*rho0, see EOSlib.h
         material->minSoundSpeed = 0;
         /* No entropy look up table required. */
         material->bEntropyTableInit = EOS_TRUE;
@@ -151,7 +151,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
          * unless outside the table), see the SCvH branch below.
          */
         material->rho0 = material->reos3material->rho0;
-        material->rho0forInterfaceCorrection = 0.0; // Gas has no cutoff
+        material->rho0forInterfaceCorrection = 0.0; // Not read by EOSlib; EOSWoolfsonCoeff cuts at 0.8*rho0, see EOSlib.h
         // So far we do not have entropy for REOS3.
         material->bEntropyTableInit = EOS_FALSE;
         // How do we define a minimum sound speed and reference density for H and He?
@@ -172,10 +172,12 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
          * unless outside the table): a gas has no reference density. It only
          * serves as the starting point of EOSSolveBC's lower bracket, which
          * shrinks by 0.9 up to EOS_SOLVEBC_MAX_EXPAND times, so interface
-         * densities down to ~3e-8 g/cc are found from it. rho0forInterfaceCorrection
-         * is 0 because the Woolfson cutoff 0.8*rho0 has no meaning for a gas.
+         * densities down to ~3e-8 g/cc are found from it.
+         * rho0forInterfaceCorrection is 0 (a gas has no natural cutoff density),
+         * but EOSlib never reads it: EOSWoolfsonCoeff applies its cutoff at
+         * 0.8*rho0, i.e. 8e-4 g/cc with the default rho0.
          */
-        material->rho0forInterfaceCorrection = 0.0; // Gas has no cutoff
+        material->rho0forInterfaceCorrection = 0.0; // Not read by EOSlib, see EOSlib.h
         material->bEntropyTableInit = EOS_TRUE;
         material->bEntropy = EOS_TRUE;
         // How do we define a minimum sound speed and reference density for H and He?
@@ -513,7 +515,8 @@ double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, doub
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
             P = tillPressureSound(material->tillmaterial, rho, u, c);
-            *T = tillTempRhoU(material->tillmaterial, rho, u);
+            /* An invalid rho is counted once, by the pressure; T = 0 (the T_min fallback) without a second count. */
+            *T = tillFailed(P) ? 0.0 : tillTempRhoU(material->tillmaterial, rho, u);
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
@@ -1095,8 +1098,9 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            /* No table; the cold curve is u = 0 (T_min = 0), as for Tillotson. */
-            if (!(rho > 0.0)) return EOS_OUTSIDE_RHOMIN;
+            /* No table; the cold curve is u = 0 (T_min = 0), as for Tillotson. rho must be positive and finite (igeos). */
+            if (!(rho > 0.0)) return EOS_OUTSIDE_RHOMIN;   /* also NaN */
+            if (!isfinite(rho)) return EOS_OUTSIDE_RHOMAX;
             if (!(u >= 0.0)) return EOS_OUTSIDE_VMIN;   /* also NaN */
             return EOS_SUCCESS;
 #ifdef HAVE_TILLOTSON_H
@@ -1282,7 +1286,11 @@ double EOSdUdRho(EOSMATERIAL *material, double rho, double u)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            dUdRho = igeosPofRhoU(material->igeosmaterial, rho, u) / (rho * rho);
+            {
+                /* The sentinel of an invalid rho is passed on, not divided by rho^2 (it gave NaN at rho = 0). */
+                double P = igeosPofRhoU(material->igeosmaterial, rho, u);
+                dUdRho = EOSFailed(P) ? EOS_FAIL_VALUE : P / (rho * rho);
+            }
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
@@ -1448,7 +1456,8 @@ double EOSUCold(EOSMATERIAL *material, double rho)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            // ucold = 0
+            /* u_cold = 0; IGEOS_FAIL_VALUE (counted) for an invalid rho, like a density outside a table. */
+            ucold = igeosUCold(material->igeosmaterial, rho);
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
@@ -1813,6 +1822,11 @@ double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P
      * Limit the correction in expanded states: at phase transitions P(rho) is
      * flat (not strictly monotonic), so rho(P, T) is ill-conditioned and f_ij
      * can become huge.
+     *
+     * The cutoff is 0.8*rho0 for every material, the gases included (8e-4 g/cc
+     * for SCvH and REOS3 with the default rho0 = 1e-3 g/cc, 0.8*rho0 of the ideal
+     * gas). rho0forInterfaceCorrection is NOT used here (EOSlib never reads it):
+     * its value 0 for the gases does not switch the cutoff off.
      */
     if ((rho1 <= 0.8*material1->rho0) || (rho2 <= 0.8*material2->rho0)) {
         return 1.0;

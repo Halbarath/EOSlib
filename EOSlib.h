@@ -174,6 +174,19 @@
  *          analytic and evaluated at the given (rho, u) also below the cold curve and outside the
  *          table, uncounted (the contract said every (rho, u) function evaluates such a state at
  *          (rho, T_min) and every out-of-table state returns the sentinel). No change in behaviour.
+ *          Invalid density (rho <= 0, NaN, inf) for the analytic EOS: Tillotson and the ideal gas fail
+ *          like a density outside a table. P, c and the (rho, u) derivatives (EOSdUdRho included)
+ *          return EOS_FAIL_VALUE, T(rho, u) is 0 (T_min), EOSUCold returns EOS_FAIL_VALUE for the gas
+ *          and so EOSisbelowColdCurve EOS_FAIL; counted once per call. The ideal gas returned P < 0
+ *          for rho < 0, 0 for rho = 0, EOSdUdRho = NaN at rho = 0, EOSUCold = 0 for any rho (so
+ *          EOSisbelowColdCurve answered EOS_FALSE where EOSIsInTable said EOS_OUTSIDE_RHOMIN); Tillotson
+ *          returned NaN, uncounted. EOSIsInTable for the gas reports EOS_OUTSIDE_RHOMAX for rho = inf.
+ *          EOSPCTofRhoU for Tillotson counts an invalid rho once (pressure and T fallback counted it
+ *          twice). The ideal gas rejects dConstGamma <= 1 and dMeanMolMass <= 0 or not finite (fatal,
+ *          in igeosInitMat). Needs the igeosUCold, igeos and tillotson of this round (raise the
+ *          required versions when bumped).
+ *          rho0forInterfaceCorrection is documented as not read by EOSlib: EOSWoolfsonCoeff cuts at
+ *          0.8*rho0 for every material, the gases included. No change in behaviour.
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -323,15 +336,20 @@
  * temperature of the table (T_min of the tabulated EOS, 0 for Tillotson and
  * the ideal gas) when (rho, u) cannot be inverted; the hydro codes rely on
  * this. A state below the cold curve (u < u(rho, T_min); u < 0 for the ideal
- * gas) is evaluated at (rho, T_min) by every (rho, u) function. Status
- * functions return EOS_FAIL or an EOS_OUTSIDE_* code.
+ * gas) is evaluated at (rho, T_min) by every (rho, u) function. An invalid
+ * density (rho <= 0, NaN, inf) is outside every table, also of the analytic
+ * EOS (ideal gas, Tillotson): EOS_FAIL_VALUE, T(rho, u) = T_min, EOSIsInTable
+ * EOS_OUTSIDE_RHOMIN (EOS_OUTSIDE_RHOMAX for inf), EOSisbelowColdCurve
+ * EOS_FAIL. Status functions return EOS_FAIL or an EOS_OUTSIDE_* code.
  *
  * Exception, Tillotson: its pressure is an analytic function of (rho, u),
  * so EOSPofRhoU, EOSCofRhoU, EOSPCofRhoU, the P and c of EOSPCTofRhoU,
  * EOSdPdRho, EOSdPdU and EOSdUdRho are evaluated at the given (rho, u)
  * everywhere: below the cold curve (u < 0 enters the Grueneisen term as
- * Gamma = a + b), below rho_min and above rho_max. They never fail, never
- * fall back and are not counted. Only the functions that need the cold curve
+ * Gamma = a + b), below rho_min and above rho_max. For a valid density
+ * (rho > 0 and finite) they never fail, never fall back and are not counted;
+ * an invalid density (rho <= 0, NaN, inf) returns EOS_FAIL_VALUE, counted,
+ * as for every library. Only the functions that need the cold curve
  * fall back or fail there (T(rho, u) gives 0, counted; u(rho, T), P(rho, T),
  * rho(P, T) and u_cold give EOS_FAIL_VALUE above rho_max, counted), so below
  * the cold curve P(rho, u) is not P(rho, T(rho, u)). Whether P, c and T of a
@@ -388,7 +406,13 @@ typedef struct EOSmaterial
     int iMat; // Material number
     int matType; // Material type, e.g., 0: ideal gas, 1: Tillotson, 2: ANEOS
     double rho0; // reference density
-    double rho0forInterfaceCorrection; // reference density for interface correction
+    /*
+     * Intended reference density for the interface correction: rho0 for Tillotson and ANEOS, 0 for
+     * the gases (no natural cutoff). EOSlib never reads it: EOSWoolfsonCoeff cuts at 0.8*rho0 for
+     * every material, the gases included (8e-4 g/cc for SCvH and REOS3 with the default rho0 of
+     * 1e-3 g/cc). It is kept for callers that read it.
+     */
+    double rho0forInterfaceCorrection;
     int bEntropyTableInit; // flag to signal if the entropy table is initialized
     int bEntropy; // flag to signal if the eos has entropy available (see EOSSofRhoU)
     double minSoundSpeed; // sound speed at reference values
@@ -500,7 +524,8 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T);
  * tabulated EOS "below" is the table status (EOSIsInTable == EOS_OUTSIDE_VMIN, the states that
  * fall back to T_min), which agrees with the lookup also where the cold rows of a table are
  * defective (M-ANEOS); for Tillotson it is u < u_cold(rho) - tillUTol(u), the roundoff tolerance of
- * its table status and T(rho, u), and for the ideal gas u < 0.
+ * its table status and T(rho, u), and for the ideal gas u < 0. An invalid density (rho <= 0,
+ * NaN, inf) gives EOS_FAIL for every material.
  */
 int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u);
 
@@ -575,6 +600,9 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
  * material and for P < EOSWoolfsonMinPressure(material1), EOS_FAIL_VALUE if a
  * density inversion fails; callers must check for a negative result
  * (EOSFailed or f < 0). Both materials must use the same unit system.
+ * Returns 1 also where rho_1 <= 0.8*rho0 of material 1 or rho_2 <= 0.8*rho0
+ * of material 2 (expanded states, ill-conditioned inversion), for every
+ * material including the gases; rho0forInterfaceCorrection is not used.
  */
 double EOSWoolfsonCoeff(EOSMATERIAL *material1, EOSMATERIAL *material2, double P, double T);
 /* WOOLFSON_MIN_PRESSURE_CGS in the code units of the material. */

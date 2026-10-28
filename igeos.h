@@ -28,6 +28,12 @@
  *          like the tabulated libraries (it printed code-unit values unlabelled).
  *          New igeosdPdRhoofRhoT and igeosdPdTofRhoT (the analytic (rho, T) derivatives, for
  *          EOSdPdRhoofRhoT and EOSdPdT, which were fatal for the ideal gas).
+ *          igeosInitMat rejects (fatal) dConstGamma <= 1 and dMeanMolMass <= 0 (or not finite): cv
+ *          was inf, negative or NaN and every lookup returned garbage.
+ *          An invalid density (rho <= 0, NaN, inf) fails like a density outside a table: P, c and
+ *          the derivatives return IGEOS_FAIL_VALUE, T(rho, u) falls back to T = 0, all counted once
+ *          (P was negative or 0 for rho <= 0, uncounted). New igeosUCold (0, or IGEOS_FAIL_VALUE for
+ *          an invalid rho), for EOSUCold and EOSisbelowColdCurve.
  */
 #define IGEOS_VERSION_TEXT    "1.1.0"
 #define IGEOS_VERSION_MAJOR   1
@@ -46,10 +52,13 @@
  * The ideal gas is analytic; its cold curve is u = 0 and T_min = 0. A state
  * (rho, u) below the cold curve (u < 0, or NaN) falls back to (rho, T = 0),
  * like a state below the cold curve of a tabulated EOS: T = 0, P = 0, c = 0
- * (T(rho, u) never fails). IGEOS_FAIL_VALUE is returned by P(rho, T) and
- * u(rho, T) for T < 0 (below T_min), by rho(P, T) for T <= 0 or P < 0, by the
- * isentrope for a density <= 0, and by igeosSofRhoT/igeosSofRhoU for rho <= 0
- * or T <= 0, where the entropy is undefined (all also for NaN). Every failure
+ * (T(rho, u) never fails). An invalid density (rho <= 0, NaN, inf) is like a
+ * density outside a table: every function that takes one returns
+ * IGEOS_FAIL_VALUE (P, c, the derivatives, u_cold, the isentrope for rho1 or
+ * rho2), except T(rho, u), which falls back to T = 0. IGEOS_FAIL_VALUE is also
+ * returned by P(rho, T), u(rho, T) and the (rho, T) derivatives for T < 0 (below
+ * T_min), by rho(P, T) for T <= 0 or P < 0, and by igeosSofRhoT/igeosSofRhoU for
+ * T <= 0, where the entropy is undefined (all also for NaN). Every failure
  * and fallback is counted in Mat->nLookupFail, once per call, and reported on
  * stderr only with -DEOSLIB_VERBOSE (IGEOS_WARN). Test a returned value with
  * igeosFailed(x). Unimplemented functions (igeosRhoofUT) are fatal.
@@ -91,7 +100,7 @@ typedef struct igeosMat {
     /* Specific heat capacity. */
     double cv;
 
-    /* Diagnostics: number of failed evaluations since init (the entropy for rho <= 0 or T <= 0). */
+    /* Diagnostics: number of failed evaluations and fallbacks since init (see the failure contract above). */
     long nLookupFail;
 } IGEOSMAT;
 
@@ -116,6 +125,8 @@ double igeosdPdU(IGEOSMAT *Mat, double rho, double u);
 /* dP/drho|T = (gamma-1) cv T and dP/dT|rho = (gamma-1) rho cv; IGEOS_FAIL_VALUE (counted) for T < 0 or NaN, like igeosPofRhoT. */
 double igeosdPdRhoofRhoT(IGEOSMAT *Mat, double rho, double T);
 double igeosdPdTofRhoT(IGEOSMAT *Mat, double rho, double T);
+/* u(rho, T = 0) = 0, the cold curve; IGEOS_FAIL_VALUE (counted) for rho <= 0, NaN or inf. */
+double igeosUCold(IGEOSMAT *Mat, double rho);
 double igeosSofRhoU(IGEOSMAT *Mat, double rho, double u);
 double igeosSofRhoT(IGEOSMAT *Mat, double rho, double T);
 

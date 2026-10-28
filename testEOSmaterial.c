@@ -359,6 +359,55 @@ static void testIdealGas(double dKpcUnit, double dMsolUnit)
         CHECK(EOSIsentropic(g, -1.0, 1.0, 1.0) == EOS_FAIL_VALUE, "gas: isentrope from rho1 < 0");
         GAS_ONCE(EOSRhoofPT(g, 1.0, 0.0), "rho(P, T = 0)");
         GAS_ONCE(EOSUofRhoT(g, rho, -1.0), "u(rho, T < 0)");
+        /*
+         * An invalid density (rho <= 0, NaN, inf) is outside every table: P, c and the (rho, u)
+         * derivatives are the sentinel, T(rho, u) = 0, u_cold fails and so does the cold-curve
+         * test; each call counted once. Up to this round P was negative for rho < 0, EOSdUdRho NaN
+         * at rho = 0 and EOSUcold 0, so EOSisbelowColdCurve answered EOS_FALSE.
+         */
+        {
+            const double bad[] = { 0.0, -1.0, NAN, INFINITY };
+            for (int k = 0; k < 4; k++) {
+                const double r = bad[k], u = 1.0;
+                double c = 1.0, T = 1.0;
+                double P = EOSPCTofRhoU(g, r, u, &c, &T);
+                CHECK(P == EOS_FAIL_VALUE && c == EOS_FAIL_VALUE && T == 0.0, "gas: PCT at rho = %g: P=%g c=%g T=%g", r, P, c, T);
+                CHECK(EOSPofRhoU(g, r, u) == EOS_FAIL_VALUE, "gas: P(rho = %g)", r);
+                CHECK(EOSCofRhoU(g, r, u) == EOS_FAIL_VALUE, "gas: c(rho = %g)", r);
+                CHECK(EOSPCofRhoU(g, r, u, &c) == EOS_FAIL_VALUE && c == EOS_FAIL_VALUE, "gas: PC(rho = %g)", r);
+                CHECK(EOSTofRhoU(g, r, u) == 0.0, "gas: T(rho = %g) = %g", r, EOSTofRhoU(g, r, u));
+                CHECK(EOSdPdRho(g, r, u) == EOS_FAIL_VALUE, "gas: dP/drho(rho = %g)", r);
+                CHECK(EOSdPdU(g, r, u) == EOS_FAIL_VALUE, "gas: dP/du(rho = %g)", r);
+                CHECK(EOSdUdRho(g, r, u) == EOS_FAIL_VALUE, "gas: du/drho(rho = %g) = %g", r, EOSdUdRho(g, r, u));
+                CHECK(EOSUCold(g, r) == EOS_FAIL_VALUE, "gas: u_cold(rho = %g)", r);
+                CHECK(EOSisbelowColdCurve(g, r, u) == EOS_FAIL, "gas: isbelowColdCurve(rho = %g)", r);
+                CHECK(EOSisbelowColdCurve(g, r, -1.0) == EOS_FAIL, "gas: isbelowColdCurve(rho = %g, u < 0)", r);
+                CHECK(EOSIsInTable(g, r, u) == (isinf(r) ? EOS_OUTSIDE_RHOMAX : EOS_OUTSIDE_RHOMIN), "gas: status at rho = %g: %d", r, EOSIsInTable(g, r, u));
+                CHECK(EOSIsUsable(g, r, u) == EOS_FALSE, "gas: usable at rho = %g", r);
+                CHECK(EOSIsentropic(g, r, u, 1.0) == EOS_FAIL_VALUE && EOSIsentropic(g, 1.0, u, r) == EOS_FAIL_VALUE, "gas: isentrope with rho = %g", r);
+                CHECK(EOSPofRhoT(g, r, 300.0) == EOS_FAIL_VALUE && EOSUofRhoT(g, r, 300.0) == EOS_FAIL_VALUE, "gas: P, u (rho = %g, T)", r);
+                CHECK(EOSdPdRhoofRhoT(g, r, 300.0) == EOS_FAIL_VALUE && EOSdPdT(g, r, 300.0) == EOS_FAIL_VALUE, "gas: (rho, T) derivatives at rho = %g", r);
+                GAS_ONCE(EOSPCTofRhoU(g, r, u, &c, &T), "PCT at an invalid rho");
+                GAS_ONCE(EOSPofRhoU(g, r, u), "P at an invalid rho");
+                GAS_ONCE(EOSCofRhoU(g, r, u), "c at an invalid rho");
+                GAS_ONCE(EOSPCofRhoU(g, r, u, &c), "PC at an invalid rho");
+                GAS_ONCE(EOSTofRhoU(g, r, u), "T at an invalid rho");
+                GAS_ONCE(EOSdPdRho(g, r, u), "dP/drho at an invalid rho");
+                GAS_ONCE(EOSdPdU(g, r, u), "dP/du at an invalid rho");
+                GAS_ONCE(EOSdUdRho(g, r, u), "du/drho at an invalid rho");
+                GAS_ONCE(EOSUCold(g, r), "u_cold at an invalid rho");
+                GAS_ONCE(EOSisbelowColdCurve(g, r, u), "isbelowColdCurve at an invalid rho");
+                GAS_ONCE(EOSIsentropic(g, r, u, 1.0), "isentrope from an invalid rho1");
+                GAS_ONCE(EOSIsentropic(g, 1.0, u, r), "isentrope to an invalid rho2");
+                GAS_ONCE(EOSPofRhoT(g, r, 300.0), "P(rho, T) at an invalid rho");
+                GAS_ONCE(EOSSofRhoT(g, r, 300.0), "s(rho, T) at an invalid rho");
+                {
+                    long n = ig->nLookupFail;
+                    (void) EOSIsInTable(g, r, u);
+                    CHECK(ig->nLookupFail == n, "gas: EOSIsInTable counted at rho = %g", r);
+                }
+            }
+        }
 #undef GAS_ONCE
     }
     checkPrintMatCounter(g, g->igeosmaterial->nLookupFail);
@@ -1535,6 +1584,41 @@ static void testTillotsonTableStatus(EOSMATERIAL *e)
     CHECK(EOSIsInTable(e, rhoOk, NAN) == EOS_FAIL, "NaN u");
     CHECK(EOSIsInTable(e, rhoOk, INFINITY) == EOS_FAIL, "+inf u");
 
+    /*
+     * An invalid density (rho <= 0, NaN, inf) fails also for the analytic Tillotson pressure (it
+     * returned NaN, uncounted): P, c and the (rho, u) derivatives are the sentinel, T = 0, every call
+     * counted once (EOSPCTofRhoU counted twice through the pressure and the T fallback).
+     */
+    {
+        const double bad[] = { 0.0, -1.0, NAN, INFINITY };
+        const long nIn = m->nLookupFail;
+        for (int k = 0; k < 4; k++) {
+            const double r = bad[k];
+            double c = 1.0, T = 1.0, P;
+            long n = m->nLookupFail;
+            P = EOSPCTofRhoU(e, r, uOk, &c, &T);
+            CHECK(P == EOS_FAIL_VALUE && c == EOS_FAIL_VALUE && T == 0.0, "PCT at rho = %g: P=%g c=%g T=%g", r, P, c, T);
+            CHECK(m->nLookupFail == n + 1, "PCT at rho = %g counted %ld times", r, m->nLookupFail - n);
+            n = m->nLookupFail; P = EOSPCofRhoU(e, r, uOk, &c);
+            CHECK(P == EOS_FAIL_VALUE && c == EOS_FAIL_VALUE && m->nLookupFail == n + 1, "PC at rho = %g", r);
+            n = m->nLookupFail;
+            CHECK(EOSPofRhoU(e, r, uOk) == EOS_FAIL_VALUE && m->nLookupFail == n + 1, "P at rho = %g", r);
+            n = m->nLookupFail;
+            CHECK(EOSCofRhoU(e, r, uOk) == EOS_FAIL_VALUE && m->nLookupFail == n + 1, "c at rho = %g", r);
+            n = m->nLookupFail;
+            CHECK(EOSdPdRho(e, r, uOk) == EOS_FAIL_VALUE && m->nLookupFail == n + 1, "dP/drho at rho = %g", r);
+            n = m->nLookupFail;
+            CHECK(EOSdPdU(e, r, uOk) == EOS_FAIL_VALUE && m->nLookupFail == n + 1, "dP/du at rho = %g", r);
+            n = m->nLookupFail;
+            CHECK(EOSdUdRho(e, r, uOk) == EOS_FAIL_VALUE && m->nLookupFail == n + 1, "du/drho at rho = %g", r);
+            n = m->nLookupFail;
+            CHECK(EOSTofRhoU(e, r, uOk) == 0.0 && m->nLookupFail == n + 1, "T at rho = %g", r);
+            CHECK(EOSIsUsable(e, r, uOk) == EOS_FALSE, "usable at rho = %g", r);
+            CHECK(EOSisbelowColdCurve(e, r, uOk) == EOS_FAIL, "isbelowColdCurve at rho = %g", r);
+        }
+        CHECK(m->nLookupFail > nIn, "invalid densities counted");
+    }
+
     /* Policy: the pressure is analytic, only u above the table is tolerated. */
     CHECK(EOSIsUsable(e, rhoOk, uOk) == EOS_TRUE, "usable in table");
     CHECK(EOSIsUsable(e, rhoOk, uHuge) == EOS_TRUE, "usable above the table (analytic P)");
@@ -2139,6 +2223,58 @@ static void testUnitPair(int iMat)
 }
 
 /*
+ * Initialise an ideal gas with (gamma, mu) in a child process, through EOSinitMaterial and
+ * igeosInitMat. Returns 0 if accepted, 1 if the program was stopped, -1 for anything else.
+ */
+static int gasParamsRejected(double dConstGamma, double dMeanMolMass)
+{
+    fflush(NULL);
+    pid_t pid = fork();
+    if (pid == 0) {
+        if (freopen("/dev/null", "w", stderr) == NULL) _exit(3);   /* the expected diagnostic */
+        struct igeosParam gp = {dConstGamma, dMeanMolMass};
+        EOSMATERIAL *e = EOSinitMaterial(MAT_IDEALGAS, 0.0, 0.0, &gp);
+        IGEOSMAT *g = igeosInitMat(0, dConstGamma, dMeanMolMass, 2.06701e-13, 4.80438e-08);
+        EOSfinalizeMaterial(e); igeosFinalizeMat(g);
+        _exit(0);
+    }
+    int status = 0;
+    if (pid < 0 || waitpid(pid, &status, 0) != pid) return -1;
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) return 0;
+    if ((WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT) || (WIFEXITED(status) && WEXITSTATUS(status) == 1)) return 1;
+    return -1;
+}
+
+/*
+ * igeosInitMat requires gamma > 1 and mu > 0, both finite (fatal otherwise). Before, gamma = 1 gave
+ * cv = inf, gamma < 1 a negative cv and mu = 0 a division by zero, and every lookup returned garbage.
+ */
+static void testGasParams(void)
+{
+    int failsBefore = nFails;
+    TEST("ideal gas: gamma > 1 and mu > 0 or fatal");
+    static const struct { double gamma, mu; int bRejected; const char *what; } cases[] = {
+        {5.0 / 3.0, 1.0, 0, "gamma 5/3, mu 1"},
+        {1.4, 2.3, 0, "gamma 1.4, mu 2.3"},
+        {1.0 + 1e-12, 1e-3, 0, "gamma just above 1, small mu"},
+        {1.0, 1.0, 1, "gamma = 1"},
+        {0.5, 1.0, 1, "gamma < 1"},
+        {-1.4, 1.0, 1, "gamma < 0"},
+        {NAN, 1.0, 1, "gamma NaN"},
+        {INFINITY, 1.0, 1, "gamma inf"},
+        {1.4, 0.0, 1, "mu = 0"},
+        {1.4, -1.0, 1, "mu < 0"},
+        {1.4, NAN, 1, "mu NaN"},
+        {1.4, INFINITY, 1, "mu inf"},
+    };
+    for (size_t k = 0; k < sizeof(cases) / sizeof(cases[0]); k++) {
+        int r = gasParamsRejected(cases[k].gamma, cases[k].mu);
+        CHECK(r == cases[k].bRejected, "%s: %s (got %d)", cases[k].what, cases[k].bRejected ? "must be fatal" : "must be accepted", r);
+    }
+    END_TEST();
+}
+
+/*
  * The *_N_MATERIAL_MAX constants size arrays indexed by the material id: every id must be a valid
  * index (largest id + 1, as TILL_N_MATERIAL_MAX). EOS_N_MATERIAL_MAX was 130 and
  * ANEOS_N_MATERIAL_MAX 100, the largest ids themselves, so such an array overflowed by one.
@@ -2210,6 +2346,7 @@ int main(int argc, char *argv[])
     testMaterialIdConstants();
     testIdealGas(dKpcUnit, dMsolUnit);
     testUnitPair(MAT_IDEALGAS);
+    testGasParams();
 
 #ifdef HAVE_ANEOSMATERIAL_H
     EOSMATERIAL *A = initQuiet(iMatA, dKpcUnit, dMsolUnit, NULL, 0);

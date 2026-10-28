@@ -3,7 +3,7 @@
  *
  * Author: Christian Reinhardt
  * Date: 15.06.2022
- * Modified: 26.10.2026 (1.1.0)
+ * Modified: 28.10.2026 (1.1.0)
  */
 #include <stdlib.h>
 #include <stdio.h>
@@ -20,9 +20,6 @@ IGEOSMAT *igeosInitMat(int iMat, double dConstGamma, double dMeanMolMass, double
     const double KPCCM = 3.085678e21;    /* kiloparsec in centimeters */
     IGEOSMAT *Mat;
 
-    Mat = (IGEOSMAT *) calloc(1, sizeof(IGEOSMAT));
-    assert(Mat != NULL);
-
     /*
      * Unit system (the same rule in EOSlib and every sublibrary): both units > 0 and finite are code
      * units, both <= 0 is cgs; anything else (exactly one of them <= 0, NaN, inf) is a caller error.
@@ -32,6 +29,21 @@ IGEOSMAT *igeosInitMat(int iMat, double dConstGamma, double dMeanMolMass, double
         assert(0);
         exit(1);
     }
+
+    /*
+     * The material parameters (fatal, like a defective table): cv = k_B/((gamma-1) mu m_H) needs
+     * gamma > 1 and mu > 0, both finite. Up to 1.1.0 gamma <= 1 gave cv = inf or cv < 0, mu <= 0 or
+     * NaN cv = inf or NaN, and every lookup after that silently returned garbage.
+     */
+    if (!(dConstGamma > 1.0) || !isfinite(dConstGamma) || !(dMeanMolMass > 0.0) || !isfinite(dMeanMolMass)) {
+        fprintf(stderr, "igeosInitMat: invalid ideal gas parameters dConstGamma= %g dMeanMolMass= %g (need gamma > 1 and mu > 0, both finite).\n",
+                dConstGamma, dMeanMolMass);
+        assert(0);
+        exit(1);
+    }
+
+    Mat = (IGEOSMAT *) calloc(1, sizeof(IGEOSMAT));
+    assert(Mat != NULL);
 
     Mat->iMat = iMat;
     assert(Mat->iMat == 0);
@@ -92,50 +104,85 @@ void igeosPrintMat(IGEOSMAT *Mat, FILE *fp) {
 }
 
 /*
- * The cold curve of the ideal gas is u = 0 (T_min = 0). A state below it (u < 0, or u NaN) falls
- * back to (rho, T = 0) like a state below the cold curve of a tabulated EOS (ANEOSTofRhoU,
- * tillTempRhoU): T = 0, P = 0, c = 0, counted once in nLookupFail. Up to 1.1.0 u < 0 gave T < 0,
- * P < 0 and c = NaN (a NaN time step in a hydro code). Returns the u to evaluate with.
+ * A valid density: positive and finite. Like a density outside the table of a tabulated EOS, an
+ * invalid rho is a failure of every function that takes one (counted once, by the caller), and
+ * T(rho, u) falls back to T_min = 0. Up to 1.1.0 rho <= 0 gave a negative or zero P and c, and
+ * EOSdUdRho a NaN at rho = 0, uncounted.
  */
-static double igeosColdClamp(IGEOSMAT *Mat, const char *chFunc, double rho, double u) {
-    if (u >= 0.0) return u;
-    Mat->nLookupFail++;
-    IGEOS_WARN("%s: u= %g below the cold curve u = 0 at rho= %g (iMat= %i), using T = 0.\n", chFunc, u, rho, Mat->iMat);
-    return 0.0;
+static inline int igeosValidRho(double rho) {
+    return (rho > 0.0) && isfinite(rho);
 }
 
-/* Calculate P(rho, u). P(rho, 0) = 0 below the cold curve (counted). */
+/*
+ * The state check of the (rho, u) functions: returns 0 and the u to evaluate with, or -1 for an
+ * invalid rho (counted). The cold curve of the ideal gas is u = 0 (T_min = 0). A state below it
+ * (u < 0, or u NaN) falls back to (rho, T = 0) like a state below the cold curve of a tabulated EOS
+ * (ANEOSTofRhoU, tillTempRhoU): T = 0, P = 0, c = 0, counted once in nLookupFail. Up to 1.1.0
+ * u < 0 gave T < 0, P < 0 and c = NaN (a NaN time step in a hydro code). An invalid rho is counted
+ * once, not as a cold-curve fallback as well.
+ */
+static int igeosCheckState(IGEOSMAT *Mat, const char *chFunc, double rho, double *pu) {
+    if (!igeosValidRho(rho)) {
+        Mat->nLookupFail++;
+        IGEOS_WARN("%s: invalid density rho= %g (u= %g, iMat= %i).\n", chFunc, rho, *pu, Mat->iMat);
+        return -1;
+    }
+    if (*pu >= 0.0) return 0;
+    Mat->nLookupFail++;
+    IGEOS_WARN("%s: u= %g below the cold curve u = 0 at rho= %g (iMat= %i), using T = 0.\n", chFunc, *pu, rho, Mat->iMat);
+    *pu = 0.0;
+    return 0;
+}
+
+/*
+ * The state check of the (rho, T) functions: 0, or -1 (counted) for an invalid rho or T < 0
+ * (below T_min = 0) or a NaN T, like (rho, T) outside a table.
+ */
+static int igeosCheckRhoT(IGEOSMAT *Mat, const char *chFunc, double rho, double T) {
+    if (igeosValidRho(rho) && T >= 0.0) return 0;
+    Mat->nLookupFail++;
+    IGEOS_WARN("%s: invalid state rho= %g T= %g (iMat= %i).\n", chFunc, rho, T, Mat->iMat);
+    return -1;
+}
+
+/* Calculate P(rho, u). P(rho, 0) = 0 below the cold curve (counted); IGEOS_FAIL_VALUE for an invalid rho. */
 double igeosPofRhoU(IGEOSMAT *Mat, double rho, double u) {
-    u = igeosColdClamp(Mat, __func__, rho, u);
+    if (igeosCheckState(Mat, __func__, rho, &u)) return IGEOS_FAIL_VALUE;
     return (Mat->dConstGamma-1.0)*rho*u;
 }
 
-/* Calculate P(rho, T). IGEOS_FAIL_VALUE (counted) for T < 0 or NaN, like T below a table. */
+/* Calculate P(rho, T). IGEOS_FAIL_VALUE (counted) for T < 0, NaN or an invalid rho, like (rho, T) outside a table. */
 double igeosPofRhoT(IGEOSMAT *Mat, double rho, double T) {
-    if (!(T >= 0.0)) {
-        Mat->nLookupFail++;
-        IGEOS_WARN("igeosPofRhoT: T= %g < 0 (iMat= %i).\n", T, Mat->iMat);
-        return IGEOS_FAIL_VALUE;
-    }
+    if (igeosCheckRhoT(Mat, __func__, rho, T)) return IGEOS_FAIL_VALUE;
     return (Mat->dConstGamma-1.0)*rho*Mat->cv*T;
 }
 
-/* Calculate cs(rho, u). 0 below the cold curve (counted). */
+/* Calculate cs(rho, u). 0 below the cold curve (counted); IGEOS_FAIL_VALUE for an invalid rho. */
 double igeosCofRhoU(IGEOSMAT *Mat, double rho, double u) {
-    u = igeosColdClamp(Mat, __func__, rho, u);
+    if (igeosCheckState(Mat, __func__, rho, &u)) return IGEOS_FAIL_VALUE;
     return sqrt(Mat->dConstGamma*(Mat->dConstGamma-1.0)*u);
 }
 
-/* Calculate P(rho, u) and cs(rho, u) (a state below the cold curve counted once). */
+/* Calculate P(rho, u) and cs(rho, u) (a bad state counted once); both IGEOS_FAIL_VALUE for an invalid rho. */
 double igeosPCofRhoU(IGEOSMAT *Mat, double rho, double u, double *c) {
-    u = igeosColdClamp(Mat, __func__, rho, u);
+    if (igeosCheckState(Mat, __func__, rho, &u)) {
+        *c = IGEOS_FAIL_VALUE;
+        return IGEOS_FAIL_VALUE;
+    }
     *c = sqrt(Mat->dConstGamma*(Mat->dConstGamma-1.0)*u);
     return (Mat->dConstGamma-1.0)*rho*u;
 }
 
-/* Calculate P(rho, u), cs(rho, u) and T(rho, u) (a state below the cold curve counted once). */
+/*
+ * Calculate P(rho, u), cs(rho, u) and T(rho, u) (a bad state counted once). For an invalid rho P
+ * and c are IGEOS_FAIL_VALUE and T = 0 (T(rho, u) never fails), as in the tabulated libraries.
+ */
 double igeosPCTofRhoU(IGEOSMAT *Mat, double rho, double u, double *c, double *T) {
-    u = igeosColdClamp(Mat, __func__, rho, u);
+    if (igeosCheckState(Mat, __func__, rho, &u)) {
+        *c = IGEOS_FAIL_VALUE;
+        *T = 0.0;
+        return IGEOS_FAIL_VALUE;
+    }
     *c = sqrt(Mat->dConstGamma*(Mat->dConstGamma-1.0)*u);
     *T = u/Mat->cv;
     return (Mat->dConstGamma-1.0)*rho*u;
@@ -144,31 +191,27 @@ double igeosPCTofRhoU(IGEOSMAT *Mat, double rho, double u, double *c, double *T)
 /*
  * Calculate u2(rho1, u1, rho2) so that (rho1, u1) and (rho2, u2) are on the same isentrope.
  * u1 below the cold curve: the cold curve at rho2, u2 = 0 (counted, like ANEOSisentropicU).
- * IGEOS_FAIL_VALUE (counted) if rho1 or rho2 is not positive and finite.
+ * IGEOS_FAIL_VALUE (counted once) if rho1 or rho2 is not positive and finite.
  */
 double igeosIsentropicU(IGEOSMAT *Mat, double rho1, double u1, double rho2) {
-    if (!(rho1 > 0.0) || !(rho2 > 0.0) || !isfinite(rho1) || !isfinite(rho2)) {
+    if (!igeosValidRho(rho2)) {
         Mat->nLookupFail++;
         IGEOS_WARN("igeosIsentropicU: invalid density rho1= %g rho2= %g (iMat= %i).\n", rho1, rho2, Mat->iMat);
         return IGEOS_FAIL_VALUE;
     }
-    u1 = igeosColdClamp(Mat, __func__, rho1, u1);
+    if (igeosCheckState(Mat, __func__, rho1, &u1)) return IGEOS_FAIL_VALUE;
     return u1*pow(rho2/rho1, Mat->dConstGamma-1.0);
 }
 
-/* Calculate T(rho, u). Never fails: T = 0 below the cold curve (counted). */
+/* Calculate T(rho, u). Never fails: T = 0 below the cold curve or for an invalid rho (counted). */
 double igeosTofRhoU(IGEOSMAT *Mat, double rho, double u) {
-    u = igeosColdClamp(Mat, __func__, rho, u);
+    if (igeosCheckState(Mat, __func__, rho, &u)) return 0.0;
     return u/Mat->cv;
 }
 
-/* Calculate u(rho, T). IGEOS_FAIL_VALUE (counted) for T < 0 or NaN, like T below a table. */
+/* Calculate u(rho, T). IGEOS_FAIL_VALUE (counted) for T < 0, NaN or an invalid rho, like (rho, T) outside a table. */
 double igeosUofRhoT(IGEOSMAT *Mat, double rho, double T) {
-    if (!(T >= 0.0)) {
-        Mat->nLookupFail++;
-        IGEOS_WARN("igeosUofRhoT: T= %g < 0 (iMat= %i).\n", T, Mat->iMat);
-        return IGEOS_FAIL_VALUE;
-    }
+    if (igeosCheckRhoT(Mat, __func__, rho, T)) return IGEOS_FAIL_VALUE;
     return Mat->cv*T;
 }
 
@@ -197,41 +240,46 @@ double igeosRhoofUT(IGEOSMAT *Mat, double U, double T) {
     return IGEOS_FAIL_VALUE;   /* not reached */
 }
 
-/* Calculate dP/drho(rho, u), at (rho, T = 0) below the cold curve (counted). */
+/* Calculate dP/drho(rho, u), at (rho, T = 0) below the cold curve (counted); IGEOS_FAIL_VALUE for an invalid rho. */
 double igeosdPdRho(IGEOSMAT *Mat, double rho, double u) {
-    u = igeosColdClamp(Mat, __func__, rho, u);
+    if (igeosCheckState(Mat, __func__, rho, &u)) return IGEOS_FAIL_VALUE;
     return (Mat->dConstGamma-1.0)*u;
 }
 
-/* Calculate dP/du(rho, u), at (rho, T = 0) below the cold curve (counted, as for a table). */
+/* Calculate dP/du(rho, u), at (rho, T = 0) below the cold curve (counted, as for a table); IGEOS_FAIL_VALUE for an invalid rho. */
 double igeosdPdU(IGEOSMAT *Mat, double rho, double u) {
-    (void) igeosColdClamp(Mat, __func__, rho, u);
+    if (igeosCheckState(Mat, __func__, rho, &u)) return IGEOS_FAIL_VALUE;
     return (Mat->dConstGamma-1.0)*rho;
 }
 
 /*
  * The (rho, T) derivatives of P = (gamma-1) rho cv T: dP/drho|T = (gamma-1) cv T and
  * dP/dT|rho = (gamma-1) rho cv. Same domain as igeosPofRhoT: IGEOS_FAIL_VALUE (counted) for
- * T < 0 or NaN, T = 0 (the cold curve) is valid. Up to 1.1.0 EOSdPdRhoofRhoT and EOSdPdT were
- * fatal (not implemented) for the ideal gas.
+ * T < 0, NaN or an invalid rho, T = 0 (the cold curve) is valid. Up to 1.1.0 EOSdPdRhoofRhoT and
+ * EOSdPdT were fatal (not implemented) for the ideal gas.
  */
 double igeosdPdRhoofRhoT(IGEOSMAT *Mat, double rho, double T) {
-    (void) rho;
-    if (!(T >= 0.0)) {
-        Mat->nLookupFail++;
-        IGEOS_WARN("igeosdPdRhoofRhoT: T= %g < 0 (iMat= %i).\n", T, Mat->iMat);
-        return IGEOS_FAIL_VALUE;
-    }
+    if (igeosCheckRhoT(Mat, __func__, rho, T)) return IGEOS_FAIL_VALUE;
     return (Mat->dConstGamma-1.0)*Mat->cv*T;
 }
 
 double igeosdPdTofRhoT(IGEOSMAT *Mat, double rho, double T) {
-    if (!(T >= 0.0)) {
+    if (igeosCheckRhoT(Mat, __func__, rho, T)) return IGEOS_FAIL_VALUE;
+    return (Mat->dConstGamma-1.0)*rho*Mat->cv;
+}
+
+/*
+ * The cold curve u(rho, T = 0) = 0 for a valid rho; IGEOS_FAIL_VALUE (counted) for an invalid one,
+ * like u_cold outside a table (ANEOSUCold, reos3UCold, scvheosUCold). EOSUCold returned 0 for any
+ * rho up to 1.1.0, so EOSisbelowColdCurve answered for rho <= 0 or NaN instead of failing.
+ */
+double igeosUCold(IGEOSMAT *Mat, double rho) {
+    if (!igeosValidRho(rho)) {
         Mat->nLookupFail++;
-        IGEOS_WARN("igeosdPdTofRhoT: T= %g < 0 (iMat= %i).\n", T, Mat->iMat);
+        IGEOS_WARN("igeosUCold: invalid density rho= %g (iMat= %i).\n", rho, Mat->iMat);
         return IGEOS_FAIL_VALUE;
     }
-    return (Mat->dConstGamma-1.0)*rho*Mat->cv;
+    return 0.0;
 }
 
 /*
@@ -242,13 +290,13 @@ double igeosdPdTofRhoT(IGEOSMAT *Mat, double rho, double T) {
  * where (gamma-1)*cv = k_B/(mu*m_H). The result is returned in cgs
  * (erg/g/K), consistent with the tabulated EOS libraries, and the additive
  * constant is set to zero. Only entropy differences are meaningful.
- * Returns IGEOS_FAIL_VALUE (counted in nLookupFail) for rho <= 0 or T <= 0.
+ * Returns IGEOS_FAIL_VALUE (counted in nLookupFail) for an invalid rho or T <= 0.
  */
 double igeosSofRhoT(IGEOSMAT *Mat, double rho, double T) {
     double cv_cgs = Mat->cv * Mat->dErgPerGmUnit;
     double rho_cgs = rho * Mat->dGmPerCcUnit;
 
-    if (!(rho_cgs > 0.0) || !(T > 0.0)) {
+    if (!igeosValidRho(rho) || !(T > 0.0)) {
         Mat->nLookupFail++;
         IGEOS_WARN("igeosSofRhoT: entropy undefined for rho= %g T= %g (iMat= %i).\n", rho, T, Mat->iMat);
         return IGEOS_FAIL_VALUE;
@@ -259,7 +307,7 @@ double igeosSofRhoT(IGEOSMAT *Mat, double rho, double T) {
 
 /*
  * Calculate the specific entropy s(rho, u). IGEOS_FAIL_VALUE for u <= 0 (s(rho, T = 0) is
- * undefined) or rho <= 0, counted once (not as a T fallback as well).
+ * undefined) or an invalid rho, counted once (not as a T fallback as well).
  */
 double igeosSofRhoU(IGEOSMAT *Mat, double rho, double u) {
     return igeosSofRhoT(Mat, rho, u/Mat->cv);
