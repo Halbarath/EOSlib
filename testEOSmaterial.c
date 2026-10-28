@@ -1106,6 +1106,13 @@ static void testFailureContract(EOSMATERIAL *e, double rhoOk, double uOk, double
             ONCE(EOSIsentropic(e, rhoOk, uOk, rhoHi), "isentrope, rho2 above the table");
             ONCE(EOSIsentropic(e, rhoHi, uOk, rhoHi), "isentrope, rho1 and rho2 above the table");
             ONCE(EOSIsentropic(e, rhoOk, uHi, rhoHi), "isentrope, u1 above the column and rho2 above the table");
+            /* rho1 outside a table: no entropy, the sentinel in every tabulated library (ANEOS gave the
+             * cold curve at rho2 up to 1.2.0). Tillotson integrates there (analytic P), tested separately. */
+            if (e->matType != EOSTILLOTSON) {
+                CHECK(EOSFailed(EOSIsentropic(e, rhoHi, uOk, rhoOk)), "isentrope, rho1 above the table");
+                CHECK(EOSFailed(EOSIsentropic(e, rhoHi, uOk, rhoHi)), "isentrope, rho1 and rho2 above the table");
+            }
+            CHECK(EOSFailed(EOSIsentropic(e, rhoOk, uOk, rhoHi)), "isentrope, rho2 above the table");
             long n = *pnLookupFail;
             (void) EOSIsentropic(e, rhoOk, uOk, rhoOk);
             CHECK(*pnLookupFail == n, "isentrope inside the table counted %ld times", *pnLookupFail - n);
@@ -1470,13 +1477,17 @@ static void testTillotsonSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
         double u1 = EOSUofRhoT(outer, rho1, T1), P1 = EOSPofRhoU(outer, rho1, u1);
         double rho2 = -1.0, u2 = -1.0;
         CHECK(EOSIsUsable(outer, rho1, u1) == EOS_TRUE && P1 > 0.0, "cold-curve state (q=%d) usable with P > 0", q);
-        int ret = EOSSolveBC(outer, inner, rho1, u1, &rho2, &u2, T1);
+        /* Tjump = T(rho1, u1) as EOSSolveBC computes it, so that T2 = 0 exactly: with Tjump = T1 the
+         * round trip u(rho1, T1) -> T can give T1 - 1e-13 (T2 < 0, rejected; seen in cgs units). */
+        const double Tjump = EOSTofRhoU(outer, rho1, u1);
+        CHECK(fabs(Tjump - T1) <= 1e-9 * (1.0 + T1), "T(rho1, u(rho1, T1)) = %.17g, T1 = %g (q=%d)", Tjump, T1, q);
+        int ret = EOSSolveBC(outer, inner, rho1, u1, &rho2, &u2, Tjump);
         CHECK(ret == EOS_SUCCESS, "SolveBC with T2 = 0 (q=%d) failed (ret=%d)", q, ret);
         if (ret == EOS_SUCCESS) {
             CHECK(fabs(EOSPofRhoU(inner, rho2, u2) - P1) <= solveBCPResidualBound(inner, rho2, 0.0, P1),
                   "P continuity with T2 = 0 (q=%d): %.15e vs %.15e", q, EOSPofRhoU(inner, rho2, u2), P1);
             CHECK(fabs(u2 - EOSUCold(inner, rho2)) <= tillUTol(inner->tillmaterial, u2), "u2 on the cold curve of material 2 (q=%d)", q);
-            /* T1 - Tjump is 0 only up to the roundoff of T(rho1, u1) for q = 1. */
+            /* T2 = 0 up to the roundoff of the T(rho2, u2) round trip. */
             CHECK(EOSTofRhoU(inner, rho2, u2) <= 1e-12 * (1.0 + T1), "T2 = %g, expected 0 (q=%d)", EOSTofRhoU(inner, rho2, u2), q);
         }
     }

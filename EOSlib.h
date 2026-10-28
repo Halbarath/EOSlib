@@ -129,6 +129,9 @@
  *          s(rho1, T_max), not from the T_min fallback, which put u2 on the cold curve at rho2
  *          (needs the ANEOSisentropicU and scvheosIsentropicU of this round; raise the required
  *          versions when bumped).
+ *          EOSIsentropic for ANEOS returns EOS_FAIL_VALUE for rho1 outside the table, like SCvH
+ *          (ANEOSisentropicU returned the cold curve at rho2). Tillotson still integrates the ODE
+ *          there: its pressure is analytic, so the isentrope exists outside its table.
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -385,8 +388,8 @@ double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, doub
  * above the top row is lost. Where the isentrope leaves a tabulated EOS at
  * rho2, u2 is clamped to the edge it leaves through: the cold curve u(rho2,
  * T_min) below, the top row u(rho2, T_max) above (counted as well);
- * EOS_FAIL_VALUE only for an invalid input or rho2 outside a
- * tabulated EOS. Tillotson has an analytic P and integrates the ODE directly
+ * EOS_FAIL_VALUE only for an invalid input or rho1 or rho2 outside a
+ * tabulated EOS (no entropy at rho1, no s(T) line at rho2). Tillotson has an analytic P and integrates the ODE directly
  * where (rho1, u1) or rho2 is outside its table (counted as a fallback); it
  * needs EOSinitIsentropicLookup first (fatal without). Not implemented (fatal)
  * for REOS3.
