@@ -190,6 +190,7 @@ static void testIdealGas(double dKpcUnit, double dMsolUnit)
     CHECK(g->bEntropy && g->bEntropyTableInit, "entropy flags");
     CHECK(EOSYieldModel(g) == 0, "yield model for gas");
     CHECK(EOSYieldStrength(g, 1.0, 1.0) == 0.0, "yield strength for gas");
+    CHECK(EOSYieldStrengthofRhoUTP(g, 1.0, 1.0, 1.0, 1.0) == 0.0, "yield strength (rho, u, T, P) for gas");
     CHECK(EOSGammaofRhoT(g, 1.0, 300.0) == 0.0, "shear modulus for gas");
 
     double rhos[] = { 1e-6, 1e-3, 1.0, 50.0 };
@@ -502,6 +503,53 @@ static void testANEOSYield(EOSMATERIAL *e)
     }
 
     /*
+     * Overheated material: u above the column. T(rho, u) falls back to T_min and P to P(rho, T_min),
+     * which gave the full cold strength Y0 f(T_min) up to EOSlib 1.2.0. The strength is that of the
+     * top row (T_max, P(rho, T_max)), 0 where T_melt <= T_max, from (rho, u) and from the T, P of
+     * EOSPCTofRhoU (EOSYieldStrengthofRhoUTP); the lookup counts the fallback once, the strength
+     * nothing more. In the table and below the cold curve RhoUTP is RhoTP; EOSYieldStrengthofRhoTP
+     * evaluates the fallback T, P as given (it cannot recognise them).
+     */
+    {
+        const double Tmax = m->TAxis[m->nT-1], Tmin = m->TAxis[0];
+        int nHot = 0, nZero = 0;
+        long nf0 = m->nLookupFail;
+        for (int a = 1; a < NSAMPLE - 1; a++) {
+            double rho = sampleRho(m, a), c, T, P;
+            double uTop = EOSUofRhoT(e, rho, Tmax);
+            double uHi = uTop + fabs(uTop) + 1.0 * m->CGStoCodeUnitsforU;
+            double Ytop = EOSYieldStrengthofRhoTP(e, rho, Tmax, EOSPofRhoT(e, rho, Tmax));
+            CHECK(EOSIsInTable(e, rho, uHi) == EOS_OUTSIDE_VMAX, "u above the column at rho=%g", rho);
+            long nf = m->nLookupFail;
+            double Y = EOSYieldStrength(e, rho, uHi);
+            CHECK(m->nLookupFail == nf + 1, "Y(rho, u) above the column counted %ld times", m->nLookupFail - nf);
+            CHECK(Y == Ytop, "Y(rho, u) above the column = %g, top row %g (rho=%g)", Y, Ytop, rho);
+            P = EOSPCTofRhoU(e, rho, uHi, &c, &T);
+            CHECK(T == Tmin, "fallback T = %g, T_min = %g", T, Tmin);
+            nf = m->nLookupFail;
+            double Yutp = EOSYieldStrengthofRhoUTP(e, rho, uHi, T, P);
+            CHECK(m->nLookupFail == nf, "Y(rho, u, T, P) above the column counted %ld times", m->nLookupFail - nf);
+            CHECK(Yutp == Ytop, "Y(rho, u, T, P) above the column = %g, top row %g (rho=%g)", Yutp, Ytop, rho);
+            CHECK(EOSYieldStrengthofRhoTP(e, rho, T, P) == EOSYieldStrengthofRhoTP(e, rho, Tmin, EOSPofRhoT(e, rho, Tmin)),
+                  "Y(rho, T, P) evaluates the fallback as given (rho=%g)", rho);
+            if (ANEOSTmeltofRho(m, rho) <= Tmax) { CHECK(Y == 0.0, "overheated Y = %g at rho=%g", Y, rho); nZero++; }
+            nHot++;
+            /* In the table (the cold curve exactly, a cold and a hot state) and below the cold curve: unchanged. */
+            const double uCold = EOSUofRhoT(e, rho, Tmin);
+            const double us[4] = { uCold, EOSUofRhoT(e, rho, sampleT(m, 1)), EOSUofRhoT(e, rho, sampleT(m, NSAMPLE - 2)),
+                                   uCold - fabs(uCold) - 1.0 * m->CGStoCodeUnitsforU };
+            for (int q = 0; q < 4; q++) {
+                P = EOSPCTofRhoU(e, rho, us[q], &c, &T);
+                double Ytp = EOSYieldStrengthofRhoTP(e, rho, T, P);
+                CHECK(EOSYieldStrengthofRhoUTP(e, rho, us[q], T, P) == Ytp, "Y(rho, u, T, P) = Y(rho, T, P) (q=%d, rho=%g)", q, rho);
+                CHECK(EOSYieldStrength(e, rho, us[q]) == Ytp, "Y(rho, u) = Y(rho, T, P) (q=%d, rho=%g)", q, rho);
+            }
+        }
+        CHECK(nHot > 0 && nZero > 0, "no overheated state tested (%d, %d with T_melt <= T_max)", nHot, nZero);
+        m->nLookupFail = nf0;
+    }
+
+    /*
      * A failed lookup gives the sentinel, not a strength: the tension clamp
      * fmax(P, 0) turned P = EOS_FAIL_VALUE into P_eff = 0 and Y = Y0 * f(T)
      * (up to EOSlib 1.2.0 before this fix).
@@ -520,6 +568,8 @@ static void testANEOSYield(EOSMATERIAL *e)
         CHECK(EOSYieldStrengthofRhoTP(e, rhoMid, T, NAN) == EOS_FAIL_VALUE,
               "Y(rho,T,P = NaN) = %g", EOSYieldStrengthofRhoTP(e, rhoMid, T, NAN));
         CHECK(EOSYieldStrengthofRhoTP(e, rhoMid, NAN, 0.0) == EOS_FAIL_VALUE, "Y(rho,T = NaN,P) is not the sentinel");
+        CHECK(EOSYieldStrengthofRhoUTP(e, rhoMid, uOut, T, EOS_FAIL_VALUE) == EOS_FAIL_VALUE, "Y(rho,u,T,P = EOS_FAIL_VALUE)");
+        CHECK(EOSYieldStrengthofRhoUTP(e, rhoOut, uOut, m->TAxis[0], EOS_FAIL_VALUE) == EOS_FAIL_VALUE, "Y(rho,u,T_min,P = EOS_FAIL_VALUE) outside the table");
         /* The lookups that produced the failed P were counted; the strength adds nothing for a passed-in P. */
         long nFail1 = m->nLookupFail;
         EOSYieldStrengthofRhoTP(e, rhoMid, T, EOS_FAIL_VALUE);
@@ -656,6 +706,7 @@ static void testSCVHDispatch(EOSMATERIAL *e)
     CHECK(strlen(e->MatString) > 0, "MatString empty");
     CHECK(EOSYieldModel(e) == 0, "yield model for gas");
     CHECK(EOSYieldStrength(e, scvhSampleRho(s, 1), 1.0) == 0.0, "yield strength for gas");
+    CHECK(EOSYieldStrengthofRhoUTP(e, scvhSampleRho(s, 1), 1.0, 1.0, 1.0) == 0.0, "yield strength (rho, u, T, P) for gas");
     CHECK(EOSGammaofRhoT(e, scvhSampleRho(s, 1), scvhSampleT(s, 1)) == 0.0, "shear modulus for gas");
 
     int nSkipped = 0, nSkippedS = 0;
@@ -854,6 +905,7 @@ static void testREOS3Dispatch(EOSMATERIAL *e)
     CHECK(strlen(e->MatString) > 0, "MatString empty");
     CHECK(EOSYieldModel(e) == 0, "yield model for gas");
     CHECK(EOSYieldStrength(e, reos3SampleRho(r, 1), 1.0) == 0.0, "yield strength for gas");
+    CHECK(EOSYieldStrengthofRhoUTP(e, reos3SampleRho(r, 1), 1.0, 1.0, 1.0) == 0.0, "yield strength (rho, u, T, P) for gas");
     CHECK(EOSGammaofRhoT(e, reos3SampleRho(r, 1), reos3SampleT(r, 1)) == 0.0, "shear modulus for gas");
     CHECK(EOSSofRhoU(e, reos3SampleRho(r, 1), 1.0) == EOS_FAIL_VALUE, "entropy sentinel (rho,u)");
     CHECK(EOSSofRhoT(e, reos3SampleRho(r, 1), reos3SampleT(r, 1)) == EOS_FAIL_VALUE, "entropy sentinel (rho,T)");

@@ -132,6 +132,12 @@
  *          EOSIsentropic for ANEOS returns EOS_FAIL_VALUE for rho1 outside the table, like SCvH
  *          (ANEOSisentropicU returned the cold curve at rho2). Tillotson still integrates the ODE
  *          there: its pressure is analytic, so the isentrope exists outside its table.
+ *          EOSYieldStrength evaluates a state above the u column (overheated material) on the top
+ *          row T_max, P(rho, T_max), i.e. without strength wherever T_melt <= T_max; with the T_min
+ *          fallback it had the full cold strength Y0 f(T_min). New EOSYieldStrengthofRhoUTP for the
+ *          T, P of EOSPCTofRhoU (the pkdgrav3 path), which does the same: from T alone the fallback
+ *          cannot be recognised, so EOSYieldStrengthofRhoTP still evaluates the T, P it is given.
+ *          The test costs one inversion of the u column only when T == T_min.
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -417,13 +423,23 @@ int EOSYieldModel(EOSMATERIAL *material);
 /*
  * Yield strength for models 1 and 2 (0 for models -1 and 0). Returns EOS_FAIL_VALUE if the
  * pressure lookup fails (rho outside the table) or T, T_melt is invalid; test with EOSFailed.
+ * A state above the u column (overheated, T(rho, u) falls back to T_min) is evaluated on the top
+ * row, T = T_max and P = P(rho, T_max), so it has no strength wherever T_melt <= T_max; a state
+ * below the cold curve has the strength of the cold curve.
  */
 double EOSYieldStrength(EOSMATERIAL *material, double rho, double u);
 /*
- * Same as EOSYieldStrength, but takes T and P the caller already has (e.g.
- * from EOSPCTofRhoU) instead of re-deriving them from (rho, u). A failed P
- * (EOSFailed(P), NaN included) gives EOS_FAIL_VALUE; it is not counted again
- * in nLookupFail.
+ * Same as EOSYieldStrength, but takes the T and P the caller already has from
+ * EOSPCTofRhoU(rho, u) instead of re-deriving them: the hydro-code entry point. u is used
+ * only to recognise the T_min fallback of a state above the table (a status test when
+ * T == T_min, nothing otherwise). A failed P (EOSFailed(P), NaN included) gives
+ * EOS_FAIL_VALUE; it is not counted again in nLookupFail.
+ */
+double EOSYieldStrengthofRhoUTP(EOSMATERIAL *material, double rho, double u, double T, double P);
+/*
+ * Strength at (rho, T, P) as given. A T from the fallback of a state above the table cannot be
+ * told from a cold state and gets the full cold strength: for the T, P of a (rho, u) lookup use
+ * EOSYieldStrengthofRhoUTP.
  */
 double EOSYieldStrengthofRhoTP(EOSMATERIAL *material, double rho, double T, double P);
 

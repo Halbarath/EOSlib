@@ -806,8 +806,37 @@ static double EOSYieldStrengthCore(EOSMATERIAL *material, int yieldStrengthModel
 }
 
 /*
+ * A state above the u column of the table (overheated material): T(rho, u) falls back to T_min by
+ * contract and P, c to their values at (rho, T_min), so the strength was the full cold strength
+ * Y0 f(T_min) of a material hotter than anything tabulated. Such a state is clamped to the top row
+ * instead, T = T_max and P = P(rho, T_max), the convention of the isentropes for a state above the
+ * table; the thermal softening then gives 0 wherever T_melt(rho) <= T_max.
+ *
+ * The fallback T is exactly TAxis[0], so only T == T_min needs the status test (ANEOSIsInTable,
+ * one inversion of the u column; it agrees exactly with the lookup, also on the M-ANEOS columns
+ * whose cold rows have du/dT < 0). A state in the table at T_min, or below the cold curve (cold
+ * material, full strength), is left alone. Not counted again: the lookup that produced T counted
+ * the fallback. Only ANEOS has strength models > 0.
+ */
+static void EOSYieldClampAboveTable(EOSMATERIAL *material, double rho, double u, double *pT, double *pP)
+{
+#ifdef HAVE_ANEOSMATERIAL_H
+    if (material->matType == EOSANEOS) {
+        ANEOSMATERIAL *m = material->ANEOSmaterial;
+        if (*pT == m->TAxis[0] && !EOSFailed(*pP) && ANEOSIsInTable(m, rho, u) == ANEOS_OUTSIDE_TMAX) {
+            *pT = m->TAxis[m->nT - 1];
+            *pP = ANEOSPofRhoT(m, rho, *pT);
+        }
+    }
+#else
+    (void) material; (void) rho; (void) u; (void) pT; (void) pP;
+#endif
+}
+
+/*
  * Calculate strength limiter from (rho, u). Derives T and P with one fused
- * lookup; prefer EOSYieldStrengthofRhoTP when the caller already has them.
+ * lookup; prefer EOSYieldStrengthofRhoUTP when the caller already has them.
+ * A state above the table is evaluated on the top row (EOSYieldClampAboveTable).
  */
 double EOSYieldStrength(EOSMATERIAL *material, double rho, double u)
 {
@@ -817,12 +846,29 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u)
 
     if (yieldStrengthModel > 0) {
         P = EOSPCTofRhoU(material, rho, u, &c, &T);
+        EOSYieldClampAboveTable(material, rho, u, &T, &P);
     }
     return EOSYieldStrengthCore(material, yieldStrengthModel, &p, rho, T, P);
 }
 
 /*
- * Calculate strength limiter from (rho, T, P) supplied by the caller.
+ * Calculate strength limiter from (rho, u) and the T, P the caller already has from
+ * EOSPCTofRhoU(rho, u). Same result as EOSYieldStrength(rho, u), without the second lookup:
+ * u is needed only to recognise the T_min fallback of a state above the table.
+ */
+double EOSYieldStrengthofRhoUTP(EOSMATERIAL *material, double rho, double u, double T, double P)
+{
+    EOSYIELDPARAMS p;
+    int yieldStrengthModel = EOSYieldParams(material, &p);
+
+    if (yieldStrengthModel > 0) EOSYieldClampAboveTable(material, rho, u, &T, &P);
+    return EOSYieldStrengthCore(material, yieldStrengthModel, &p, rho, T, P);
+}
+
+/*
+ * Calculate strength limiter from (rho, T, P) supplied by the caller. Evaluated as given: a T from
+ * the T_min fallback of a state above the table cannot be told from a cold state (use
+ * EOSYieldStrengthofRhoUTP for the T, P of a (rho, u) lookup).
  */
 double EOSYieldStrengthofRhoTP(EOSMATERIAL *material, double rho, double T, double P)
 {
