@@ -187,6 +187,9 @@
  *          required versions when bumped).
  *          rho0forInterfaceCorrection is documented as not read by EOSlib: EOSWoolfsonCoeff cuts at
  *          0.8*rho0 for every material, the gases included. No change in behaviour.
+ *          EOSPrintMat: every value labelled "(cgs units)" now carries its unit in every library (g/cc,
+ *          K, erg/g, ...); ANEOS, SCvH and REOS3 printed bare numbers, SCvH its boundaries as log10
+ *          values (needs the ANEOSmaterial, scvheos and reos3 of this round).
  */
 
 #ifndef EOSLIB_HINCLUDED

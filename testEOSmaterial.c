@@ -158,8 +158,9 @@ static void checkPrintMatCounter(EOSMATERIAL *e, long nLookupFail)
 }
 
 /*
- * EOSPrintMat prints rho0 in cgs with the unit for every tabulated library (reos3 did; ANEOS and SCvH
- * printed the code-unit value unlabelled, which reads like g/cc).
+ * EOSPrintMat prints rho0 in cgs with the unit for every library (ANEOS and SCvH printed the code-unit
+ * value unlabelled, which reads like g/cc), and every value labelled "(cgs units)" with its unit:
+ * ANEOS, SCvH and REOS3 printed bare numbers, igeos and Tillotson g/cc, erg/g, ...
  */
 static void checkPrintMatRho0(EOSMATERIAL *e)
 {
@@ -170,12 +171,27 @@ static void checkPrintMatRho0(EOSMATERIAL *e)
     rewind(fp);
     char line[512];
     double rho0 = -1.0;
+    int bRho0Unit = 0, nCgs = 0, nCgsNoUnit = 0;
     while (fgets(line, sizeof(line), fp) != NULL) {
         const char *p = strstr(line, "rho0 (cgs units):");
-        if (p != NULL) rho0 = atof(p + strlen("rho0 (cgs units):"));
+        if (p != NULL) {
+            char *end;
+            rho0 = strtod(p + strlen("rho0 (cgs units):"), &end);
+            bRho0Unit = (strncmp(end, " g/cc", 5) == 0);   /* the unit right after the number */
+        }
+        /* Every line labelled "(cgs units)" carries a unit (atof alone accepted a bare number). */
+        if (strstr(line, "(cgs units)") != NULL) {
+            nCgs++;
+            if (strstr(line, "g/cc") == NULL && strstr(line, "erg") == NULL && strstr(line, " K") == NULL) {
+                nCgsNoUnit++;
+                fprintf(stderr, "    no unit in: %s", line);
+            }
+        }
     }
     fclose(fp);
     CHECK_REL(rho0, e->rho0 * e->dGmPerCcUnit, 1e-5, "EOSPrintMat of %s: rho0 (cgs units)", e->MatString);
+    CHECK(bRho0Unit, "EOSPrintMat of %s: rho0 is not followed by \" g/cc\"", e->MatString);
+    CHECK(nCgs > 0 && nCgsNoUnit == 0, "EOSPrintMat of %s: %d of %d \"(cgs units)\" lines without a unit", e->MatString, nCgsNoUnit, nCgs);
 }
 
 /*
