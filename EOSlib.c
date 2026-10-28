@@ -659,7 +659,7 @@ double EOSSofRhoT(EOSMATERIAL *material, double rho, double T)
  * Yield strength parameters of a material in code units, gathered once per evaluation. Returns the
  * yield strength model:
  *   -2: no strength model exists for this EOS (Tillotson); EOSYieldStrength is fatal
- *   -1: no yield stress (ANEOS material without strength parameters or melt curve)
+ *   -1: no yield stress (ANEOS material without a strength file)
  *    0: no limiter (gases, or a strength file with model 0)
  *    1: pressure-dependent yield strength of intact material (Collins et al. 2004)
  *    2: pressure-dependent yield strength of damaged material

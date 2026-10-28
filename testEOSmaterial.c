@@ -386,8 +386,8 @@ static void testANEOSYield(EOSMATERIAL *e)
         double rho = sampleRho(m, NSAMPLE / 2), u = EOSUofRhoT(e, rho, sampleT(m, 1));
         CHECK(EOSYieldStrength(e, rho, u) == 0.0, "no strength model but Y != 0");
         /* Say so: an "ok" here covers only Y = 0, not the strength model. */
-        printf("\n    note: yield model %d (%s), strength checks skipped; provide %s_strength and _tmelt to run them\n  %-44s",
-               model, model == -1 ? "no strength file or melt curve" : "no limiter", m->matName, "");
+        printf("\n    note: yield model %d (%s), strength checks skipped (need <table>_strength and <table>_tmelt)\n  %-44s",
+               model, model == -1 ? "no strength file" : "no limiter", "");
         END_TEST();
         return;
     }
