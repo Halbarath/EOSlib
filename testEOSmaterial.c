@@ -1594,6 +1594,36 @@ static void testTillotsonTableStatus(EOSMATERIAL *e)
                   "tillIsBelowColdCurve %d vs EOSisbelowColdCurve %d at rho=%g u=%g", st, EOSisbelowColdCurve(e, rs[i], us[k]), rs[i], us[k]);
         }
     }
+    /*
+     * Below the cold curve means exactly: the lookup falls back to T = 0 (counted), the table status is
+     * OUTSIDE_VMIN (or, below rhomin, the state is unusable). Within roundoff below the cold curve
+     * (0.1 tillUTol) the state is on it, EOSisbelowColdCurve says FALSE; 10 tolerances below it says
+     * TRUE. Up to EOSlib 1.2.0 it compared u < u_cold and said TRUE for the first state, which is in
+     * the table, usable and inverted without a fallback.
+     */
+    {
+        const double rs[3] = { rhoOk, m->rho0, rhoLo };
+        for (int i = 0; i < 3; i++) {
+            const double uc = EOSUCold(e, rs[i]);
+            const double us[2] = { uc - 0.1*tillUTol(m, uc), uc - 10.0*tillUTol(m, uc) };
+            for (int k = 0; k < 2; k++) {
+                long n = m->nLookupFail;
+                int below = EOSisbelowColdCurve(e, rs[i], us[k]);
+                int st = EOSIsInTable(e, rs[i], us[k]), usable = EOSIsUsable(e, rs[i], us[k]);
+                CHECK(m->nLookupFail == n, "status queries counted at rho=%g u=%.17g", rs[i], us[k]);
+                (void) EOSTofRhoU(e, rs[i], us[k]);
+                int bFallback = (m->nLookupFail > n);
+                CHECK(below == (k ? EOS_TRUE : EOS_FALSE), "isbelowColdCurve = %d %s the cold curve at rho=%g",
+                      below, k ? "10 tolerances below" : "within roundoff of", rs[i]);
+                CHECK((below == EOS_TRUE) == bFallback, "isbelowColdCurve %d but T(rho, u) %s at rho=%g u=%.17g",
+                      below, bFallback ? "falls back" : "inverts", rs[i], us[k]);
+                CHECK((below == EOS_TRUE) == (usable == EOS_FALSE), "isbelowColdCurve %d vs EOSIsUsable %d at rho=%g", below, usable, rs[i]);
+                if (st != EOS_OUTSIDE_RHOMIN)
+                    CHECK((below == EOS_TRUE) == (st == EOS_OUTSIDE_VMIN), "isbelowColdCurve %d vs EOSIsInTable %d at rho=%g", below, st, rs[i]);
+                m->nLookupFail = n;
+            }
+        }
+    }
     CHECK(EOSisbelowColdCurve(e, rhoOk, NAN) == EOS_FAIL, "isbelowColdCurve for a NaN u");
     {
         /* Above rhomax the cold curve is not tabulated: undecidable, counted (was "not below"). */

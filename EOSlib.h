@@ -165,6 +165,11 @@
  *          EOSdPdRhoofRhoT and EOSdPdT for the ideal gas: (gamma-1) cv T and (gamma-1) rho cv
  *          (igeosdPdRhoofRhoT, igeosdPdTofRhoT); they were fatal (not implemented). Requires the
  *          igeos of this round (raise the required version when bumped).
+ *          EOSisbelowColdCurve for Tillotson uses tillIsBelowColdCurve, u < u_cold - tillUTol(u),
+ *          the tolerance of tillIsInTable, tillTempRhoU and EOSIsUsable; it compared u < u_cold and
+ *          said "below" for states within roundoff of the cold curve that EOSIsInTable reports
+ *          inside, EOSIsUsable accepts and T(rho, u) inverts without a fallback (needs the
+ *          tillIsBelowColdCurve of this round; raise the required version when bumped).
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -478,7 +483,8 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T);
  * be evaluated (rho outside the table) or u is not finite. Compare with == EOS_TRUE. For the
  * tabulated EOS "below" is the table status (EOSIsInTable == EOS_OUTSIDE_VMIN, the states that
  * fall back to T_min), which agrees with the lookup also where the cold rows of a table are
- * defective (M-ANEOS); for Tillotson and the ideal gas it is u < u_cold(rho).
+ * defective (M-ANEOS); for Tillotson it is u < u_cold(rho) - tillUTol(u), the roundoff tolerance of
+ * its table status and T(rho, u), and for the ideal gas u < 0.
  */
 int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u);
 

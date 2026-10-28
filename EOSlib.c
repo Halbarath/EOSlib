@@ -1039,8 +1039,12 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
  *     lie on the line at a slightly higher T, the lookup finds them without a fallback and
  *     EOSIsInTable reports EOS_SUCCESS, but this function said EOS_TRUE;
  *   - states within the edge tolerance below the first row, which the inversions clamp onto it.
- * Tillotson and the ideal gas have an analytic cold curve and keep u < u_cold(rho) (Tillotson
- * also below rho_min, where u_cold = 0 and EOSIsInTable reports EOS_OUTSIDE_RHOMIN).
+ * Tillotson and the ideal gas have an analytic cold curve. Tillotson uses tillIsBelowColdCurve,
+ * u < u_cold(rho) - tillUTol(u), the roundoff tolerance of tillIsInTable, tillTempRhoU and
+ * EOSIsUsable (also below rho_min, where u_cold = 0 and EOSIsInTable reports EOS_OUTSIDE_RHOMIN):
+ * up to 1.2.0 it compared u < u_cold without a tolerance and said "below" for states within
+ * roundoff of the cold curve that are in the table, usable and inverted without a fallback. The
+ * ideal gas keeps u < 0, exactly where igeos falls back to T = 0.
  *
  * Required: ballic
  */
@@ -1062,6 +1066,12 @@ int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u)
         EOS_WARN("EOSisbelowColdCurve: table status %d at rho= %g u= %g (material %d).\n", st, rho, u, material->iMat);
         return EOS_FAIL;
     }
+#ifdef HAVE_TILLOTSON_H
+    if (material->matType == EOSTILLOTSON) {
+        /* rho and u are valid here (u_cold succeeded, u finite), so this is 1 or 0, never TILL_FAIL. */
+        return (tillIsBelowColdCurve(material->tillmaterial, rho, u) == 1) ? EOS_TRUE : EOS_FALSE;
+    }
+#endif
     return (u < ucold) ? EOS_TRUE : EOS_FALSE;
 }
 
