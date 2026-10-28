@@ -1580,6 +1580,37 @@ static void testTillotsonTableStatus(EOSMATERIAL *e)
     CHECK(EOSIsUsable(e, rhoOk, INFINITY) == EOS_FALSE, "not usable for +inf u");
     CHECK(isfinite(EOSPofRhoU(e, rhoOk, uHuge)), "P above the table is finite");
     CHECK(isfinite(EOSCofRhoU(e, rhoOk, uHuge)), "c above the table is finite");
+    /*
+     * The Tillotson exception of the failure contract (EOSlib.h): P, c and the (rho, u) derivatives
+     * are analytic, evaluated at the given (rho, u) below the cold curve, below rhomin and above
+     * rhomax, and count nothing; EOSIsUsable is what tells the caller whether P, c and T belong
+     * together. Below the cold curve P(rho, u) is therefore not P(rho, T(rho, u) = 0).
+     */
+    {
+        const double rs[3] = { rhoOk, rhoLo, rhoHi };
+        const double ub[3] = { 0.5 * ucold, -1e-3 * uOk, uOk };   /* below the cold curve, u < 0, any u */
+        const int usable[3] = { EOS_FALSE, EOS_FALSE, EOS_FALSE };
+        for (int i = 0; i < 3; i++) {
+            const double rho = rs[i], u = ub[i];
+            long n = m->nLookupFail;
+            double c, c2, T;
+            double P = EOSPofRhoU(e, rho, u), Pc = EOSPCofRhoU(e, rho, u, &c2);
+            double dPdRho = EOSdPdRho(e, rho, u), dPdU = EOSdPdU(e, rho, u), dUdRho = EOSdUdRho(e, rho, u);
+            CHECK(m->nLookupFail == n, "Tillotson P, c, derivatives counted at rho=%g u=%g (%ld)", rho, u, m->nLookupFail - n);
+            CHECK(P == tillPressure(m, rho, u) && Pc == P, "Tillotson P(rho, u) at the given state, rho=%g u=%g", rho, u);
+            CHECK(EOSCofRhoU(e, rho, u) == tillSoundSpeed(m, rho, u) && c2 == tillSoundSpeed(m, rho, u), "Tillotson c(rho, u) at the given state, rho=%g", rho);
+            CHECK(dPdRho == tilldPdrho(m, rho, u) && dPdU == tilldPdu(m, rho, u) && dUdRho == tilldudrho(m, rho, u),
+                  "Tillotson (rho, u) derivatives at the given state, rho=%g", rho);
+            CHECK(isfinite(P) && P >= 0.0 && isfinite(c2) && c2 > 0.0, "Tillotson P, c finite at rho=%g u=%g: %g %g", rho, u, P, c2);
+            /* The fused lookup: P and c as above, T the counted fallback 0. */
+            n = m->nLookupFail;
+            CHECK(EOSPCTofRhoU(e, rho, u, &c, &T) == P && c == c2 && T == 0.0, "Tillotson PCT at rho=%g u=%g: T=%g", rho, u, T);
+            CHECK(m->nLookupFail == n + 1, "Tillotson PCT: only the T fallback counted at rho=%g (%ld)", rho, m->nLookupFail - n);
+            CHECK(EOSIsUsable(e, rho, u) == usable[i], "Tillotson usable at rho=%g u=%g", rho, u);
+        }
+        /* Below the cold curve with dP/du > 0 (compressed): P(rho, u) lies below P(rho, T = 0) = P(rho, u_cold). */
+        CHECK(EOSPofRhoU(e, rhoOk, 0.5 * ucold) < EOSPofRhoT(e, rhoOk, 0.0), "Tillotson P below the cold curve is not P(rho, T = 0)");
+    }
     CHECK(EOSisbelowColdCurve(e, rhoOk, 0.5 * ucold) == EOS_TRUE, "below cold curve");
     CHECK(EOSisbelowColdCurve(e, rhoOk, uOk) == EOS_FALSE, "above cold curve");
     CHECK(EOSisbelowColdCurve(e, rhoLo, -1.0) == EOS_TRUE, "below cold curve below rhomin (u_cold = 0)");

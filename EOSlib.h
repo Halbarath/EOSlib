@@ -170,6 +170,10 @@
  *          said "below" for states within roundoff of the cold curve that EOSIsInTable reports
  *          inside, EOSIsUsable accepts and T(rho, u) inverts without a fallback (needs the
  *          tillIsBelowColdCurve of this round; raise the required version when bumped).
+ *          The failure contract names the Tillotson exception: P, c and the (rho, u) derivatives are
+ *          analytic and evaluated at the given (rho, u) also below the cold curve and outside the
+ *          table, uncounted (the contract said every (rho, u) function evaluates such a state at
+ *          (rho, T_min) and every out-of-table state returns the sentinel). No change in behaviour.
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -321,6 +325,18 @@
  * this. A state below the cold curve (u < u(rho, T_min); u < 0 for the ideal
  * gas) is evaluated at (rho, T_min) by every (rho, u) function. Status
  * functions return EOS_FAIL or an EOS_OUTSIDE_* code.
+ *
+ * Exception, Tillotson: its pressure is an analytic function of (rho, u),
+ * so EOSPofRhoU, EOSCofRhoU, EOSPCofRhoU, the P and c of EOSPCTofRhoU,
+ * EOSdPdRho, EOSdPdU and EOSdUdRho are evaluated at the given (rho, u)
+ * everywhere: below the cold curve (u < 0 enters the Grueneisen term as
+ * Gamma = a + b), below rho_min and above rho_max. They never fail, never
+ * fall back and are not counted. Only the functions that need the cold curve
+ * fall back or fail there (T(rho, u) gives 0, counted; u(rho, T), P(rho, T),
+ * rho(P, T) and u_cold give EOS_FAIL_VALUE above rho_max, counted), so below
+ * the cold curve P(rho, u) is not P(rho, T(rho, u)). Whether P, c and T of a
+ * state belong together is what EOSIsUsable reports: EOS_FALSE below the
+ * cold curve and above rho_max, for Tillotson as for every other library.
  *
  * Every failure and every fallback is counted in the sublibrary's
  * nLookupFail (printed by EOSPrintMat for every library), once per call: a

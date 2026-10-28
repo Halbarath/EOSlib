@@ -318,6 +318,10 @@ void EOSPrintMat(EOSMATERIAL *material, FILE *fp)
 /*
  * Calculates the pressure P(rho,u) for a material
  *
+ * For Tillotson P is analytic and evaluated at the given (rho, u) also below the cold curve and
+ * outside the table, uncounted (the Tillotson exception of the failure contract in EOSlib.h; the
+ * same for c and the (rho, u) derivatives below).
+ *
  * Required: all
  */
 double EOSPofRhoU(EOSMATERIAL *material, double rho, double u)
