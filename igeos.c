@@ -210,6 +210,31 @@ double igeosdPdU(IGEOSMAT *Mat, double rho, double u) {
 }
 
 /*
+ * The (rho, T) derivatives of P = (gamma-1) rho cv T: dP/drho|T = (gamma-1) cv T and
+ * dP/dT|rho = (gamma-1) rho cv. Same domain as igeosPofRhoT: IGEOS_FAIL_VALUE (counted) for
+ * T < 0 or NaN, T = 0 (the cold curve) is valid. Up to 1.1.0 EOSdPdRhoofRhoT and EOSdPdT were
+ * fatal (not implemented) for the ideal gas.
+ */
+double igeosdPdRhoofRhoT(IGEOSMAT *Mat, double rho, double T) {
+    (void) rho;
+    if (!(T >= 0.0)) {
+        Mat->nLookupFail++;
+        IGEOS_WARN("igeosdPdRhoofRhoT: T= %g < 0 (iMat= %i).\n", T, Mat->iMat);
+        return IGEOS_FAIL_VALUE;
+    }
+    return (Mat->dConstGamma-1.0)*Mat->cv*T;
+}
+
+double igeosdPdTofRhoT(IGEOSMAT *Mat, double rho, double T) {
+    if (!(T >= 0.0)) {
+        Mat->nLookupFail++;
+        IGEOS_WARN("igeosdPdTofRhoT: T= %g < 0 (iMat= %i).\n", T, Mat->iMat);
+        return IGEOS_FAIL_VALUE;
+    }
+    return (Mat->dConstGamma-1.0)*rho*Mat->cv;
+}
+
+/*
  * Calculate the specific entropy s(rho, T) of an ideal gas with constant cv:
  *
  *   s = cv*ln(T) - (gamma-1)*cv*ln(rho) + const

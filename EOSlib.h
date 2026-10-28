@@ -156,12 +156,15 @@
  *          (EOS_SOLVEBC_PROBE). A root within EOS_SOLVEBC_SLOPE_WIDTH of a kink of a continuous P2
  *          (Tillotson at rho0 near T = 0: P cut off at 0 below, the stiff cold curve above) was
  *          rejected as discontinuous whenever the reference bracket straddled the kink; with the
- *          old brackets this happened not to be the case for the states tested.
+ *          old brackets this happened not to be the case for the states tested. 
  *          EOSinitIsentropicLookup for REOS3 prints its note only under EOSLIB_VERBOSE (it printed
  *          "entropy lookup table not implemented" on every call). With the reos3 and scvheos of this
  *          round EOSinitMaterial is silent unless compiled with -DEOSLIB_VERBOSE; EOSPrintMat prints
  *          dimensional values in cgs with the unit for every library (igeos and Tillotson printed
  *          code units without a label).
+ *          EOSdPdRhoofRhoT and EOSdPdT for the ideal gas: (gamma-1) cv T and (gamma-1) rho cv
+ *          (igeosdPdRhoofRhoT, igeosdPdTofRhoT); they were fatal (not implemented). Requires the
+ *          igeos of this round (raise the required version when bumped).
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -326,8 +329,8 @@
  * Fatal (message on stderr, then assert(0); exit(1)): initialisation errors
  * (unknown material, missing or defective table, version mismatch) and
  * calling a function that is not implemented for the material (EOSRhoofUT
- * for all but ANEOS, EOSIsentropic for REOS3, EOSdPdRhoofRhoT/EOSdPdT for the
- * analytic EOS, EOSGammaofRhoT/EOSYieldStrength for Tillotson); those are
+ * for all but ANEOS, EOSIsentropic for REOS3, EOSdPdRhoofRhoT/EOSdPdT for
+ * Tillotson, EOSGammaofRhoT/EOSYieldStrength for Tillotson); those are
  * programming errors, not lookup failures. The assert(0) comes first on
  * purpose: in an MPI run a plain exit() on one rank can leave the others
  * waiting in a collective and the job hangs, while SIGABRT makes the
@@ -501,6 +504,11 @@ double EOSdPdU(EOSMATERIAL *material, double rho, double u);
 /* du/drho|_s = P/rho^2; EOS_FAIL_VALUE where P(rho, u) fails. */
 double EOSdUdRho(EOSMATERIAL *material, double rho, double u);
 
+/*
+ * dP/drho at constant T and dP/dT at constant rho. Analytic for the ideal gas ((gamma-1) cv T and
+ * (gamma-1) rho cv, EOS_FAIL_VALUE for T < 0), from the tables for ANEOS, REOS3 and SCvH; not
+ * implemented (fatal) for Tillotson.
+ */
 double EOSdPdRhoofRhoT(EOSMATERIAL *material, double rho, double T);
 double EOSdPdT(EOSMATERIAL *material, double rho, double T);
 

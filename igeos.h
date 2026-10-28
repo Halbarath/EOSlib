@@ -26,6 +26,8 @@
  *          igeosPCofRhoU and igeosTofRhoU).
  *          igeosPrintMat prints rho0 and cv in cgs with the unit and the unit pair,
  *          like the tabulated libraries (it printed code-unit values unlabelled).
+ *          New igeosdPdRhoofRhoT and igeosdPdTofRhoT (the analytic (rho, T) derivatives, for
+ *          EOSdPdRhoofRhoT and EOSdPdT, which were fatal for the ideal gas).
  */
 #define IGEOS_VERSION_TEXT    "1.1.0"
 #define IGEOS_VERSION_MAJOR   1
@@ -111,6 +113,9 @@ double igeosRhoofPT(IGEOSMAT *Mat, double P, double T);
 double igeosRhoofUT(IGEOSMAT *Mat, double U, double T);
 double igeosdPdRho(IGEOSMAT *Mat, double rho, double u);
 double igeosdPdU(IGEOSMAT *Mat, double rho, double u);
+/* dP/drho|T = (gamma-1) cv T and dP/dT|rho = (gamma-1) rho cv; IGEOS_FAIL_VALUE (counted) for T < 0 or NaN, like igeosPofRhoT. */
+double igeosdPdRhoofRhoT(IGEOSMAT *Mat, double rho, double T);
+double igeosdPdTofRhoT(IGEOSMAT *Mat, double rho, double T);
 double igeosSofRhoU(IGEOSMAT *Mat, double rho, double u);
 double igeosSofRhoT(IGEOSMAT *Mat, double rho, double T);
 

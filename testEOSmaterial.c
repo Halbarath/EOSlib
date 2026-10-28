@@ -265,6 +265,19 @@ static void testIdealGas(double dKpcUnit, double dMsolUnit)
         CHECK_REL(EOSdPdRho(g, rho, u), gm1 * u, 1e-14, "dP/drho");
         CHECK_REL(EOSdPdU(g, rho, u), gm1 * rho, 1e-14, "dP/du");
         CHECK_REL(EOSdUdRho(g, rho, u), P / (rho * rho), 1e-14, "du/drho");
+        /* (rho, T) derivatives: closed form, and against central differences of P(rho, T) (P is
+         * linear in rho and in T, so the differences are exact up to roundoff). */
+        {
+            const double cv = g->igeosmaterial->cv, hr = 1e-3 * rho, hT = 1e-3 * T;
+            CHECK_REL(EOSdPdRhoofRhoT(g, rho, T), gm1 * cv * T, 1e-14, "dP/drho|T rho=%g T=%g", rho, T);
+            CHECK_REL(EOSdPdT(g, rho, T), gm1 * rho * cv, 1e-14, "dP/dT|rho rho=%g T=%g", rho, T);
+            CHECK_REL(EOSdPdRhoofRhoT(g, rho, T), (EOSPofRhoT(g, rho + hr, T) - EOSPofRhoT(g, rho - hr, T)) / (2.0 * hr), 1e-9, "dP/drho|T vs P(rho, T)");
+            CHECK_REL(EOSdPdT(g, rho, T), (EOSPofRhoT(g, rho, T + hT) - EOSPofRhoT(g, rho, T - hT)) / (2.0 * hT), 1e-9, "dP/dT|rho vs P(rho, T)");
+            /* Thermodynamic consistency with the (rho, u) derivatives: dP/drho|T = dP/drho|u
+             * (u depends on T only) and dP/dT|rho = cv dP/du|rho. */
+            CHECK_REL(EOSdPdRhoofRhoT(g, rho, T), EOSdPdRho(g, rho, u), 1e-13, "dP/drho|T = dP/drho|u");
+            CHECK_REL(EOSdPdT(g, rho, T), cv * EOSdPdU(g, rho, u), 1e-13, "dP/dT = cv dP/du");
+        }
         /* Isentrope: u2/u1 = (rho2/rho1)^(gamma-1), and entropy is conserved. */
         double rho2 = 2.0 * rho;
         double u2 = EOSIsentropic(g, rho, u, rho2);
@@ -285,6 +298,13 @@ static void testIdealGas(double dKpcUnit, double dMsolUnit)
         CHECK(EOSFailed(EOSSofRhoU(g, 1.0, -1.0)), "gas: s(rho, u < 0)");
         CHECK(g->igeosmaterial->nLookupFail == nf + 4, "gas: entropy failures counted (%ld -> %ld)", nf, g->igeosmaterial->nLookupFail);
         CHECK(!EOSFailed(EOSSofRhoT(g, 1.0, 300.0)) && g->igeosmaterial->nLookupFail == nf + 4, "gas: a valid entropy is not counted");
+        /* The (rho, T) derivatives: T < 0 or NaN fails (counted once each), T = 0 is the cold curve. */
+        CHECK(EOSFailed(EOSdPdRhoofRhoT(g, 1.0, -1.0)) && EOSFailed(EOSdPdT(g, 1.0, -1.0)), "gas: (rho, T) derivatives at T < 0");
+        CHECK(EOSFailed(EOSdPdRhoofRhoT(g, 1.0, NAN)) && EOSFailed(EOSdPdT(g, 1.0, NAN)), "gas: (rho, T) derivatives at a NaN T");
+        CHECK(g->igeosmaterial->nLookupFail == nf + 8, "gas: (rho, T) derivative failures counted (%ld)", g->igeosmaterial->nLookupFail - nf - 4);
+        CHECK(EOSdPdRhoofRhoT(g, 2.0, 0.0) == 0.0 && EOSdPdT(g, 2.0, 0.0) == (par.dConstGamma - 1.0) * 2.0 * g->igeosmaterial->cv,
+              "gas: (rho, T) derivatives at T = 0");
+        CHECK(g->igeosmaterial->nLookupFail == nf + 8, "gas: valid (rho, T) derivatives counted");
     }
     /* The cold curve of a gas is u = 0 everywhere; a non-finite u is undecidable. */
     CHECK(EOSisbelowColdCurve(g, 1.0, -1.0) == EOS_TRUE && EOSisbelowColdCurve(g, 1.0, 1.0) == EOS_FALSE, "gas: isbelowColdCurve");

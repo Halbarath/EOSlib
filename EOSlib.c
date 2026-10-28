@@ -1311,7 +1311,7 @@ double EOSdPdRhoofRhoT(EOSMATERIAL *material, double rho, double T)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            EOS_NOT_IMPLEMENTED(material);
+            dPdRho = igeosdPdRhoofRhoT(material->igeosmaterial, rho, T);
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
@@ -1350,7 +1350,7 @@ double EOSdPdT(EOSMATERIAL *material, double rho, double T)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            EOS_NOT_IMPLEMENTED(material);
+            dPdT = igeosdPdTofRhoT(material->igeosmaterial, rho, T);
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
