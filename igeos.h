@@ -24,6 +24,8 @@
  *          density before), the isentrope for rho1 or rho2 <= 0; all counted.
  *          New igeosPCTofRhoU (EOSPCTofRhoU counted a state twice through
  *          igeosPCofRhoU and igeosTofRhoU).
+ *          igeosPrintMat prints rho0 and cv in cgs with the unit and the unit pair,
+ *          like the tabulated libraries (it printed code-unit values unlabelled).
  */
 #define IGEOS_VERSION_TEXT    "1.1.0"
 #define IGEOS_VERSION_MAJOR   1

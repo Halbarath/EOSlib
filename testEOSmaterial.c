@@ -178,6 +178,62 @@ static void checkPrintMatRho0(EOSMATERIAL *e)
     CHECK_REL(rho0, e->rho0 * e->dGmPerCcUnit, 1e-5, "EOSPrintMat of %s: rho0 (cgs units)", e->MatString);
 }
 
+/*
+ * Output of a call on stderr: stderr is redirected to a temporary file while the call runs.
+ * Initialisation must be silent unless the library is compiled with -DEOSLIB_VERBOSE: with one
+ * material instance per thread every message appeared 64 times (reos3 printed the table name, uRef
+ * and the unit conversion, reos3 and scvheos their monotonicity reports and sound speed repairs,
+ * EOSinitIsentropicLookup a REOS3 note on every call, up to EOSlib 1.2.0).
+ */
+static FILE *stderrCaptureBegin(int *pfdSaved)
+{
+    FILE *fp = tmpfile();
+    fflush(stderr);
+    *pfdSaved = dup(fileno(stderr));
+    if (fp == NULL || *pfdSaved < 0) return fp;
+    dup2(fileno(fp), fileno(stderr));
+    return fp;
+}
+
+/* Restores stderr; returns the number of bytes written to it in between (echoed if any). */
+static long stderrCaptureEnd(FILE *fp, int fdSaved)
+{
+    long n = 0;
+    fflush(stderr);
+    if (fdSaved >= 0) { dup2(fdSaved, fileno(stderr)); close(fdSaved); }
+    if (fp == NULL) return 0;
+    fseek(fp, 0, SEEK_END);
+    n = ftell(fp);
+    if (n > 0) {
+        char line[512];
+        rewind(fp);
+        fprintf(stderr, "    captured stderr:\n");
+        while (fgets(line, sizeof(line), fp) != NULL) fprintf(stderr, "      %s", line);
+    }
+    fclose(fp);
+    return n;
+}
+
+static EOSMATERIAL *initQuiet(int iMat, double dKpcUnit, double dMsolUnit, const void *add, int bIsentrope)
+{
+    int fd;
+    FILE *fp = stderrCaptureBegin(&fd);
+    EOSMATERIAL *e = EOSinitMaterial(iMat, dKpcUnit, dMsolUnit, add);
+    if (bIsentrope) { EOSinitIsentropicLookup(e, NULL); EOSinitIsentropicLookup(e, NULL); }
+    long n = stderrCaptureEnd(fp, fd);
+#ifndef EOSLIB_VERBOSE
+    {
+        int failsBefore = nFails;
+        TEST("silent initialisation");
+        CHECK(n == 0, "EOSinitMaterial(%d)%s wrote %ld bytes to stderr", iMat, bIsentrope ? " + EOSinitIsentropicLookup" : "", n);
+        END_TEST();
+    }
+#else
+    (void) n;
+#endif
+    return e;
+}
+
 static void testIdealGas(double dKpcUnit, double dMsolUnit)
 {
     int failsBefore = nFails;
@@ -286,6 +342,7 @@ static void testIdealGas(double dKpcUnit, double dMsolUnit)
 #undef GAS_ONCE
     }
     checkPrintMatCounter(g, g->igeosmaterial->nLookupFail);
+    checkPrintMatRho0(g);
     EOSfinalizeMaterial(g);
     END_TEST();
 }
@@ -954,7 +1011,7 @@ static void testREOS3Dispatch(EOSMATERIAL *e)
     CHECK(EOSGammaofRhoT(e, reos3SampleRho(r, 1), reos3SampleT(r, 1)) == 0.0, "shear modulus for gas");
     CHECK(EOSSofRhoU(e, reos3SampleRho(r, 1), 1.0) == EOS_FAIL_VALUE, "entropy sentinel (rho,u)");
     CHECK(EOSSofRhoT(e, reos3SampleRho(r, 1), reos3SampleT(r, 1)) == EOS_FAIL_VALUE, "entropy sentinel (rho,T)");
-    /* EOSinitIsentropicLookup only warns for REOS3 (not implemented). */
+    /* EOSinitIsentropicLookup has nothing to build for REOS3 (a note under EOSLIB_VERBOSE only). */
     EOSinitIsentropicLookup(e, NULL);
     CHECK(!e->bEntropyTableInit, "isentropic lookup must stay uninitialised");
 
@@ -1928,14 +1985,16 @@ static void testTillotson(double dKpcUnit, double dMsolUnit)
     /* Iron (2) and granite (1): the two Tillotson materials with a unique
      * rho(P, T) in the condensed region; ice and water are not (intermediate region).
      * EOSIsentropic is used below, so the isentrope table is built (EOSinitIsentropicLookup). */
-    EOSMATERIAL *iron = EOSinitMaterial(2, dKpcUnit, dMsolUnit, NULL);
-    EOSMATERIAL *granite = EOSinitMaterial(1, dKpcUnit, dMsolUnit, NULL);
+    EOSMATERIAL *iron = initQuiet(2, dKpcUnit, dMsolUnit, NULL, 0);
+    EOSMATERIAL *granite = initQuiet(1, dKpcUnit, dMsolUnit, NULL, 0);
     EOSinitIsentropicLookup(iron, NULL);
     EOSinitIsentropicLookup(granite, NULL);
     printf("  T1: %s  T2: %s\n", granite->MatString, iron->MatString);
     testTillotsonDispatch(granite);
     testTillotsonDispatch(iron);
     checkPrintMatCounter(granite, granite->tillmaterial->nLookupFail);
+    checkPrintMatRho0(granite);
+    checkPrintMatRho0(iron);
     testTillotsonTableStatus(granite);
     testTillotsonTableStatus(iron);
     CHECK(iron->rho0 > granite->rho0, "iron must be denser than granite");
@@ -2072,8 +2131,8 @@ int main(int argc, char *argv[])
     testUnitPair(MAT_IDEALGAS);
 
 #ifdef HAVE_ANEOSMATERIAL_H
-    EOSMATERIAL *A = EOSinitMaterial(iMatA, dKpcUnit, dMsolUnit, NULL);
-    EOSMATERIAL *B = EOSinitMaterial(iMatB, dKpcUnit, dMsolUnit, NULL);
+    EOSMATERIAL *A = initQuiet(iMatA, dKpcUnit, dMsolUnit, NULL, 0);
+    EOSMATERIAL *B = initQuiet(iMatB, dKpcUnit, dMsolUnit, NULL, 0);
     EOSinitIsentropicLookup(A, NULL);
     EOSinitIsentropicLookup(B, NULL);
     printf("  A: %s  B: %s\n", A->MatString, B->MatString);
@@ -2106,7 +2165,7 @@ int main(int argc, char *argv[])
 
 #ifdef HAVE_SCVHEOS_H
     if (iMatSCVH > 0) {
-        EOSMATERIAL *S = EOSinitMaterial(iMatSCVH, dKpcUnit, dMsolUnit, NULL);
+        EOSMATERIAL *S = initQuiet(iMatSCVH, dKpcUnit, dMsolUnit, NULL, 1);
         printf("  S: %s\n", S->MatString);
         testSCVHDispatch(S);
         testSCVHTableStatus(S);
@@ -2130,7 +2189,7 @@ int main(int argc, char *argv[])
 
 #ifdef HAVE_REOS3_H
     if (iMatREOS3 > 0) {
-        EOSMATERIAL *R = EOSinitMaterial(iMatREOS3, dKpcUnit, dMsolUnit, NULL);
+        EOSMATERIAL *R = initQuiet(iMatREOS3, dKpcUnit, dMsolUnit, NULL, 1);
         printf("  R: %s\n", R->MatString);
         testREOS3Dispatch(R);
         testREOS3Extrapolation(R);

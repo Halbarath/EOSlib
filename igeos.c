@@ -81,12 +81,13 @@ int igeosFinalizeMat(IGEOSMAT *Mat) {
 void igeosPrintMat(IGEOSMAT *Mat, FILE *fp) {
     assert(Mat != NULL);
 
+    /* Dimensional values in cgs with the unit, like ANEOSPrintMat, scvheosPrintMat and reos3PrintMat. */
     fprintf(fp,"# Material: %i (IDEALGAS)\n", Mat->iMat);
-
+    fprintf(fp,"# dKpcUnit: %g dMsolUnit: %g\n", Mat->dKpcUnit, Mat->dMsolUnit);
     fprintf(fp,"# dConstGamma:  %g\n", Mat->dConstGamma);
-    fprintf(fp,"# dMeanMolMass: %g\n", Mat->dMeanMolMass);
-    fprintf(fp,"# rho0:         %g\n", Mat->rho0);
-    fprintf(fp,"# cv:           %g\n", Mat->cv);
+    fprintf(fp,"# dMeanMolMass: %g (in m_H)\n", Mat->dMeanMolMass);
+    fprintf(fp,"# Reference density rho0 (cgs units): %g g/cc\n", Mat->rho0*Mat->dGmPerCcUnit);
+    fprintf(fp,"# cv (cgs units): %g erg/g/K\n", Mat->cv*Mat->dErgPerGmUnit);
     fprintf(fp,"# Failed lookups and fallbacks (nLookupFail): %ld\n", Mat->nLookupFail);
 }
 

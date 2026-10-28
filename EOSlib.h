@@ -157,6 +157,11 @@
  *          (Tillotson at rho0 near T = 0: P cut off at 0 below, the stiff cold curve above) was
  *          rejected as discontinuous whenever the reference bracket straddled the kink; with the
  *          old brackets this happened not to be the case for the states tested.
+ *          EOSinitIsentropicLookup for REOS3 prints its note only under EOSLIB_VERBOSE (it printed
+ *          "entropy lookup table not implemented" on every call). With the reos3 and scvheos of this
+ *          round EOSinitMaterial is silent unless compiled with -DEOSLIB_VERBOSE; EOSPrintMat prints
+ *          dimensional values in cgs with the unit for every library (igeos and Tillotson printed
+ *          code units without a label).
  */
 
 #ifndef EOSLIB_HINCLUDED

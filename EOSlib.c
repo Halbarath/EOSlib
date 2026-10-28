@@ -224,8 +224,12 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            // Not implemented yet: warn, do not fail.
-            fprintf(stderr, "REOS3: Warning entropy lookup table not implemented yet.\n");
+            /*
+             * No entropy table: nothing to build, EOSIsentropic is fatal for REOS3 (documented) and
+             * bEntropyTableInit stays EOS_FALSE. Reported only under EOSLIB_VERBOSE: the message was
+             * printed unconditionally on every call, once per instance and thread.
+             */
+            EOS_WARN("EOSinitIsentropicLookup: REOS3 (material %d) has no entropy table, EOSIsentropic is not available.\n", material->iMat);
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
