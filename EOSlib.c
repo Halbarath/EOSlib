@@ -1185,7 +1185,10 @@ double EOSdPdU(EOSMATERIAL *material, double rho, double u)
 }
 
 /*
- * Calculates the derivative dudrho(rho,u) for a material
+ * Calculates the derivative dudrho(rho,u) = P/rho^2 for a material
+ * (EOS_FAIL_VALUE where P(rho, u) fails: tabulated EOS outside the table).
+ * The sentinel is passed on as it is, never divided by rho^2 (ANEOS and SCvH
+ * did that up to 1.2.0; igeos and Tillotson have an analytic P).
  *
  * Required: ballic
  */
@@ -1214,7 +1217,11 @@ double EOSdUdRho(EOSMATERIAL *material, double rho, double u)
 #endif
 #ifdef HAVE_SCVHEOS_H
         case EOSSCVHEOS:
-            dUdRho = scvheosPofRhoU(material->scvheosmaterial, rho, u) / (rho * rho);
+            {
+                /* No scvheosdUdRhoofRhoU: check the failed P here (see reos3dUdRhoofRhoU). */
+                double P = scvheosPofRhoU(material->scvheosmaterial, rho, u);
+                dUdRho = EOSFailed(P) ? EOS_FAIL_VALUE : P / (rho * rho);
+            }
             break;
 #endif
         default: EOS_UNKNOWN_MATERIAL(material);

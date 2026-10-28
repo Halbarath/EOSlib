@@ -986,6 +986,10 @@ static void testFailureContract(EOSMATERIAL *e, double rhoOk, double uOk, double
     CHECK(EOSFailed(EOSPofRhoT(e, rhoHi, TMin)), "P(rho, T) above rhoMax");
     CHECK(EOSFailed(EOSdPdRho(e, rhoHi, uOk)), "dP/drho above rhoMax");
     CHECK(EOSFailed(EOSdPdU(e, rhoHi, uOk)), "dP/du above rhoMax");
+    /* Exactly the sentinel: ANEOS and SCvH divided it by rho^2 up to 1.2.0 (-1e50/rho^2, for
+     * rho > 1e5 not even EOSFailed). */
+    CHECK(EOSdUdRho(e, rhoHi, uOk) == EOS_FAIL_VALUE, "du/drho above rhoMax = %g", EOSdUdRho(e, rhoHi, uOk));
+    CHECK(EOSdUdRho(e, 1e6 * rhoHi, uOk) == EOS_FAIL_VALUE, "du/drho at 1e6 rhoMax = %g", EOSdUdRho(e, 1e6 * rhoHi, uOk));
     CHECK_REL(EOSTofRhoU(e, rhoHi, uOk), TMin, 1e-12, "T(rho, u) above rhoMax falls back to T_min");
     CHECK_REL(EOSTofRhoU(e, rhoOk, uHi), TMin, 1e-12, "T(rho, u) above the column falls back to T_min");
     CHECK_REL(EOSPofRhoU(e, rhoOk, uHi), EOSPofRhoT(e, rhoOk, TMin), 1e-12, "P(rho, u) above the column = P(rho, T_min)");

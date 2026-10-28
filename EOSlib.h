@@ -89,6 +89,8 @@
  *          EOSSolveBC fails at once for a failed state in material 1 (P = EOS_FAIL_VALUE, e.g.
  *          rho1 outside its table); isfinite(P) let the sentinel through as the target
  *          pressure, and the solver failed only after shrinking the lower bracket.
+ *          EOSdUdRho returns EOS_FAIL_VALUE where P(rho, u) fails; for ANEOS and SCvH it
+ *          returned -1e50/rho^2 (not the sentinel, for rho > 1e5 not even EOSFailed).
  *          EOSYieldStrength and EOSYieldStrengthofRhoTP return EOS_FAIL_VALUE for a failed
  *          pressure (models 1 and 2): the tension clamp max(P, 0) turned P = EOS_FAIL_VALUE
  *          into P_eff = 0 and a finite Y0 * f(T) for a state outside the table.
@@ -388,6 +390,7 @@ int EOSIsUsable(EOSMATERIAL *material, double rho, double u);
 // Derivatives
 double EOSdPdRho(EOSMATERIAL *material, double rho, double u);
 double EOSdPdU(EOSMATERIAL *material, double rho, double u);
+/* du/drho|_s = P/rho^2; EOS_FAIL_VALUE where P(rho, u) fails. */
 double EOSdUdRho(EOSMATERIAL *material, double rho, double u);
 
 double EOSdPdRhoofRhoT(EOSMATERIAL *material, double rho, double T);
