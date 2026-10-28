@@ -1119,14 +1119,17 @@ static void testFailureContract(EOSMATERIAL *e, double rhoOk, double uOk, double
 
 /*
  * EOSSolveBC with a failed state in material 1 (rho1 above its table, P = EOS_FAIL_VALUE) must
- * fail and leave the outputs untouched. Material 2 is an ideal gas, valid at every density, so
+ * fail and leave the outputs untouched. So must a fallback state (u above the column or below the
+ * cold curve at a valid rho1): its P and T are finite, those of (rho1, T_min), and up to EOSlib
+ * 1.2.0 before the fix the solver matched that target in the ideal gas and returned EOS_SUCCESS. Material 2 is an ideal gas, valid at every density, so
  * the solver is not stopped by material 2 leaving its table: up to EOSlib 1.2.0 before the fix
  * isfinite(P) took the sentinel as the target pressure and the lower bracket shrank
  * EOS_SOLVEBC_MAX_EXPAND times before the solver failed. The return value was EOS_FAIL then
  * as well, so this pins the contract (a failed target can never give a solution); the
  * early exit itself is not observable through the API.
  */
-static void testSolveBCFailedState(EOSMATERIAL *e, double rhoHi, double uOk, double dKpcUnit, double dMsolUnit, long *pnLookupFail)
+static void testSolveBCFailedState(EOSMATERIAL *e, double rhoHi, double rhoOk, double uOk, double uHi,
+                                   double dKpcUnit, double dMsolUnit, long *pnLookupFail)
 {
     int failsBefore = nFails;
     TEST("EOSSolveBC: failed state in material 1");
@@ -1146,6 +1149,22 @@ static void testSolveBCFailedState(EOSMATERIAL *e, double rhoHi, double uOk, dou
         double rho2 = -1.0, u2 = -1.0;
         CHECK(EOSSolveBC(e, gas, rhoHi, NAN, &rho2, &u2, 0.0) == EOS_FAIL, "NaN u1 must fail");
         CHECK(rho2 == -1.0 && u2 == -1.0, "outputs touched for a NaN u1");
+    }
+    /* Fallback states at a valid rho1: above the column and below the cold curve. */
+    {
+        const double us[2] = { uHi, belowColdCurve(e, rhoOk) };
+        const char *what[2] = { "u1 above the column", "u1 below the cold curve" };
+        for (int q = 0; q < 2; q++) {
+            double rho2 = -1.0, u2 = -1.0;
+            CHECK(EOSIsUsable(e, rhoOk, us[q]) == EOS_FALSE, "%s is usable", what[q]);
+            CHECK(!EOSFailed(EOSPofRhoU(e, rhoOk, us[q])), "%s: P is the fallback, not the sentinel", what[q]);
+            int ret = EOSSolveBC(e, gas, rhoOk, us[q], &rho2, &u2, 0.0);
+            CHECK(ret == EOS_FAIL, "%s: returned %d (rho2=%g)", what[q], ret, rho2);
+            CHECK(rho2 == -1.0 && u2 == -1.0, "%s: outputs touched on failure", what[q]);
+        }
+        /* The usable state at the same density still solves. */
+        double rho2 = -1.0, u2 = -1.0;
+        CHECK(EOSSolveBC(e, gas, rhoOk, uOk, &rho2, &u2, 0.0) == EOS_SUCCESS, "usable state in material 1 does not solve");
     }
     CHECK(*pnLookupFail > nf0, "the failed lookups in material 1 were not counted");
     *pnLookupFail = nf0;
@@ -1421,6 +1440,14 @@ static void testTillotsonSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
         double rho2 = -1.0, u2 = -1.0;
         int ret = EOSSolveBC(outer, inner, rho1, u1, &rho2, &u2, 1e4);
         CHECK(ret == EOS_FAIL, "SolveBC with T < 0 must fail (ret=%d)", ret);
+        CHECK(rho2 == -1.0 && u2 == -1.0, "outputs touched on failure");
+    }
+    /* Failure path: (rho1, u1) below the cold curve (not usable; T falls back to 0). */
+    {
+        double rho1 = 1.5 * outer->rho0, u1 = 0.5 * EOSUCold(outer, rho1);
+        double rho2 = -1.0, u2 = -1.0;
+        CHECK(EOSIsUsable(outer, rho1, u1) == EOS_FALSE, "below the cold curve is usable");
+        CHECK(EOSSolveBC(outer, inner, rho1, u1, &rho2, &u2, 0.0) == EOS_FAIL, "SolveBC below the cold curve must fail");
         CHECK(rho2 == -1.0 && u2 == -1.0, "outputs touched on failure");
     }
     END_TEST();
@@ -1842,7 +1869,7 @@ int main(int argc, char *argv[])
         double uOk = EOSUofRhoT(A, rhoOk, sampleT(m, NSAMPLE / 2));
         double uHi = 2.0 * fabs(EOSUofRhoT(A, rhoOk, m->TAxis[m->nT-1])) + 1.0;
         testFailureContract(A, rhoOk, uOk, uHi, 2.0 * m->rhoAxis[m->nRho-1] * m->CGStoCodeUnitsforRho, TMin, &m->nLookupFail);
-        testSolveBCFailedState(A, 2.0 * m->rhoAxis[m->nRho-1] * m->CGStoCodeUnitsforRho, uOk, dKpcUnit, dMsolUnit, &m->nLookupFail);
+        testSolveBCFailedState(A, 2.0 * m->rhoAxis[m->nRho-1] * m->CGStoCodeUnitsforRho, rhoOk, uOk, uHi, dKpcUnit, dMsolUnit, &m->nLookupFail);
         int failsBefore = nFails;
         TEST("ANEOS: EOSPrintMat prints nLookupFail");
         checkPrintMatCounter(A, m->nLookupFail);
@@ -1865,7 +1892,7 @@ int main(int argc, char *argv[])
             double uOk = EOSUofRhoT(S, rhoOk, scvhSampleT(s, 1));
             double uHi = 2.0 * EOSUofRhoT(S, rhoOk, pow(10.0, s->LogTMax));
             testFailureContract(S, rhoOk, uOk, uHi, 2.0 * pow(10.0, s->LogRhoMax), TMin, &s->nLookupFail);
-            testSolveBCFailedState(S, 2.0 * pow(10.0, s->LogRhoMax), uOk, dKpcUnit, dMsolUnit, &s->nLookupFail);
+            testSolveBCFailedState(S, 2.0 * pow(10.0, s->LogRhoMax), rhoOk, uOk, uHi, dKpcUnit, dMsolUnit, &s->nLookupFail);
             int failsBefore = nFails;
             TEST("SCvH: EOSPrintMat prints nLookupFail");
             checkPrintMatCounter(S, s->nLookupFail);
@@ -1890,7 +1917,7 @@ int main(int argc, char *argv[])
             double uOk = EOSUofRhoT(R, rhoOk, reos3SampleT(r, 1));
             double uHi = 2.0 * EOSUofRhoT(R, rhoOk, pow(10.0, r->LogTMax));
             testFailureContract(R, rhoOk, uOk, uHi, 2.0 * pow(10.0, r->LogRhoMax), TMin, &r->nLookupFail);
-            testSolveBCFailedState(R, 2.0 * pow(10.0, r->LogRhoMax), uOk, dKpcUnit, dMsolUnit, &r->nLookupFail);
+            testSolveBCFailedState(R, 2.0 * pow(10.0, r->LogRhoMax), rhoOk, uOk, uHi, dKpcUnit, dMsolUnit, &r->nLookupFail);
             int failsBefore = nFails;
             TEST("REOS3: EOSPrintMat prints nLookupFail");
             checkPrintMatCounter(R, r->nLookupFail);

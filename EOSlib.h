@@ -120,6 +120,10 @@
  *          EOSYieldStrength and EOSYieldStrengthofRhoTP return EOS_FAIL_VALUE for a failed
  *          pressure (models 1 and 2): the tension clamp max(P, 0) turned P = EOS_FAIL_VALUE
  *          into P_eff = 0 and a finite Y0 * f(T) for a state outside the table.
+ *          EOSSolveBC fails at once for a state (rho1, u1) that is not usable in material 1
+ *          (EOSIsUsable): u above the column or below the cold curve has a finite P and T, those
+ *          of the fallback (rho1, T_min), and the solver matched that wrong target and reported
+ *          success.
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -467,8 +471,10 @@ double EOSUCold(EOSMATERIAL *material, double rho);
  * table), with a message under EOSLIB_VERBOSE. A discontinuity is detected by
  * the growth of the secant slope of P2(rho) as the bracket closes (see
  * EOSSolveBC in EOSlib.c), not by the pressure gap, which for a continuous but
- * stiff P2 can exceed EOS_SOLVEBC_PTOL |P|. A failed lookup of (rho1, u1) in
- * material 1 fails at once, without evaluating material 2. On failure *prho2
+ * stiff P2 can exceed EOS_SOLVEBC_PTOL |P|. A state (rho1, u1) that is not
+ * usable in material 1 (EOSIsUsable: rho1 outside the table, or u1 outside the
+ * u(T) column, where T(rho, u) falls back to T_min and P would be that of the
+ * fallback) fails at once, without evaluating material 2. On failure *prho2
  * and *pu2 are untouched.
  */
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,

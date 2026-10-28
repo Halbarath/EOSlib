@@ -1445,7 +1445,8 @@ static int EOSSolveBCEval(EOSMATERIAL *material, double rho, double T,
  * assuming P2(rho, T2) is monotonically increasing in rho. The tolerances and
  * the discontinuity check are described in EOSlib.h.
  *
- * Returns EOS_SUCCESS, or EOS_FAIL (message under EOSLIB_VERBOSE) if not.
+ * Returns EOS_SUCCESS, or EOS_FAIL (message under EOSLIB_VERBOSE) if not,
+ * also at once if (rho1, u1) is not usable in material 1 (EOSIsUsable).
  * On failure *prho2 and *pu2 are untouched.
  */
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,
@@ -1468,10 +1469,18 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
      * alone let it through as the target pressure: every P2 > -1e50, the lower bracket shrank
      * EOS_SOLVEBC_MAX_EXPAND times (or until it left the table of material 2) and the solver
      * failed there with a message about material 2. EOSFailed also catches NaN.
+     *
+     * A state that T(rho, u) cannot invert (u above the column or below the cold curve of a
+     * tabulated EOS, below the cold curve of Tillotson or the ideal gas) has a finite P and T,
+     * but they are those of the fallback (rho1, T_min), not of (rho1, u1): the solver matched
+     * the wrong target and reported success. EOSIsUsable is exactly the test whether P, c and T
+     * are those of the state. It is checked after the lookups, which count the failure or the
+     * fallback in nLookupFail (EOSIsUsable, a status query, counts nothing).
      */
-    if (EOSFailed(P) || !isfinite(P) || !isfinite(T) || T <= 0.0) {
+    if (EOSFailed(P) || !isfinite(P) || !isfinite(T) || T <= 0.0 ||
+        EOSIsUsable(material1, rho1, u1) != EOS_TRUE) {
         EOS_WARN("EOSSolveBC: invalid state in material 1 "
-                "(rho1= %g u1= %g P= %g T= %g).\n", rho1, u1, P, T);
+                "(rho1= %g u1= %g P= %g T= %g, usable= %d).\n", rho1, u1, P, T, EOSIsUsable(material1, rho1, u1));
         return EOS_FAIL;
     }
 
