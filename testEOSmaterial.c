@@ -808,8 +808,9 @@ static double reos3SampleRhoExtrap(REOS3MAT *r, int k)
 }
 
 /* 1 if u(T) increases along both node columns of the rho cell containing rho
- * (the first column for the extrapolation region). Elsewhere T(rho, u) fails
- * by contract (table defect) and the identities through it are not invariants. */
+ * (the first column for the extrapolation region). Elsewhere T(rho, u) may
+ * return another root or fall back to T_min (table defect), and the identities
+ * through it are not invariants. */
 static int reos3EnergyMonotonic(REOS3MAT *r, double rho)
 {
     double lr = log10(rho);
@@ -894,7 +895,7 @@ static void testREOS3Dispatch(EOSMATERIAL *e)
         CHECK(EOSIsUsable(e, rho, u) == EOS_TRUE, "usable at rho=%g T=%g", rho, T);
     }
     /* rho(P, T) dispatch and round trip, where the row is monotonic (the
-     * library fails otherwise, by contract). */
+     * library may return another root otherwise, a table defect). */
     for (int a = 0; a < NSAMPLE_REOS3; a += 7) for (int b = 0; b < NSAMPLE_REOS3; b += 7) {
         double rho = reos3SampleRho(r, a), T = reos3SampleT(r, b);
         double P = EOSPofRhoT(e, rho, T);
