@@ -102,6 +102,12 @@
  *          (rho <= 0) and EOSIsUsable is false there (both always succeeded). EOSRhoofPT
  *          returns EOS_FAIL_VALUE for T <= 0 or P < 0 (inf before). EOSPCTofRhoU uses the
  *          new igeosPCTofRhoU: the required igeos version must follow when bumped.
+ *          EOSIsInTable/EOSIsUsable for ANEOS agree exactly with the lookups (ANEOSIsInTable
+ *          runs the same inversion): about a quarter of the states near the cold curve of the
+ *          M-ANEOS tables, which the lookup finds, were reported EOS_OUTSIDE_VMIN and unusable.
+ *          EOS_N_MATERIAL_MAX is the size of an array indexed by iMat, MAT_SCVHEOS_MAX + 1 = 131
+ *          (it was 130, the largest id: such an array overflowed by one), like
+ *          TILL_N_MATERIAL_MAX. Loops over ids must use iMat < EOS_N_MATERIAL_MAX.
  *          EOSYieldStrength and EOSYieldStrengthofRhoTP return EOS_FAIL_VALUE for a failed
  *          pressure (models 1 and 2): the tension clamp max(P, 0) turned P = EOS_FAIL_VALUE
  *          into P_eff = 0 and a finite Y0 * f(T) for a state outside the table.
@@ -188,8 +194,6 @@
 #define EOS_SOLVEBC_SLOPE_WIDTH 1e-6  /* relative bracket width of the reference secant slope */
 #define EOS_SOLVEBC_SLOPE_FAC   10.0  /* the final secant slope may exceed the reference by this */
 
-#define EOS_N_MATERIAL_MAX 130
-
 #define EOSIDEALGAS  0
 #define EOSTILLOTSON 1
 #define EOSANEOS     2
@@ -205,6 +209,24 @@
 #define MAT_REOS3_MAX 109
 #define MAT_SCVHEOS_MIN 110
 #define MAT_SCVHEOS_MAX 130
+
+/*
+ * Size of an array indexed by the material id (iMat = 0 .. MAT_SCVHEOS_MAX), i.e. the largest id
+ * plus one, the convention of TILL_N_MATERIAL_MAX (10 for ids up to 7). It was 130, the largest id
+ * itself, so that an array of EOS_N_MATERIAL_MAX entries indexed by iMat overflowed by one for the
+ * SCvH id 130. Loop over ids with iMat < EOS_N_MATERIAL_MAX.
+ */
+#define EOS_N_MATERIAL_MAX (MAT_SCVHEOS_MAX + 1)
+#if EOS_N_MATERIAL_MAX <= MAT_TILLOTSON_MAX || EOS_N_MATERIAL_MAX <= MAT_ANEOS_MAX || \
+    EOS_N_MATERIAL_MAX <= MAT_REOS3_MAX || EOS_N_MATERIAL_MAX <= MAT_SCVHEOS_MAX
+#error "EOSlib: EOS_N_MATERIAL_MAX must exceed every material id (it sizes arrays indexed by iMat)"
+#endif
+#if defined(ANEOS_N_MATERIAL_MAX) && (ANEOS_N_MATERIAL_MAX <= MAT_ANEOS_MAX)
+#error "EOSlib: ANEOS_N_MATERIAL_MAX must exceed MAT_ANEOS_MAX (it sizes arrays indexed by the ANEOS iMat)"
+#endif
+#if defined(TILL_N_MATERIAL_MAX) && (TILL_N_MATERIAL_MAX <= FORSTERITE)
+#error "EOSlib: TILL_N_MATERIAL_MAX must exceed the largest Tillotson material id"
+#endif
 
 #define EOS_TRUE 1
 #define EOS_FALSE 0

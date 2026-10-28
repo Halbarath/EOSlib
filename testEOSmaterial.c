@@ -1621,6 +1621,36 @@ static void testUnitPair(int iMat)
     END_TEST();
 }
 
+/*
+ * The *_N_MATERIAL_MAX constants size arrays indexed by the material id: every id must be a valid
+ * index (largest id + 1, as TILL_N_MATERIAL_MAX). EOS_N_MATERIAL_MAX was 130 and
+ * ANEOS_N_MATERIAL_MAX 100, the largest ids themselves, so such an array overflowed by one.
+ */
+static void testMaterialIdConstants(void)
+{
+    int failsBefore = nFails;
+    TEST("*_N_MATERIAL_MAX: arrays indexed by iMat");
+    CHECK(EOS_N_MATERIAL_MAX == MAT_SCVHEOS_MAX + 1, "EOS_N_MATERIAL_MAX = %d, largest id %d", EOS_N_MATERIAL_MAX, MAT_SCVHEOS_MAX);
+    CHECK(MAT_IDEALGAS < EOS_N_MATERIAL_MAX && MAT_TILLOTSON_MAX < EOS_N_MATERIAL_MAX && MAT_ANEOS_MAX < EOS_N_MATERIAL_MAX &&
+          MAT_REOS3_MAX < EOS_N_MATERIAL_MAX && MAT_SCVHEOS_MAX < EOS_N_MATERIAL_MAX, "an id range ends at or above EOS_N_MATERIAL_MAX");
+    /* The ranges are disjoint and ordered, so the id alone selects the library. */
+    CHECK(MAT_IDEALGAS < MAT_TILLOTSON_MIN && MAT_TILLOTSON_MAX < MAT_ANEOS_MIN && MAT_ANEOS_MAX < MAT_REOS3_MIN &&
+          MAT_REOS3_MAX < MAT_SCVHEOS_MIN, "material id ranges overlap");
+#ifdef HAVE_ANEOSMATERIAL_H
+    CHECK(ANEOS_N_MATERIAL_MAX == MAT_ANEOS_MAX + 1, "ANEOS_N_MATERIAL_MAX = %d, largest ANEOS id %d", ANEOS_N_MATERIAL_MAX, MAT_ANEOS_MAX);
+#endif
+#ifdef HAVE_TILLOTSON_H
+    CHECK(TILL_N_MATERIAL_MAX > FORSTERITE, "TILL_N_MATERIAL_MAX = %d, largest Tillotson id %d", TILL_N_MATERIAL_MAX, FORSTERITE);
+#endif
+    /* An array of that size takes every id (with -fsanitize=address an overflow would be caught). */
+    {
+        static int byId[EOS_N_MATERIAL_MAX];
+        for (int iMat = 0; iMat < EOS_N_MATERIAL_MAX; iMat++) byId[iMat] = iMat;
+        CHECK(byId[MAT_SCVHEOS_MAX] == MAT_SCVHEOS_MAX, "largest id not a valid index");
+    }
+    END_TEST();
+}
+
 /* ------------------------------------------------------------------- main */
 
 int main(int argc, char *argv[])
@@ -1660,6 +1690,7 @@ int main(int argc, char *argv[])
         END_TEST();
     }
 
+    testMaterialIdConstants();
     testIdealGas(dKpcUnit, dMsolUnit);
     testUnitPair(MAT_IDEALGAS);
 
