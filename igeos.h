@@ -16,6 +16,14 @@
  *          nLookupFail and IGEOS_WARN like the other libraries: the entropy
  *          failures (rho <= 0 or T <= 0) are counted and printed by
  *          igeosPrintMat.
+ *          The cold curve is u = 0 (T_min = 0): a state below it (u < 0 or NaN)
+ *          falls back to (rho, T = 0) like a state below the cold curve of a
+ *          tabulated EOS, counted once: T = 0, P = 0, c = 0, dP/drho = 0, isentrope
+ *          u2 = 0 (u < 0 gave T < 0, P < 0 and c = NaN). P(rho, T) and u(rho, T) return
+ *          IGEOS_FAIL_VALUE for T < 0, rho(P, T) for T <= 0 or P < 0 (inf or a negative
+ *          density before), the isentrope for rho1 or rho2 <= 0; all counted.
+ *          New igeosPCTofRhoU (EOSPCTofRhoU counted a state twice through
+ *          igeosPCofRhoU and igeosTofRhoU).
  */
 #define IGEOS_VERSION_TEXT    "1.1.0"
 #define IGEOS_VERSION_MAJOR   1
@@ -31,12 +39,16 @@
 
 /*
  * Failure contract (the EOSlib convention, shared by all EOS libraries).
- * The ideal gas is analytic and its lookups cannot fail; the only sentinel
- * is returned by igeosSofRhoT/igeosSofRhoU for rho <= 0 or T <= 0 (also
- * NaN), where the entropy is undefined. Every such failure is counted in
- * Mat->nLookupFail and reported on stderr only with -DEOSLIB_VERBOSE
- * (IGEOS_WARN). Test a returned value with igeosFailed(x). Unimplemented
- * functions (igeosRhoofUT) are fatal.
+ * The ideal gas is analytic; its cold curve is u = 0 and T_min = 0. A state
+ * (rho, u) below the cold curve (u < 0, or NaN) falls back to (rho, T = 0),
+ * like a state below the cold curve of a tabulated EOS: T = 0, P = 0, c = 0
+ * (T(rho, u) never fails). IGEOS_FAIL_VALUE is returned by P(rho, T) and
+ * u(rho, T) for T < 0 (below T_min), by rho(P, T) for T <= 0 or P < 0, by the
+ * isentrope for a density <= 0, and by igeosSofRhoT/igeosSofRhoU for rho <= 0
+ * or T <= 0, where the entropy is undefined (all also for NaN). Every failure
+ * and fallback is counted in Mat->nLookupFail, once per call, and reported on
+ * stderr only with -DEOSLIB_VERBOSE (IGEOS_WARN). Test a returned value with
+ * igeosFailed(x). Unimplemented functions (igeosRhoofUT) are fatal.
  */
 #define IGEOS_FAIL_VALUE (-1e50)
 
@@ -89,6 +101,7 @@ double igeosPofRhoU(IGEOSMAT *Mat, double rho, double u);
 double igeosPofRhoT(IGEOSMAT *Mat, double rho, double T);
 double igeosCofRhoU(IGEOSMAT *Mat, double rho, double u);
 double igeosPCofRhoU(IGEOSMAT *Mat, double rho, double u, double *c);
+double igeosPCTofRhoU(IGEOSMAT *Mat, double rho, double u, double *c, double *T);
 double igeosIsentropicU(IGEOSMAT *Mat, double rho1, double u1, double rho2);
 double igeosTofRhoU(IGEOSMAT *Mat, double rho, double u);
 double igeosUofRhoT(IGEOSMAT *Mat, double rho, double T);

@@ -96,6 +96,12 @@
  *          ANEOS and SCvH isentropes up to three times, EOSSofRhoU for SCvH twice.
  *          EOSSofRhoU uses the new scvheosSofRhoU: when the versions are bumped, the
  *          required scvheos version (SCVHEOS_VERSION_*_REQUIRED) must follow.
+ *          Ideal gas: u < 0 lies below its cold curve u = 0 and falls back to T = 0, P = 0,
+ *          c = 0 (counted) like a state below the cold curve of a table; it gave T < 0, P < 0
+ *          and c = NaN. EOSIsInTable reports EOS_OUTSIDE_VMIN (u < 0) or EOS_OUTSIDE_RHOMIN
+ *          (rho <= 0) and EOSIsUsable is false there (both always succeeded). EOSRhoofPT
+ *          returns EOS_FAIL_VALUE for T <= 0 or P < 0 (inf before). EOSPCTofRhoU uses the
+ *          new igeosPCTofRhoU: the required igeos version must follow when bumped.
  *          EOSYieldStrength and EOSYieldStrengthofRhoTP return EOS_FAIL_VALUE for a failed
  *          pressure (models 1 and 2): the tension clamp max(P, 0) turned P = EOS_FAIL_VALUE
  *          into P_eff = 0 and a finite Y0 * f(T) for a state outside the table.
@@ -226,8 +232,10 @@
  * is not available for the material (e.g. the entropy); the fused lookups
  * set their output arguments to it as well. The one exception is T(rho, u):
  * EOSTofRhoU (and *T of EOSPCTofRhoU) never fails and returns the lowest
- * temperature of the table (T_min of the tabulated EOS, 0 for Tillotson)
- * when (rho, u) cannot be inverted; the hydro codes rely on this. Status
+ * temperature of the table (T_min of the tabulated EOS, 0 for Tillotson and
+ * the ideal gas) when (rho, u) cannot be inverted; the hydro codes rely on
+ * this. A state below the cold curve (u < u(rho, T_min); u < 0 for the ideal
+ * gas) is evaluated at (rho, T_min) by every (rho, u) function. Status
  * functions return EOS_FAIL or an EOS_OUTSIDE_* code.
  *
  * Every failure and every fallback is counted in the sublibrary's
@@ -388,7 +396,8 @@ int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u);
  * EOSIsUsable applies the library policy: returns EOS_TRUE if P(rho, u),
  * c(rho, u) and T(rho, u) can be evaluated for this material even if the
  * state lies outside the lookup table (for Tillotson: u > u_max, and rho <
- * rho_min with u >= 0, where the cold curve is zero), EOS_FALSE otherwise. Use this in the hydro code; use
+ * rho_min with u >= 0, where the cold curve is zero; for the ideal gas every
+ * rho > 0 and u >= 0), EOS_FALSE otherwise. Use this in the hydro code; use
  * EOSIsInTable when you need to know *why* a state is out of range or whether
  * isentropic lookups (EOSIsentropic) are available.
  */

@@ -493,8 +493,8 @@ double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, doub
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            P = igeosPCofRhoU(material->igeosmaterial, rho, u, c);
-            *T = igeosTofRhoU(material->igeosmaterial, rho, u);
+            /* One call: a state below the cold curve u = 0 counted once (PC and T counted it twice). */
+            P = igeosPCTofRhoU(material->igeosmaterial, rho, u, c, T);
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
@@ -1011,8 +1011,10 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            iret = EOS_SUCCESS;
-            break;
+            /* No table; the cold curve is u = 0 (T_min = 0), as for Tillotson. */
+            if (!(rho > 0.0)) return EOS_OUTSIDE_RHOMIN;
+            if (!(u >= 0.0)) return EOS_OUTSIDE_VMIN;   /* also NaN */
+            return EOS_SUCCESS;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
             iret = tillIsInTable(material->tillmaterial, rho, u);
@@ -1085,8 +1087,8 @@ int EOSIsUsable(EOSMATERIAL *material, double rho, double u)
     switch(material->matType)
     {
         case EOSIDEALGAS:
-            /* EOSIsInTable always succeeds for an ideal gas. */
-            return EOS_TRUE;
+            /* Below the cold curve u = 0 (or rho <= 0): T, P and c are clamped, not usable. */
+            return EOS_FALSE;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
             /* Pressure is analytic; only the isentrope lookup needs u <= u_max. */

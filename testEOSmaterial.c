@@ -194,8 +194,8 @@ static void testIdealGas(double dKpcUnit, double dMsolUnit)
         CHECK(EOSIsUsable(g, rho, u) == EOS_TRUE, "ideal gas always usable");
         CHECK(EOSUCold(g, rho) == 0.0, "ucold = 0 for gas");
     }
-    /* The only failures of the ideal gas, the entropy at rho <= 0 or T <= 0, are counted like in
-     * every other library; the analytic lookups never count. */
+    /* The entropy at rho <= 0 or T <= 0 fails and is counted like in every other library; the
+     * analytic lookups of valid states never count. */
     {
         long nf = g->igeosmaterial->nLookupFail;
         CHECK(nf == 0, "igeos nLookupFail = %ld after init and valid lookups", nf);
@@ -209,6 +209,58 @@ static void testIdealGas(double dKpcUnit, double dMsolUnit)
     /* The cold curve of a gas is u = 0 everywhere; a non-finite u is undecidable. */
     CHECK(EOSisbelowColdCurve(g, 1.0, -1.0) == EOS_TRUE && EOSisbelowColdCurve(g, 1.0, 1.0) == EOS_FALSE, "gas: isbelowColdCurve");
     CHECK(EOSisbelowColdCurve(g, 1.0, NAN) == EOS_FAIL, "gas: isbelowColdCurve for a NaN u");
+    /*
+     * Below the cold curve u = 0 (T_min = 0) the ideal gas falls back to (rho, T = 0) like a
+     * table below its cold curve, counted once per call: T = 0, P = 0, c = 0. Up to igeos 1.1.0
+     * u < 0 gave T < 0, P < 0 and c = NaN, uncounted, and rho(P, T = 0) was inf.
+     */
+    {
+        IGEOSMAT *ig = g->igeosmaterial;
+#define GAS_ONCE(expr, what) do { long n_ = ig->nLookupFail; (void) (expr); \
+            CHECK(ig->nLookupFail == n_ + 1, "gas: %s counted %ld times", what, ig->nLookupFail - n_); } while (0)
+        const double rho = 2.0;
+        for (int k = 0; k < 2; k++) {
+            const double u = k ? NAN : -3.0;
+            double c = 1.0, T = 1.0;
+            double P = EOSPCTofRhoU(g, rho, u, &c, &T);
+            CHECK(P == 0.0 && c == 0.0 && T == 0.0, "gas: PCT below the cold curve (u = %g): P=%g c=%g T=%g", u, P, c, T);
+            CHECK(EOSPofRhoU(g, rho, u) == 0.0, "gas: P(rho, u = %g) = %g", u, EOSPofRhoU(g, rho, u));
+            CHECK(EOSCofRhoU(g, rho, u) == 0.0, "gas: c(rho, u = %g) = %g", u, EOSCofRhoU(g, rho, u));
+            CHECK(EOSTofRhoU(g, rho, u) == 0.0, "gas: T(rho, u = %g) = %g", u, EOSTofRhoU(g, rho, u));
+            CHECK(EOSdPdRho(g, rho, u) == 0.0, "gas: dP/drho(rho, u = %g)", u);
+            CHECK_REL(EOSdPdU(g, rho, u), gm1 * rho, 1e-14, "gas: dP/du(rho, u = %g)", u);
+            CHECK(EOSdUdRho(g, rho, u) == 0.0, "gas: du/drho(rho, u = %g)", u);
+            CHECK(EOSIsentropic(g, rho, u, 2.0 * rho) == 0.0, "gas: isentrope from u = %g", u);
+            CHECK(EOSIsInTable(g, rho, u) == EOS_OUTSIDE_VMIN, "gas: status for u = %g", u);
+            CHECK(EOSIsUsable(g, rho, u) == EOS_FALSE, "gas: usable for u = %g", u);
+            GAS_ONCE(EOSPCTofRhoU(g, rho, u, &c, &T), "PCT below the cold curve");
+            GAS_ONCE(EOSPofRhoU(g, rho, u), "P below the cold curve");
+            GAS_ONCE(EOSCofRhoU(g, rho, u), "c below the cold curve");
+            GAS_ONCE(EOSTofRhoU(g, rho, u), "T below the cold curve");
+            GAS_ONCE(EOSdPdRho(g, rho, u), "dP/drho below the cold curve");
+            GAS_ONCE(EOSdPdU(g, rho, u), "dP/du below the cold curve");
+            GAS_ONCE(EOSIsentropic(g, rho, u, 2.0 * rho), "isentrope below the cold curve");
+            GAS_ONCE(EOSSofRhoU(g, rho, u), "s below the cold curve");
+        }
+        /* u = 0 is on the cold curve: valid, not counted. */
+        {
+            long n = ig->nLookupFail;
+            double c, T, P = EOSPCTofRhoU(g, rho, 0.0, &c, &T);
+            CHECK(P == 0.0 && c == 0.0 && T == 0.0 && ig->nLookupFail == n, "gas: u = 0 is a valid state");
+            CHECK(EOSIsInTable(g, rho, 0.0) == EOS_SUCCESS && EOSIsUsable(g, rho, 0.0) == EOS_TRUE, "gas: u = 0 usable");
+        }
+        CHECK(EOSIsInTable(g, 0.0, 1.0) == EOS_OUTSIDE_RHOMIN && EOSIsUsable(g, -1.0, 1.0) == EOS_FALSE, "gas: rho <= 0");
+        /* T below T_min = 0, rho(P, T) without a solution: the sentinel, counted. */
+        CHECK(EOSUofRhoT(g, rho, -1.0) == EOS_FAIL_VALUE, "gas: u(rho, T < 0)");
+        CHECK(EOSPofRhoT(g, rho, -1.0) == EOS_FAIL_VALUE, "gas: P(rho, T < 0)");
+        CHECK(EOSRhoofPT(g, 1.0, 0.0) == EOS_FAIL_VALUE, "gas: rho(P, T = 0) = %g", EOSRhoofPT(g, 1.0, 0.0));
+        CHECK(EOSRhoofPT(g, -1.0, 300.0) == EOS_FAIL_VALUE, "gas: rho(P < 0, T)");
+        CHECK(EOSRhoofPT(g, 0.0, 300.0) == 0.0, "gas: rho(P = 0, T) = 0");
+        CHECK(EOSIsentropic(g, -1.0, 1.0, 1.0) == EOS_FAIL_VALUE, "gas: isentrope from rho1 < 0");
+        GAS_ONCE(EOSRhoofPT(g, 1.0, 0.0), "rho(P, T = 0)");
+        GAS_ONCE(EOSUofRhoT(g, rho, -1.0), "u(rho, T < 0)");
+#undef GAS_ONCE
+    }
     checkPrintMatCounter(g, g->igeosmaterial->nLookupFail);
     EOSfinalizeMaterial(g);
     END_TEST();
