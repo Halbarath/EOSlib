@@ -835,8 +835,7 @@ static void EOSYieldClampAboveTable(EOSMATERIAL *material, double rho, double u,
 
 /*
  * Calculate strength limiter from (rho, u). Derives T and P with one fused
- * lookup; prefer EOSYieldStrengthofRhoUTP when the caller already has them.
- * A state above the table is evaluated on the top row (EOSYieldClampAboveTable).
+ * lookup. A state above the table is evaluated on the top row (EOSYieldClampAboveTable).
  */
 double EOSYieldStrength(EOSMATERIAL *material, double rho, double u)
 {
@@ -852,23 +851,9 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u)
 }
 
 /*
- * Calculate strength limiter from (rho, u) and the T, P the caller already has from
- * EOSPCTofRhoU(rho, u). Same result as EOSYieldStrength(rho, u), without the second lookup:
- * u is needed only to recognise the T_min fallback of a state above the table.
- */
-double EOSYieldStrengthofRhoUTP(EOSMATERIAL *material, double rho, double u, double T, double P)
-{
-    EOSYIELDPARAMS p;
-    int yieldStrengthModel = EOSYieldParams(material, &p);
-
-    if (yieldStrengthModel > 0) EOSYieldClampAboveTable(material, rho, u, &T, &P);
-    return EOSYieldStrengthCore(material, yieldStrengthModel, &p, rho, T, P);
-}
-
-/*
  * Calculate strength limiter from (rho, T, P) supplied by the caller. Evaluated as given: a T from
  * the T_min fallback of a state above the table cannot be told from a cold state (use
- * EOSYieldStrengthofRhoUTP for the T, P of a (rho, u) lookup).
+ * EOSYieldStrength for a (rho, u) state).
  */
 double EOSYieldStrengthofRhoTP(EOSMATERIAL *material, double rho, double T, double P)
 {
@@ -1042,14 +1027,35 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
  * as "not below", because u < EOS_FAIL_VALUE is false. Compare with == EOS_TRUE; a caller that
  * uses the truth value treats an undecidable state as below the cold curve, the safe side.
  *
+ * For the tabulated EOS (ANEOS, REOS3, SCvH) "below the cold curve" is the table status of the
+ * lookup, EOSIsInTable == EOS_OUTSIDE_VMIN: exactly the states that T(rho, u) cannot invert from
+ * below and that fall back to T_min. It compared u with u(rho, T_min), the first table row, which
+ * disagreed with EOSIsInTable (and the lookup) in two places:
+ *   - M-ANEOS columns whose cold rows have du/dT < 0 (up to 18-58 K): states below u(rho, T_min)
+ *     lie on the line at a slightly higher T, the lookup finds them without a fallback and
+ *     EOSIsInTable reports EOS_SUCCESS, but this function said EOS_TRUE;
+ *   - states within the edge tolerance below the first row, which the inversions clamp onto it.
+ * Tillotson and the ideal gas have an analytic cold curve and keep u < u_cold(rho) (Tillotson
+ * also below rho_min, where u_cold = 0 and EOSIsInTable reports EOS_OUTSIDE_RHOMIN).
+ *
  * Required: ballic
  */
 int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u)
 {
+    /* u_cold first, also for the tabulated EOS: rho outside the table is counted there (EOSIsInTable is a status query and counts nothing). */
     double ucold = EOSUCold(material, rho);
 
     if (EOSFailed(ucold) || !isfinite(u)) {
         EOS_WARN("EOSisbelowColdCurve: cold curve not available (rho= %g u= %g u_cold= %g, material %d).\n", rho, u, ucold, material->iMat);
+        return EOS_FAIL;
+    }
+
+    if (material->matType == EOSANEOS || material->matType == EOSREOS3 || material->matType == EOSSCVHEOS) {
+        int st = EOSIsInTable(material, rho, u);
+        if (st == EOS_OUTSIDE_VMIN) return EOS_TRUE;
+        if (st == EOS_SUCCESS || st == EOS_OUTSIDE_VMAX) return EOS_FALSE;
+        /* Not reached: rho is in the table (u_cold succeeded) and u is finite. */
+        EOS_WARN("EOSisbelowColdCurve: table status %d at rho= %g u= %g (material %d).\n", st, rho, u, material->iMat);
         return EOS_FAIL;
     }
     return (u < ucold) ? EOS_TRUE : EOS_FALSE;
@@ -1411,8 +1417,9 @@ double EOSGammaofRhoT(EOSMATERIAL *material, double rho, double T){
  * Calculate the cold part of the internal energy, u(rho, T=0). For the
  * tabulated EOS this is u at the lowest tabulated temperature, i.e. the first
  * table row; where a table's cold rows are defective (u(T_min) above u at
- * higher T) it is not the energy minimum, and EOSisbelowColdCurve and
- * EOSIsInTable inherit that.
+ * higher T, the M-ANEOS tables below 18-58 K) it is not the energy minimum:
+ * states slightly below it are inside the table (EOSIsInTable,
+ * EOSisbelowColdCurve, which use the table status, not this value).
  *
  * Required: internal, ballic
  */

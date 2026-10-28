@@ -190,7 +190,6 @@ static void testIdealGas(double dKpcUnit, double dMsolUnit)
     CHECK(g->bEntropy && g->bEntropyTableInit, "entropy flags");
     CHECK(EOSYieldModel(g) == 0, "yield model for gas");
     CHECK(EOSYieldStrength(g, 1.0, 1.0) == 0.0, "yield strength for gas");
-    CHECK(EOSYieldStrengthofRhoUTP(g, 1.0, 1.0, 1.0, 1.0) == 0.0, "yield strength (rho, u, T, P) for gas");
     CHECK(EOSGammaofRhoT(g, 1.0, 300.0) == 0.0, "shear modulus for gas");
 
     double rhos[] = { 1e-6, 1e-3, 1.0, 50.0 };
@@ -329,9 +328,11 @@ static void testANEOSDispatch(EOSMATERIAL *e)
     for (int a = 0; a < NSAMPLE; a++) for (int b = 0; b < NSAMPLE; b++) {
         double rho = sampleRho(m, a), T = sampleT(m, b);
         double u = EOSUofRhoT(e, rho, T);
-        /* EOSUCold is the first table row. Where a defective cold row lies
-         * above u(rho,T) (M-ANEOS forsterite above ~55 g/cc), EOSUCold,
-         * EOSisbelowColdCurve and EOSIsInTable are wrong by construction. */
+        /* EOSUCold is the first table row. Where a defective cold row lies above u(rho,T) (M-ANEOS
+         * forsterite above ~55 g/cc), u is also attained on the defective cold rows, and T(rho, u)
+         * may return that root (a cell with du/dT < 0, where the (rho, u) derivatives fail): the
+         * dispatch comparisons below assume a unique root. Skipped here; EOSisbelowColdCurve and
+         * EOSIsInTable for such states are checked against the lookup in the block after the loop. */
         if (u < EOSUCold(e, rho)) { nSkipped++; continue; }
         double c, Tf;
         double P = EOSPCTofRhoU(e, rho, u, &c, &Tf);
@@ -381,6 +382,57 @@ static void testANEOSDispatch(EOSMATERIAL *e)
     if (nSkipped)
         printf("\n    note: %d of %d states skipped (u(rho,T) below the first table row, table defect)\n  %-44s",
                nSkipped, NSAMPLE * NSAMPLE, "");
+
+    /*
+     * Below the cold curve means exactly: the lookup falls back to T_min (counted). EOSisbelowColdCurve,
+     * EOSIsInTable and the lookup must agree on every state around the first row, from below the
+     * column's minimum (defective cold rows: u(rho, T) dips below u(rho, T_min) at the next rows) to
+     * above u(rho, T_min), including the edge tolerance. Up to EOSlib 1.2.0 EOSisbelowColdCurve
+     * compared with u(rho, T_min) and said "below" for states the lookup finds.
+     */
+    {
+        int nBelowRow = 0, nIn = 0, nOut = 0;
+        for (int a = 0; a < NSAMPLE; a++) {
+            double rho = sampleRho(m, a), w = 0.0;
+            int i = 0;
+            interpLocateAxis(m->rhoAxis, m->nRho, rho * m->CodeUnitstoCGSforRho, ANEOS_EDGE_TOL, &i, &w);
+            /* The u(T) line at rho: its minimum over the whole column (the defective cold rows of
+             * M-ANEOS reach up to ~60 K, many rows) and the u step of the first cell. */
+            double line0 = 0.0, line1 = 0.0, umin = INFINITY;
+            for (int j = 0; j < m->nT; j++) {
+                double uj = ((1.0 - w) * m->uArray[i][j] + w * m->uArray[i+1][j]) * m->CGStoCodeUnitsforU;
+                if (j == 0) line0 = uj;
+                if (j == 1) line1 = uj;
+                umin = fmin(umin, uj);
+            }
+            double ucold = EOSUCold(e, rho), du = fabs(line1 - line0) + 1e-300;
+            for (int k = -24; k <= 24; k++) {
+                double uk = (k < 0) ? umin + k * 0.05 * du : ucold + (k - 12) * 0.05 * du;
+                if (k == 0) uk = umin;
+                if (k == -24) uk = umin - fabs(umin) - 1.0 * m->CGStoCodeUnitsforU;   /* far below the column */
+                if (k == 12) uk = ucold;
+                if (k == 13) uk = ucold - 1e-14 * fabs(ucold);   /* within the edge tolerance */
+                long nf = m->nLookupFail;
+                int below = EOSisbelowColdCurve(e, rho, uk), st = EOSIsInTable(e, rho, uk);
+                CHECK(m->nLookupFail == nf, "status queries counted at rho=%g u=%.17g", rho, uk);
+                (void) EOSTofRhoU(e, rho, uk);
+                int bFallback = (m->nLookupFail > nf);
+                m->nLookupFail = nf;
+                CHECK(below == EOS_TRUE || below == EOS_FALSE, "isbelowColdCurve = %d at rho=%g u=%.17g", below, rho, uk);
+                CHECK((below == EOS_TRUE) == (st == EOS_OUTSIDE_VMIN), "isbelowColdCurve %d vs EOSIsInTable %d at rho=%g u=%.17g (u_cold %.17g)",
+                      below, st, rho, uk, ucold);
+                if (st != EOS_OUTSIDE_VMAX)
+                    CHECK((below == EOS_TRUE) == bFallback, "isbelowColdCurve %d but the lookup %s at rho=%g u=%.17g (u_cold %.17g)",
+                          below, bFallback ? "falls back" : "finds it", rho, uk, ucold);
+                if (below == EOS_FALSE && uk < ucold) nBelowRow++;
+                if (below == EOS_FALSE) nIn++; else nOut++;
+            }
+        }
+        CHECK(nIn > 0 && nOut > 0, "cold-curve status not exercised (%d inside, %d below)", nIn, nOut);
+        if (nBelowRow)
+            printf("\n    note: %d states below u(rho, T_min) are inside the table (cold rows with du/dT < 0, or edge tolerance)\n  %-44s",
+                   nBelowRow, "");
+    }
     END_TEST();
 }
 
@@ -505,10 +557,10 @@ static void testANEOSYield(EOSMATERIAL *e)
     /*
      * Overheated material: u above the column. T(rho, u) falls back to T_min and P to P(rho, T_min),
      * which gave the full cold strength Y0 f(T_min) up to EOSlib 1.2.0. The strength is that of the
-     * top row (T_max, P(rho, T_max)), 0 where T_melt <= T_max, from (rho, u) and from the T, P of
-     * EOSPCTofRhoU (EOSYieldStrengthofRhoUTP); the lookup counts the fallback once, the strength
-     * nothing more. In the table and below the cold curve RhoUTP is RhoTP; EOSYieldStrengthofRhoTP
-     * evaluates the fallback T, P as given (it cannot recognise them).
+     * top row (T_max, P(rho, T_max)), 0 where T_melt <= T_max; the lookup counts the fallback once,
+     * the strength nothing more. In the table and below the cold curve Y(rho, u) is Y(rho, T, P) of
+     * the lookup; EOSYieldStrengthofRhoTP evaluates the fallback T, P as given (it cannot recognise
+     * them).
      */
     {
         const double Tmax = m->TAxis[m->nT-1], Tmin = m->TAxis[0];
@@ -526,10 +578,6 @@ static void testANEOSYield(EOSMATERIAL *e)
             CHECK(Y == Ytop, "Y(rho, u) above the column = %g, top row %g (rho=%g)", Y, Ytop, rho);
             P = EOSPCTofRhoU(e, rho, uHi, &c, &T);
             CHECK(T == Tmin, "fallback T = %g, T_min = %g", T, Tmin);
-            nf = m->nLookupFail;
-            double Yutp = EOSYieldStrengthofRhoUTP(e, rho, uHi, T, P);
-            CHECK(m->nLookupFail == nf, "Y(rho, u, T, P) above the column counted %ld times", m->nLookupFail - nf);
-            CHECK(Yutp == Ytop, "Y(rho, u, T, P) above the column = %g, top row %g (rho=%g)", Yutp, Ytop, rho);
             CHECK(EOSYieldStrengthofRhoTP(e, rho, T, P) == EOSYieldStrengthofRhoTP(e, rho, Tmin, EOSPofRhoT(e, rho, Tmin)),
                   "Y(rho, T, P) evaluates the fallback as given (rho=%g)", rho);
             if (ANEOSTmeltofRho(m, rho) <= Tmax) { CHECK(Y == 0.0, "overheated Y = %g at rho=%g", Y, rho); nZero++; }
@@ -541,7 +589,6 @@ static void testANEOSYield(EOSMATERIAL *e)
             for (int q = 0; q < 4; q++) {
                 P = EOSPCTofRhoU(e, rho, us[q], &c, &T);
                 double Ytp = EOSYieldStrengthofRhoTP(e, rho, T, P);
-                CHECK(EOSYieldStrengthofRhoUTP(e, rho, us[q], T, P) == Ytp, "Y(rho, u, T, P) = Y(rho, T, P) (q=%d, rho=%g)", q, rho);
                 CHECK(EOSYieldStrength(e, rho, us[q]) == Ytp, "Y(rho, u) = Y(rho, T, P) (q=%d, rho=%g)", q, rho);
             }
         }
@@ -568,8 +615,6 @@ static void testANEOSYield(EOSMATERIAL *e)
         CHECK(EOSYieldStrengthofRhoTP(e, rhoMid, T, NAN) == EOS_FAIL_VALUE,
               "Y(rho,T,P = NaN) = %g", EOSYieldStrengthofRhoTP(e, rhoMid, T, NAN));
         CHECK(EOSYieldStrengthofRhoTP(e, rhoMid, NAN, 0.0) == EOS_FAIL_VALUE, "Y(rho,T = NaN,P) is not the sentinel");
-        CHECK(EOSYieldStrengthofRhoUTP(e, rhoMid, uOut, T, EOS_FAIL_VALUE) == EOS_FAIL_VALUE, "Y(rho,u,T,P = EOS_FAIL_VALUE)");
-        CHECK(EOSYieldStrengthofRhoUTP(e, rhoOut, uOut, m->TAxis[0], EOS_FAIL_VALUE) == EOS_FAIL_VALUE, "Y(rho,u,T_min,P = EOS_FAIL_VALUE) outside the table");
         /* The lookups that produced the failed P were counted; the strength adds nothing for a passed-in P. */
         long nFail1 = m->nLookupFail;
         EOSYieldStrengthofRhoTP(e, rhoMid, T, EOS_FAIL_VALUE);
@@ -706,7 +751,6 @@ static void testSCVHDispatch(EOSMATERIAL *e)
     CHECK(strlen(e->MatString) > 0, "MatString empty");
     CHECK(EOSYieldModel(e) == 0, "yield model for gas");
     CHECK(EOSYieldStrength(e, scvhSampleRho(s, 1), 1.0) == 0.0, "yield strength for gas");
-    CHECK(EOSYieldStrengthofRhoUTP(e, scvhSampleRho(s, 1), 1.0, 1.0, 1.0) == 0.0, "yield strength (rho, u, T, P) for gas");
     CHECK(EOSGammaofRhoT(e, scvhSampleRho(s, 1), scvhSampleT(s, 1)) == 0.0, "shear modulus for gas");
 
     int nSkipped = 0, nSkippedS = 0;
@@ -905,7 +949,6 @@ static void testREOS3Dispatch(EOSMATERIAL *e)
     CHECK(strlen(e->MatString) > 0, "MatString empty");
     CHECK(EOSYieldModel(e) == 0, "yield model for gas");
     CHECK(EOSYieldStrength(e, reos3SampleRho(r, 1), 1.0) == 0.0, "yield strength for gas");
-    CHECK(EOSYieldStrengthofRhoUTP(e, reos3SampleRho(r, 1), 1.0, 1.0, 1.0) == 0.0, "yield strength (rho, u, T, P) for gas");
     CHECK(EOSGammaofRhoT(e, reos3SampleRho(r, 1), reos3SampleT(r, 1)) == 0.0, "shear modulus for gas");
     CHECK(EOSSofRhoU(e, reos3SampleRho(r, 1), 1.0) == EOS_FAIL_VALUE, "entropy sentinel (rho,u)");
     CHECK(EOSSofRhoT(e, reos3SampleRho(r, 1), reos3SampleT(r, 1)) == EOS_FAIL_VALUE, "entropy sentinel (rho,T)");
