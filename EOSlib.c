@@ -1457,6 +1457,7 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
     double c, uc, Pc;
     double slope0 = 0.0; /* secant slope of P2(rho) once the bracket is EOS_SOLVEBC_SLOPE_WIDTH wide */
     int bHaveSlope = 0;
+    int bHaveC = 0;      /* (c, uc) evaluated by the bisection */
     int i;
 
     /* State in material 1. */
@@ -1559,6 +1560,7 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
                     "(rho= %g T= %g).\n", c, T);
             return EOS_FAIL;
         }
+        bHaveC = 1;
         if (Pc < P) {
             b = c; ub = uc; Pb = Pc;
         } else {
@@ -1595,8 +1597,15 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
         return EOS_FAIL;
     }
 
-    /* Make sure the returned (rho2, u2) pair is consistent. */
-    if (EOSSolveBCEval(material2, c, T, &uc, &Pc) != EOS_SUCCESS) return EOS_FAIL;
+    /*
+     * The returned (rho2, u2) must be a consistent pair. After the bisection (c, uc) are the values
+     * of its last evaluation at c, so nothing is left to do (up to 1.2.0 that lookup was repeated
+     * here, one evaluation of material 2 per call for nothing). Only if the loop never ran is uc
+     * still ub, from another density: evaluate at c then. That cannot happen with the brackets
+     * above, which start at least 0.1% apart (b <= 0.999 a), far wider than EOS_SOLVEBC_TOL; the
+     * guard keeps the result consistent should the bracketing change.
+     */
+    if (!bHaveC && EOSSolveBCEval(material2, c, T, &uc, &Pc) != EOS_SUCCESS) return EOS_FAIL;
 
     *prho2 = c;
     *pu2 = uc;

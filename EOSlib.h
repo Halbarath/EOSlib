@@ -115,6 +115,8 @@
  *          EOSinitMaterial building the table must add the call); bEntropyTableInit is
  *          EOS_FALSE until then. Everything else is bit-identical. Requires the
  *          tillInitColdCurve of the Tillotson library (raise the required version when bumped).
+ *          EOSSolveBC no longer repeats the last bisection lookup at the end (one evaluation of
+ *          material 2 per call less); the result is bit-identical.
  *          EOSYieldStrength and EOSYieldStrengthofRhoTP return EOS_FAIL_VALUE for a failed
  *          pressure (models 1 and 2): the tension clamp max(P, 0) turned P = EOS_FAIL_VALUE
  *          into P_eff = 0 and a finite Y0 * f(T) for a state outside the table.
