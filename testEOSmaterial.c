@@ -157,6 +157,27 @@ static void checkPrintMatCounter(EOSMATERIAL *e, long nLookupFail)
     CHECK(found, "EOSPrintMat of %s does not print \"%s\"", e->MatString, want);
 }
 
+/*
+ * EOSPrintMat prints rho0 in cgs with the unit for every tabulated library (reos3 did; ANEOS and SCvH
+ * printed the code-unit value unlabelled, which reads like g/cc).
+ */
+static void checkPrintMatRho0(EOSMATERIAL *e)
+{
+    FILE *fp = tmpfile();
+    CHECK(fp != NULL, "tmpfile");
+    if (fp == NULL) return;
+    EOSPrintMat(e, fp);
+    rewind(fp);
+    char line[512];
+    double rho0 = -1.0;
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        const char *p = strstr(line, "rho0 (cgs units):");
+        if (p != NULL) rho0 = atof(p + strlen("rho0 (cgs units):"));
+    }
+    fclose(fp);
+    CHECK_REL(rho0, e->rho0 * e->dGmPerCcUnit, 1e-5, "EOSPrintMat of %s: rho0 (cgs units)", e->MatString);
+}
+
 static void testIdealGas(double dKpcUnit, double dMsolUnit)
 {
     int failsBefore = nFails;
@@ -1824,6 +1845,7 @@ int main(int argc, char *argv[])
         int failsBefore = nFails;
         TEST("ANEOS: EOSPrintMat prints nLookupFail");
         checkPrintMatCounter(A, m->nLookupFail);
+        checkPrintMatRho0(A);
         END_TEST();
     }
     /* Convention: the denser material is the inner one. */
@@ -1846,6 +1868,7 @@ int main(int argc, char *argv[])
             int failsBefore = nFails;
             TEST("SCvH: EOSPrintMat prints nLookupFail");
             checkPrintMatCounter(S, s->nLookupFail);
+            checkPrintMatRho0(S);
             END_TEST();
         }
         if (A->rho0 >= B->rho0) testSCVHSolveBC(A, S); else testSCVHSolveBC(B, S);
@@ -1870,6 +1893,7 @@ int main(int argc, char *argv[])
             int failsBefore = nFails;
             TEST("REOS3: EOSPrintMat prints nLookupFail");
             checkPrintMatCounter(R, r->nLookupFail);
+            checkPrintMatRho0(R);
             END_TEST();
         }
         if (A->rho0 >= B->rho0) testREOS3SolveBC(A, R); else testREOS3SolveBC(B, R);
