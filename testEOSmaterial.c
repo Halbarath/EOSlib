@@ -1010,6 +1010,42 @@ static void testFailureContract(EOSMATERIAL *e, double rhoOk, double uOk, double
     END_TEST();
 }
 
+/*
+ * EOSSolveBC with a failed state in material 1 (rho1 above its table, P = EOS_FAIL_VALUE) must
+ * fail and leave the outputs untouched. Material 2 is an ideal gas, valid at every density, so
+ * the solver is not stopped by material 2 leaving its table: up to EOSlib 1.2.0 before the fix
+ * isfinite(P) took the sentinel as the target pressure and the lower bracket shrank
+ * EOS_SOLVEBC_MAX_EXPAND times before the solver failed. The return value was EOS_FAIL then
+ * as well, so this pins the contract (a failed target can never give a solution); the
+ * early exit itself is not observable through the API.
+ */
+static void testSolveBCFailedState(EOSMATERIAL *e, double rhoHi, double uOk, double dKpcUnit, double dMsolUnit, long *pnLookupFail)
+{
+    int failsBefore = nFails;
+    TEST("EOSSolveBC: failed state in material 1");
+    struct igeosParam gp = {5.0 / 3.0, 1.0};
+    EOSMATERIAL *gas = EOSinitMaterial(MAT_IDEALGAS, dKpcUnit, dMsolUnit, &gp);
+    long nf0 = *pnLookupFail;
+
+    CHECK(EOSFailed(EOSPofRhoU(e, rhoHi, uOk)), "P(rho1 above the table) is not the sentinel");
+    for (int jump = 0; jump < 2; jump++) {
+        double rho2 = -1.0, u2 = -1.0;
+        int ret = EOSSolveBC(e, gas, rhoHi, uOk, &rho2, &u2, jump ? 1.0 : 0.0);
+        CHECK(ret == EOS_FAIL, "failed state in material 1 (Tjump %d): returned %d", jump, ret);
+        CHECK(rho2 == -1.0 && u2 == -1.0, "outputs touched on failure: rho2=%g u2=%g", rho2, u2);
+    }
+    /* A NaN state as well: EOSFailed(NaN) is true. */
+    {
+        double rho2 = -1.0, u2 = -1.0;
+        CHECK(EOSSolveBC(e, gas, rhoHi, NAN, &rho2, &u2, 0.0) == EOS_FAIL, "NaN u1 must fail");
+        CHECK(rho2 == -1.0 && u2 == -1.0, "outputs touched for a NaN u1");
+    }
+    CHECK(*pnLookupFail > nf0, "the failed lookups in material 1 were not counted");
+    *pnLookupFail = nf0;
+    EOSfinalizeMaterial(gas);
+    END_TEST();
+}
+
 /* ------------------------------------------------------------- Tillotson */
 
 #ifdef HAVE_TILLOTSON_H
@@ -1551,6 +1587,7 @@ int main(int argc, char *argv[])
         double uOk = EOSUofRhoT(A, rhoOk, sampleT(m, NSAMPLE / 2));
         double uHi = 2.0 * fabs(EOSUofRhoT(A, rhoOk, m->TAxis[m->nT-1])) + 1.0;
         testFailureContract(A, rhoOk, uOk, uHi, 2.0 * m->rhoAxis[m->nRho-1] * m->CGStoCodeUnitsforRho, TMin, &m->nLookupFail);
+        testSolveBCFailedState(A, 2.0 * m->rhoAxis[m->nRho-1] * m->CGStoCodeUnitsforRho, uOk, dKpcUnit, dMsolUnit, &m->nLookupFail);
         int failsBefore = nFails;
         TEST("ANEOS: EOSPrintMat prints nLookupFail");
         checkPrintMatCounter(A, m->nLookupFail);
@@ -1572,6 +1609,7 @@ int main(int argc, char *argv[])
             double uOk = EOSUofRhoT(S, rhoOk, scvhSampleT(s, 1));
             double uHi = 2.0 * EOSUofRhoT(S, rhoOk, pow(10.0, s->LogTMax));
             testFailureContract(S, rhoOk, uOk, uHi, 2.0 * pow(10.0, s->LogRhoMax), TMin, &s->nLookupFail);
+            testSolveBCFailedState(S, 2.0 * pow(10.0, s->LogRhoMax), uOk, dKpcUnit, dMsolUnit, &s->nLookupFail);
             int failsBefore = nFails;
             TEST("SCvH: EOSPrintMat prints nLookupFail");
             checkPrintMatCounter(S, s->nLookupFail);
@@ -1595,6 +1633,7 @@ int main(int argc, char *argv[])
             double uOk = EOSUofRhoT(R, rhoOk, reos3SampleT(r, 1));
             double uHi = 2.0 * EOSUofRhoT(R, rhoOk, pow(10.0, r->LogTMax));
             testFailureContract(R, rhoOk, uOk, uHi, 2.0 * pow(10.0, r->LogRhoMax), TMin, &r->nLookupFail);
+            testSolveBCFailedState(R, 2.0 * pow(10.0, r->LogRhoMax), uOk, dKpcUnit, dMsolUnit, &r->nLookupFail);
             int failsBefore = nFails;
             TEST("REOS3: EOSPrintMat prints nLookupFail");
             checkPrintMatCounter(R, r->nLookupFail);

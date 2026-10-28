@@ -1403,8 +1403,9 @@ static int EOSSolveBCEval(EOSMATERIAL *material, double rho, double T,
 
     if (!EOSIsUsable(material, rho, u)) return EOS_FAIL;
 
+    /* EOSFailed, not only isfinite: the sentinel -1e50 is finite (NaN is caught by both). */
     P = EOSPofRhoU(material, rho, u);
-    if (!isfinite(P)) return EOS_FAIL;
+    if (EOSFailed(P) || !isfinite(P)) return EOS_FAIL;
 
     *pu = u;
     *pP = P;
@@ -1440,7 +1441,13 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
     /* State in material 1. */
     P = EOSPofRhoU(material1, rho1, u1);
     T = EOSTofRhoU(material1, rho1, u1) - Tjump;
-    if (!isfinite(P) || !isfinite(T) || T <= 0.0) {
+    /*
+     * A failed P (EOS_FAIL_VALUE, rho1 outside the table of material 1) is finite, so isfinite
+     * alone let it through as the target pressure: every P2 > -1e50, the lower bracket shrank
+     * EOS_SOLVEBC_MAX_EXPAND times (or until it left the table of material 2) and the solver
+     * failed there with a message about material 2. EOSFailed also catches NaN.
+     */
+    if (EOSFailed(P) || !isfinite(P) || !isfinite(T) || T <= 0.0) {
         EOS_WARN("EOSSolveBC: invalid state in material 1 "
                 "(rho1= %g u1= %g P= %g T= %g).\n", rho1, u1, P, T);
         return EOS_FAIL;

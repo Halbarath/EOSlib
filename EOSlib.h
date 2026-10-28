@@ -86,6 +86,9 @@
  *          core each called ANEOSYieldParameters).
  *          EOSIsentropic documents the clamp of tabulated EOS (ANEOS, SCvH) to the table edge
  *          the isentrope leaves through (ANEOS clamped to the cold curve on both sides).
+ *          EOSSolveBC fails at once for a failed state in material 1 (P = EOS_FAIL_VALUE, e.g.
+ *          rho1 outside its table); isfinite(P) let the sentinel through as the target
+ *          pressure, and the solver failed only after shrinking the lower bracket.
  *          EOSYieldStrength and EOSYieldStrengthofRhoTP return EOS_FAIL_VALUE for a failed
  *          pressure (models 1 and 2): the tension clamp max(P, 0) turned P = EOS_FAIL_VALUE
  *          into P_eff = 0 and a finite Y0 * f(T) for a state outside the table.
@@ -406,8 +409,9 @@ double EOSUCold(EOSMATERIAL *material, double rho);
  * table), with a message under EOSLIB_VERBOSE. A discontinuity is detected by
  * the growth of the secant slope of P2(rho) as the bracket closes (see
  * EOSSolveBC in EOSlib.c), not by the pressure gap, which for a continuous but
- * stiff P2 can exceed EOS_SOLVEBC_PTOL |P|. On failure *prho2 and *pu2 are
- * untouched.
+ * stiff P2 can exceed EOS_SOLVEBC_PTOL |P|. A failed lookup of (rho1, u1) in
+ * material 1 fails at once, without evaluating material 2. On failure *prho2
+ * and *pu2 are untouched.
  */
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,
  double *prho2, double *pu2, double Tjump);
