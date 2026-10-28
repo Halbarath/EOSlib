@@ -1392,6 +1392,23 @@ static void testTillotsonTableStatus(EOSMATERIAL *e)
         double P = EOSPCTofRhoU(e, rhoHi, uOk, &c, &T);
         CHECK(isfinite(P) && isfinite(c) && T == 0.0, "fused lookup above rhomax: P=%g c=%g T=%g (analytic P, c; T = 0)", P, c, T);
     }
+    /*
+     * Below T_min = 0 (or a non-finite T): u(rho, T), P(rho, T) and rho(P, T) fail, counted once each,
+     * like the other libraries below their T_min. Up to tillotson 4.0.0 u(rho, T) gave u_cold + cv T
+     * (a state below the cold curve) and P(rho, T) its pressure.
+     */
+    {
+        const double Ts[3] = { -1.0, NAN, INFINITY };
+        const double Pok = EOSPofRhoU(e, rhoOk, uOk);
+        for (int q = 0; q < 3; q++) {
+            long n = m->nLookupFail;
+            CHECK(EOSFailed(EOSUofRhoT(e, rhoOk, Ts[q])), "u(rho, T= %g)", Ts[q]);
+            CHECK(EOSFailed(EOSPofRhoT(e, rhoOk, Ts[q])), "P(rho, T= %g)", Ts[q]);
+            CHECK(EOSFailed(EOSRhoofPT(e, Pok, Ts[q])), "rho(P, T= %g)", Ts[q]);
+            CHECK(m->nLookupFail == n + 3, "u, P, rho(P) at T= %g counted %ld times (expected 3)", Ts[q], m->nLookupFail - n);
+        }
+        CHECK(!EOSFailed(EOSPofRhoT(e, rhoOk, 0.0)), "P(rho, T = 0) is the cold curve, valid");
+    }
     m->nLookupFail = nf0;
     END_TEST();
 }
