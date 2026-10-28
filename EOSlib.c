@@ -1487,32 +1487,40 @@ static int EOSSolveBCEval(EOSMATERIAL *material, double rho, double T,
 }
 
 /*
- * Move the bracket end *px of EOSSolveBC geometrically until P2 >= P (dir > 0, upper bracket,
- * factor EOS_SOLVEBC_EXPAND_FAC) or P2 <= P (dir < 0, lower bracket, factor 1/EOS_SOLVEBC_EXPAND_FAC),
- * keeping (*pu, *pP) the values at *px. A trial density where material 2 cannot be evaluated (outside
- * its table, or u(rho, T) not usable) does not end the search: the factor is replaced by its square
- * root, so the search closes in on the edge of the usable range and still brackets a root between
- * the last valid density and that edge. It fails when the factor is within EOS_SOLVEBC_TOL of 1 (the
- * edge is reached and P2 there is still on the wrong side of P) or after EOS_SOLVEBC_MAX_EXPAND
- * trials. The trials beyond the edge are lookups outside the table of material 2 and are counted in
- * its nLookupFail.
+ * Move the bracket end *px of EOSSolveBC until P2 >= P (dir > 0, upper bracket) or P2 <= P (dir < 0,
+ * lower bracket), keeping (*pu, *pP) the values at *px.
  *
- * Up to 1.2.0 the brackets moved by 1.1 and 0.9 per step (100 steps: a factor 1.4e4 up, 3.7e-5 down)
- * and the first trial outside the table ended the search.
+ * The first EOS_SOLVEBC_MAX_EXPAND steps are those of EOSlib 1.2.0 (factors 1.1 up, 0.9 down,
+ * together 1.4e4 and 2.7e-5), done with the same arithmetic, so every bracket the old solver found
+ * is found again bit for bit and the bisection returns the same root: on a P2(rho) with several
+ * roots (non-monotonic tables) a wider bracket can end on another one, which changes the result for
+ * a caller that iterates (ballic). Only where the old search failed does it go on:
+ *   - after EOS_SOLVEBC_MAX_EXPAND steps with factor EOS_SOLVEBC_EXPAND_FAC (2 up, 1/2 down), at most
+ *     EOS_SOLVEBC_MAX_COARSE more steps (it stopped there);
+ *   - a trial density where material 2 cannot be evaluated (outside its table, or u(rho, T) not
+ *     usable) replaces the factor by its square root instead of failing (it failed at the first
+ *     such trial), so the search closes in on the edge of the usable range and still brackets a
+ *     root between the last valid density and that edge. It fails when the factor is within
+ *     EOS_SOLVEBC_TOL of 1. These trials are lookups outside the table of material 2 and are counted
+ *     in its nLookupFail.
  */
 static int EOSSolveBCExpand(EOSMATERIAL *material, double T, double P, int dir,
                             double *px, double *pu, double *pP)
 {
-    double fac = (dir > 0) ? EOS_SOLVEBC_EXPAND_FAC : 1.0/EOS_SOLVEBC_EXPAND_FAC;
+    double fac = (dir > 0) ? 1.1 : 0.9;
+    int bRefined = 0;   /* the factor was reduced at a table edge: keep it */
     int i;
 
     for (i = 0; (dir > 0) ? (*pP < P) : (*pP > P); i++) {
         double x, u, Px;
 
-        if (i >= EOS_SOLVEBC_MAX_EXPAND) return EOS_FAIL;
+        if (i >= EOS_SOLVEBC_MAX_EXPAND + EOS_SOLVEBC_MAX_COARSE) return EOS_FAIL;
+        if (i == EOS_SOLVEBC_MAX_EXPAND && !bRefined)
+            fac = (dir > 0) ? EOS_SOLVEBC_EXPAND_FAC : 1.0/EOS_SOLVEBC_EXPAND_FAC;
         x = *px*fac;
         if (EOSSolveBCEval(material, x, T, &u, &Px) != EOS_SUCCESS) {
             fac = sqrt(fac);
+            bRefined = 1;
             if (fabs(fac - 1.0) < EOS_SOLVEBC_TOL) return EOS_FAIL;
             continue;
         }
@@ -1580,13 +1588,20 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
     }
 
     /*
-     * Upper bracket: start at max(rho1, rho0 of material 2) and expand until P2 >= P. rho1 alone
-     * (the denser component inside) failed at once where rho1 lies below the table of material 2:
-     * a gas envelope (SCvH, REOS3 at 1e-6 g/cc) on a condensed core (ANEOS), whose interface
-     * density is near the core's rho0, not near rho1. rho0 of material 2 is inside its table.
+     * Upper bracket: start at rho1 (assumes the denser component is in the inner shell) and expand
+     * until P2 >= P. If material 2 cannot be evaluated at rho1 and rho1 is below its reference
+     * density, start at rho0 of material 2 instead: a gas envelope (SCvH, REOS3 at 1e-6 g/cc) on a
+     * condensed core (ANEOS) has rho1 below the core's table, and the solver failed at once there
+     * up to 1.2.0. Wherever rho1 can be evaluated the start is rho1 as before, so the solver finds
+     * the same root (see EOSSolveBCExpand).
      */
-    a = fmax(rho1, material2->rho0);
-    if (EOSSolveBCEval(material2, a, T, &ua, &Pa) != EOS_SUCCESS) {
+    a = rho1;
+    int iEval = EOSSolveBCEval(material2, a, T, &ua, &Pa);
+    if (iEval != EOS_SUCCESS && rho1 < material2->rho0) {
+        a = material2->rho0;
+        iEval = EOSSolveBCEval(material2, a, T, &ua, &Pa);
+    }
+    if (iEval != EOS_SUCCESS) {
         EOS_WARN("EOSSolveBC: rho= %g T= %g not valid in material %d.\n",
                 a, T, material2->iMat);
         return EOS_FAIL;

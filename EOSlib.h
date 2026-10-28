@@ -142,12 +142,16 @@
  *          M-ANEOS states below the first row that the lookup finds without a fallback and that
  *          EOSIsInTable reports inside (columns with du/dT < 0 at the cold rows), and for states
  *          within the edge tolerance of the first row. Tillotson and the ideal gas are unchanged.
- *          EOSSolveBC: the upper bracket starts at max(rho1, rho0 of material 2) instead of rho1, which
- *          failed at once for a gas envelope (SCvH, REOS3) below the density range of a condensed core
- *          (ANEOS); the brackets move by a factor 2 per step (1.1 and 0.9 covered a factor 1.4e4 up
- *          and 3.7e-5 down) and close in on the table edge of material 2 instead of failing at the
- *          first trial beyond it (EOS_SOLVEBC_EXPAND_FAC). Solutions can differ from 1.2.0 within
- *          EOS_SOLVEBC_TOL (other start brackets). The discontinuity test gets a second opinion
+ *          EOSSolveBC: where material 2 cannot be evaluated at rho1 < rho0 of material 2, the upper
+ *          bracket starts at that rho0 (the solver failed at once for a gas envelope, SCvH or REOS3,
+ *          below the density range of a condensed core, ANEOS). Where the steps of 1.1 and 0.9
+ *          (a factor 1.4e4 up, 2.7e-5 down) do not find a bracket, up to EOS_SOLVEBC_MAX_COARSE steps
+ *          of a factor 2 follow (EOS_SOLVEBC_EXPAND_FAC), and a trial beyond the table of material 2
+ *          refines the step instead of failing. Wherever the 1.2.0 search succeeded the brackets,
+ *          and so the result, are bit-identical: a first version with factor-2 steps and a start at
+ *          max(rho1, rho0) ended on another root of a non-monotonic P2 (M-ANEOS iron on forsterite),
+ *          and ballic's integration, which iterates over EOSSolveBC, no longer converged. The
+ *          discontinuity test gets a second opinion
  *          where the slope test fails: the one-sided secant slopes just outside the final bracket
  *          (EOS_SOLVEBC_PROBE). A root within EOS_SOLVEBC_SLOPE_WIDTH of a kink of a continuous P2
  *          (Tillotson at rho0 near T = 0: P cut off at 0 below, the stiff cold curve above) was
@@ -229,8 +233,9 @@
 #define WOOLFSON_MIN_PRESSURE_CGS 1.44e10
 
 /* EOSSolveBC: bracket expansion limits and convergence tolerances. */
-#define EOS_SOLVEBC_EXPAND_FAC  2.0   /* bracket step: x2 up, /2 down (2^100 ~ 1e30) */
-#define EOS_SOLVEBC_MAX_EXPAND  100   /* trials per bracket, including the steps refined at a table edge */
+#define EOS_SOLVEBC_MAX_EXPAND  100   /* bracket steps of 1.1 up, 0.9 down (as up to 1.2.0): 1.1^100 ~ 1.4e4, 0.9^100 ~ 2.7e-5 */
+#define EOS_SOLVEBC_EXPAND_FAC  2.0   /* then steps of x2 up, /2 down ... */
+#define EOS_SOLVEBC_MAX_COARSE  100   /* ... at most this many more (2^100 ~ 1e30); trials refined at a table edge count too */
 #define EOS_SOLVEBC_MAX_BISECT  200
 #define EOS_SOLVEBC_TOL         1e-10 /* relative, in density */
 #define EOS_SOLVEBC_PTOL        1e-6  /* relative, in pressure: a gap below this always passes */
@@ -516,11 +521,14 @@ double EOSUCold(EOSMATERIAL *material, double rho);
  * usable in material 1 (EOSIsUsable: rho1 outside the table, or u1 outside the
  * u(T) column, where T(rho, u) falls back to T_min and P would be that of the
  * fallback) fails at once, without evaluating material 2. The upper bracket
- * starts at max(rho1, rho0 of material 2), the lower one just below rho0 (and
- * below the upper bracket); both move by a factor EOS_SOLVEBC_EXPAND_FAC per
- * step and close in on the edge of the table of material 2 instead of failing
- * at the first trial beyond it (those trials count in its nLookupFail), so a
- * gas envelope far below the density range of a condensed core solves.
+ * starts at rho1 (at rho0 of material 2 if rho1 is below it and cannot be
+ * evaluated there), the lower one just below rho0 (and below the upper
+ * bracket). Both move by 1.1 and 0.9 per step as up to 1.2.0, so wherever that
+ * search succeeds the result is the same; where it fails they go on by
+ * EOS_SOLVEBC_EXPAND_FAC per step and close in on the edge of the table of
+ * material 2 instead of failing at the first trial beyond it (those trials count
+ * in its nLookupFail), so a gas envelope far below the density range of a
+ * condensed core solves.
  * On failure *prho2
  * and *pu2 are untouched.
  */

@@ -1238,8 +1238,8 @@ static void testFailureContract(EOSMATERIAL *e, double rhoOk, double uOk, double
  * A gas envelope far below the density range of a condensed core (ANEOS): an ideal gas whose mean
  * molecular mass is chosen so that, at the (P, T) of every core state tested, its density
  * rho = P mu m_H/(k T) lies a factor 1e3 or more below the core's table. Up to EOSlib 1.2.0
- * EOSSolveBC started the upper bracket at rho1 and failed at once there; now it starts at
- * max(rho1, rho0 of the core). The target (P, T) is taken from a core state (rho*, T), so a root
+ * EOSSolveBC started the upper bracket at rho1 and failed at once there; now it starts at rho0 of
+ * the core where rho1 cannot be evaluated. The target (P, T) is taken from a core state (rho*, T), so a root
  * exists; where P(rho, T) of the core is not monotonic the solver may find another one or fail
  * (table defects, like in testSolveBC), so the residual is checked for every solved state and
  * success is required for most of them. mu is fixed from the table, not assumed: the density
