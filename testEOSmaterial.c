@@ -845,12 +845,12 @@ static void testSCVHSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
     int failsBefore = nFails;
     TEST("EOSSolveBC: SCvH envelope on ANEOS core");
     SCVHEOSMAT *s = outer->scvheosmaterial;
-    int nSolved = 0;
+    int nSolved = 0, nBelow = 0;
     for (int a = 2; a < NSAMPLE_SCVH - 2; a += 4) for (int b = 1; b < NSAMPLE_SCVH - 3; b += 4) {
-        /* State at the base of the envelope. The solver brackets from rho1
-         * upwards in the inner material, so the envelope state must be denser
-         * than the core's low-density table edge, and its pressure must exceed
-         * the interface-correction floor like in the ANEOS test. */
+        /* State at the base of the envelope; its pressure must exceed the interface-correction
+         * floor like in the ANEOS test. The solver brackets from max(rho1, rho0 of the core), so
+         * rho1 may lie below the core's table (up to EOSlib 1.2.0 it started at rho1 and failed
+         * at once there). */
         double rho1 = scvhSampleRho(s, a), T1 = scvhSampleT(s, b);
         if (!scvhEnergyMonotonic(s, rho1)) continue;
         double u1 = EOSUofRhoT(outer, rho1, T1);
@@ -863,8 +863,10 @@ static void testSCVHSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
               "P continuity rho1=%g T1=%g: %.15e vs %.15e", rho1, T1, EOSPofRhoU(inner, rho2, u2), P1);
         CHECK_REL(u2, EOSUofRhoT(inner, rho2, T1), 1e-10, "T continuity rho1=%g T1=%g", rho1, T1);
         CHECK(EOSIsUsable(inner, rho2, u2) == EOS_TRUE, "solved state not usable");
+        if (EOSIsInTable(inner, rho1, EOSUofRhoT(inner, inner->rho0, T1)) == EOS_OUTSIDE_RHOMIN) nBelow++;
     }
-    if (nSolved == 0) printf("\n    note: no envelope state had a solution in the core table (table ranges do not overlap)\n  %-44s", "");
+    CHECK(nSolved > 0, "no envelope state solved on the core");
+    printf("\n    note: %d envelope states solved, %d of them with rho1 below the core table\n  %-44s", nSolved, nBelow, "");
     END_TEST();
 }
 #endif
@@ -1093,11 +1095,10 @@ static void testREOS3SolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
     int failsBefore = nFails;
     TEST("EOSSolveBC: REOS3 envelope on ANEOS core");
     REOS3MAT *r = outer->reos3material;
-    int nSolved = 0;
+    int nSolved = 0, nBelow = 0;
     for (int a = 2; a < NSAMPLE_REOS3 - 2; a += 4) for (int b = 1; b < NSAMPLE_REOS3 - 3; b += 4) {
-        /* Same conditions as the SCvH envelope test: the solver brackets from
-         * rho1 upwards in the inner material, and P must exceed the
-         * interface-correction floor. */
+        /* Same conditions as the SCvH envelope test: P must exceed the interface-correction
+         * floor; rho1 may lie below the core's table. */
         double rho1 = reos3SampleRho(r, a), T1 = reos3SampleT(r, b);
         if (!reos3EnergyMonotonic(r, rho1)) continue;
         double u1 = EOSUofRhoT(outer, rho1, T1);
@@ -1110,8 +1111,10 @@ static void testREOS3SolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
               "P continuity rho1=%g T1=%g: %.15e vs %.15e", rho1, T1, EOSPofRhoU(inner, rho2, u2), P1);
         CHECK_REL(u2, EOSUofRhoT(inner, rho2, T1), 1e-10, "T continuity rho1=%g T1=%g", rho1, T1);
         CHECK(EOSIsUsable(inner, rho2, u2) == EOS_TRUE, "solved state not usable");
+        if (EOSIsInTable(inner, rho1, EOSUofRhoT(inner, inner->rho0, T1)) == EOS_OUTSIDE_RHOMIN) nBelow++;
     }
-    if (nSolved == 0) printf("\n    note: no envelope state had a solution in the core table (table ranges do not overlap)\n  %-44s", "");
+    CHECK(nSolved > 0, "no envelope state solved on the core");
+    printf("\n    note: %d envelope states solved, %d of them with rho1 below the core table\n  %-44s", nSolved, nBelow, "");
     END_TEST();
 }
 #endif
@@ -1230,6 +1233,69 @@ static void testFailureContract(EOSMATERIAL *e, double rhoOk, double uOk, double
  * as well, so this pins the contract (a failed target can never give a solution); the
  * early exit itself is not observable through the API.
  */
+#ifdef HAVE_ANEOSMATERIAL_H
+/*
+ * A gas envelope far below the density range of a condensed core (ANEOS): an ideal gas whose mean
+ * molecular mass is chosen so that, at the (P, T) of every core state tested, its density
+ * rho = P mu m_H/(k T) lies a factor 1e3 or more below the core's table. Up to EOSlib 1.2.0
+ * EOSSolveBC started the upper bracket at rho1 and failed at once there; now it starts at
+ * max(rho1, rho0 of the core). The target (P, T) is taken from a core state (rho*, T), so a root
+ * exists; where P(rho, T) of the core is not monotonic the solver may find another one or fail
+ * (table defects, like in testSolveBC), so the residual is checked for every solved state and
+ * success is required for most of them. mu is fixed from the table, not assumed: the density
+ * range of the tables differs by many orders of magnitude (M-ANEOS iron reaches 1e-25 code units).
+ */
+static int gasEnvelopeState(EOSMATERIAL *core, int a, int b, double *prhoS, double *pT, double *pP)
+{
+    ANEOSMATERIAL *m = core->ANEOSmaterial;
+    *prhoS = sampleRho(m, a);
+    *pT = sampleT(m, b);
+    if (*prhoS < 0.8 * core->rho0) return 0;                  /* condensed core states */
+    *pP = EOSPofRhoT(core, *prhoS, *pT);
+    return (*pP > EOSWoolfsonMinPressure(core));
+}
+
+static void testSolveBCGasEnvelope(EOSMATERIAL *core, double dKpcUnit, double dMsolUnit)
+{
+    int failsBefore = nFails;
+    TEST("EOSSolveBC: dilute gas envelope on ANEOS core");
+    ANEOSMATERIAL *m = core->ANEOSmaterial;
+    const double rhoMinCore = m->rhoAxis[0] * m->CGStoCodeUnitsforRho;
+    double rhoS, T, P, rho1Max = 0.0;
+
+    /* The densest gas state at mu = 1 fixes mu: rho1 scales with mu at fixed (P, T). */
+    struct igeosParam gp = {5.0 / 3.0, 1.0};
+    EOSMATERIAL *gas = EOSinitMaterial(MAT_IDEALGAS, dKpcUnit, dMsolUnit, &gp);
+    for (int a = 2; a < NSAMPLE - 2; a += 3) for (int b = 1; b < NSAMPLE - 3; b += 3)
+        if (gasEnvelopeState(core, a, b, &rhoS, &T, &P)) rho1Max = fmax(rho1Max, EOSRhoofPT(gas, P, T));
+    EOSfinalizeMaterial(gas);
+    gp.dMeanMolMass = 1e-3 * rhoMinCore / rho1Max;
+    gas = EOSinitMaterial(MAT_IDEALGAS, dKpcUnit, dMsolUnit, &gp);
+
+    int nTried = 0, nSolved = 0;
+    for (int a = 2; a < NSAMPLE - 2; a += 3) for (int b = 1; b < NSAMPLE - 3; b += 3) {
+        if (!gasEnvelopeState(core, a, b, &rhoS, &T, &P)) continue;
+        double rho1 = EOSRhoofPT(gas, P, T), u1 = EOSUofRhoT(gas, rho1, T);
+        CHECK(rho1 > 0.0 && rho1 <= 1.001e-3 * rhoMinCore, "gas density %g not below the core table (%g)", rho1, rhoMinCore);
+        CHECK_REL(EOSPofRhoU(gas, rho1, u1), P, 1e-12, "gas pressure at rho1=%g", rho1);
+        nTried++;
+        double rho2 = -1.0, u2 = -1.0;
+        if (EOSSolveBC(gas, core, rho1, u1, &rho2, &u2, 0.0) != EOS_SUCCESS) continue;
+        nSolved++;
+        CHECK(fabs(EOSPofRhoU(core, rho2, u2) - P) <= solveBCPResidualBound(core, rho2, T, P),
+              "P continuity rho*=%g T=%g: %.15e vs %.15e", rhoS, T, EOSPofRhoU(core, rho2, u2), P);
+        CHECK_REL(u2, EOSUofRhoT(core, rho2, T), 1e-10, "T continuity rho*=%g T=%g", rhoS, T);
+        CHECK(EOSIsUsable(core, rho2, u2) == EOS_TRUE, "solved state not usable");
+    }
+    CHECK(nTried > 0, "no core state tried");
+    CHECK(2 * nSolved >= nTried, "dilute envelope solved for only %d of %d core states", nSolved, nTried);
+    printf("\n    note: %d of %d dilute-envelope states solved (rho1 <= 1e-3 of the core table minimum, mu = %g)\n  %-44s",
+           nSolved, nTried, gp.dMeanMolMass, "");
+    EOSfinalizeMaterial(gas);
+    END_TEST();
+}
+#endif
+
 static void testSolveBCFailedState(EOSMATERIAL *e, double rhoHi, double rhoOk, double uOk, double uHi,
                                    double dKpcUnit, double dMsolUnit, long *pnLookupFail)
 {
@@ -2014,6 +2080,9 @@ int main(int argc, char *argv[])
         double uHi = 2.0 * fabs(EOSUofRhoT(A, rhoOk, m->TAxis[m->nT-1])) + 1.0;
         testFailureContract(A, rhoOk, uOk, uHi, 2.0 * m->rhoAxis[m->nRho-1] * m->CGStoCodeUnitsforRho, TMin, &m->nLookupFail);
         testSolveBCFailedState(A, 2.0 * m->rhoAxis[m->nRho-1] * m->CGStoCodeUnitsforRho, rhoOk, uOk, uHi, dKpcUnit, dMsolUnit, &m->nLookupFail);
+        long nf = m->nLookupFail;
+        testSolveBCGasEnvelope(A, dKpcUnit, dMsolUnit);
+        m->nLookupFail = nf;   /* the brackets probe the core's table edge (counted) */
         int failsBefore = nFails;
         TEST("ANEOS: EOSPrintMat prints nLookupFail");
         checkPrintMatCounter(A, m->nLookupFail);

@@ -142,6 +142,17 @@
  *          M-ANEOS states below the first row that the lookup finds without a fallback and that
  *          EOSIsInTable reports inside (columns with du/dT < 0 at the cold rows), and for states
  *          within the edge tolerance of the first row. Tillotson and the ideal gas are unchanged.
+ *          EOSSolveBC: the upper bracket starts at max(rho1, rho0 of material 2) instead of rho1, which
+ *          failed at once for a gas envelope (SCvH, REOS3) below the density range of a condensed core
+ *          (ANEOS); the brackets move by a factor 2 per step (1.1 and 0.9 covered a factor 1.4e4 up
+ *          and 3.7e-5 down) and close in on the table edge of material 2 instead of failing at the
+ *          first trial beyond it (EOS_SOLVEBC_EXPAND_FAC). Solutions can differ from 1.2.0 within
+ *          EOS_SOLVEBC_TOL (other start brackets). The discontinuity test gets a second opinion
+ *          where the slope test fails: the one-sided secant slopes just outside the final bracket
+ *          (EOS_SOLVEBC_PROBE). A root within EOS_SOLVEBC_SLOPE_WIDTH of a kink of a continuous P2
+ *          (Tillotson at rho0 near T = 0: P cut off at 0 below, the stiff cold curve above) was
+ *          rejected as discontinuous whenever the reference bracket straddled the kink; with the
+ *          old brackets this happened not to be the case for the states tested.
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -218,12 +229,14 @@
 #define WOOLFSON_MIN_PRESSURE_CGS 1.44e10
 
 /* EOSSolveBC: bracket expansion limits and convergence tolerances. */
-#define EOS_SOLVEBC_MAX_EXPAND  100   /* 1.1^100 ~ 1.4e4, 0.9^100 ~ 2.7e-5 */
+#define EOS_SOLVEBC_EXPAND_FAC  2.0   /* bracket step: x2 up, /2 down (2^100 ~ 1e30) */
+#define EOS_SOLVEBC_MAX_EXPAND  100   /* trials per bracket, including the steps refined at a table edge */
 #define EOS_SOLVEBC_MAX_BISECT  200
 #define EOS_SOLVEBC_TOL         1e-10 /* relative, in density */
 #define EOS_SOLVEBC_PTOL        1e-6  /* relative, in pressure: a gap below this always passes */
 #define EOS_SOLVEBC_SLOPE_WIDTH 1e-6  /* relative bracket width of the reference secant slope */
 #define EOS_SOLVEBC_SLOPE_FAC   10.0  /* the final secant slope may exceed the reference by this */
+#define EOS_SOLVEBC_PROBE       4.0   /* width of the one-sided slopes outside the final bracket, in bracket widths */
 
 #define EOSIDEALGAS  0
 #define EOSTILLOTSON 1
@@ -502,7 +515,13 @@ double EOSUCold(EOSMATERIAL *material, double rho);
  * stiff P2 can exceed EOS_SOLVEBC_PTOL |P|. A state (rho1, u1) that is not
  * usable in material 1 (EOSIsUsable: rho1 outside the table, or u1 outside the
  * u(T) column, where T(rho, u) falls back to T_min and P would be that of the
- * fallback) fails at once, without evaluating material 2. On failure *prho2
+ * fallback) fails at once, without evaluating material 2. The upper bracket
+ * starts at max(rho1, rho0 of material 2), the lower one just below rho0 (and
+ * below the upper bracket); both move by a factor EOS_SOLVEBC_EXPAND_FAC per
+ * step and close in on the edge of the table of material 2 instead of failing
+ * at the first trial beyond it (those trials count in its nLookupFail), so a
+ * gas envelope far below the density range of a condensed core solves.
+ * On failure *prho2
  * and *pu2 are untouched.
  */
 int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, double u1,

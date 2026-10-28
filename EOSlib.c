@@ -1487,6 +1487,43 @@ static int EOSSolveBCEval(EOSMATERIAL *material, double rho, double T,
 }
 
 /*
+ * Move the bracket end *px of EOSSolveBC geometrically until P2 >= P (dir > 0, upper bracket,
+ * factor EOS_SOLVEBC_EXPAND_FAC) or P2 <= P (dir < 0, lower bracket, factor 1/EOS_SOLVEBC_EXPAND_FAC),
+ * keeping (*pu, *pP) the values at *px. A trial density where material 2 cannot be evaluated (outside
+ * its table, or u(rho, T) not usable) does not end the search: the factor is replaced by its square
+ * root, so the search closes in on the edge of the usable range and still brackets a root between
+ * the last valid density and that edge. It fails when the factor is within EOS_SOLVEBC_TOL of 1 (the
+ * edge is reached and P2 there is still on the wrong side of P) or after EOS_SOLVEBC_MAX_EXPAND
+ * trials. The trials beyond the edge are lookups outside the table of material 2 and are counted in
+ * its nLookupFail.
+ *
+ * Up to 1.2.0 the brackets moved by 1.1 and 0.9 per step (100 steps: a factor 1.4e4 up, 3.7e-5 down)
+ * and the first trial outside the table ended the search.
+ */
+static int EOSSolveBCExpand(EOSMATERIAL *material, double T, double P, int dir,
+                            double *px, double *pu, double *pP)
+{
+    double fac = (dir > 0) ? EOS_SOLVEBC_EXPAND_FAC : 1.0/EOS_SOLVEBC_EXPAND_FAC;
+    int i;
+
+    for (i = 0; (dir > 0) ? (*pP < P) : (*pP > P); i++) {
+        double x, u, Px;
+
+        if (i >= EOS_SOLVEBC_MAX_EXPAND) return EOS_FAIL;
+        x = *px*fac;
+        if (EOSSolveBCEval(material, x, T, &u, &Px) != EOS_SUCCESS) {
+            fac = sqrt(fac);
+            if (fabs(fac - 1.0) < EOS_SOLVEBC_TOL) return EOS_FAIL;
+            continue;
+        }
+        *px = x;
+        *pu = u;
+        *pP = Px;
+    }
+    return EOS_SUCCESS;
+}
+
+/*
  * Given rho1, u1 (material 1) solve for rho2, u2 (material 2) at the interface
  * between two materials.
  *
@@ -1543,28 +1580,21 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
     }
 
     /*
-     * Upper bracket: start at rho1 (assumes the denser component is in the
-     * inner shell) and expand until P2 >= P.
+     * Upper bracket: start at max(rho1, rho0 of material 2) and expand until P2 >= P. rho1 alone
+     * (the denser component inside) failed at once where rho1 lies below the table of material 2:
+     * a gas envelope (SCvH, REOS3 at 1e-6 g/cc) on a condensed core (ANEOS), whose interface
+     * density is near the core's rho0, not near rho1. rho0 of material 2 is inside its table.
      */
-    a = rho1;
+    a = fmax(rho1, material2->rho0);
     if (EOSSolveBCEval(material2, a, T, &ua, &Pa) != EOS_SUCCESS) {
         EOS_WARN("EOSSolveBC: rho= %g T= %g not valid in material %d.\n",
                 a, T, material2->iMat);
         return EOS_FAIL;
     }
-    for (i = 0; Pa < P; i++) {
-        if (i >= EOS_SOLVEBC_MAX_EXPAND) {
-            EOS_WARN("EOSSolveBC: upper bracket not found "
-                    "(P= %g T= %g a= %g Pa= %g).\n", P, T, a, Pa);
-            return EOS_FAIL;
-        }
-        a *= 1.1;
-        if (EOSSolveBCEval(material2, a, T, &ua, &Pa) != EOS_SUCCESS) {
-            EOS_WARN("EOSSolveBC: left EOS table of material %d while "
-                    "expanding upper bracket (rho= %g T= %g).\n",
-                    material2->iMat, a, T);
-            return EOS_FAIL;
-        }
+    if (EOSSolveBCExpand(material2, T, P, +1, &a, &ua, &Pa) != EOS_SUCCESS) {
+        EOS_WARN("EOSSolveBC: upper bracket not found in material %d "
+                "(P= %g T= %g a= %g Pa= %g).\n", material2->iMat, P, T, a, Pa);
+        return EOS_FAIL;
     }
 
     /*
@@ -1577,19 +1607,10 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
                 b, T, material2->iMat);
         return EOS_FAIL;
     }
-    for (i = 0; Pb > P; i++) {
-        if (i >= EOS_SOLVEBC_MAX_EXPAND) {
-            EOS_WARN("EOSSolveBC: lower bracket not found "
-                    "(P= %g T= %g b= %g Pb= %g).\n", P, T, b, Pb);
-            return EOS_FAIL;
-        }
-        b *= 0.9;
-        if (EOSSolveBCEval(material2, b, T, &ub, &Pb) != EOS_SUCCESS) {
-            EOS_WARN("EOSSolveBC: left EOS table of material %d while "
-                    "expanding lower bracket (rho= %g T= %g).\n",
-                    material2->iMat, b, T);
-            return EOS_FAIL;
-        }
+    if (EOSSolveBCExpand(material2, T, P, -1, &b, &ub, &Pb) != EOS_SUCCESS) {
+        EOS_WARN("EOSSolveBC: lower bracket not found in material %d "
+                "(P= %g T= %g b= %g Pb= %g).\n", material2->iMat, P, T, b, Pb);
+        return EOS_FAIL;
     }
 
     /* The root must now be bracketed by (b, a). */
@@ -1653,15 +1674,37 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
      * EOS_SOLVEBC_PTOL P for K/P > 1e4 (rock below ~10 MPa). A gap below
      * EOS_SOLVEBC_PTOL P is accepted regardless of the slope, so jumps that small
      * pass as before, and roundoff in Pa - Pb at low K/P cannot cause a failure.
-     * A continuous P2 can only fail if the root lies within EOS_SOLVEBC_SLOPE_WIDTH
-     * of a kink where dP/drho increases by more than EOS_SOLVEBC_SLOPE_FAC.
+     * A root within EOS_SOLVEBC_SLOPE_WIDTH of a kink where dP/drho increases by
+     * more than EOS_SOLVEBC_SLOPE_FAC fails this test; the one-sided slopes
+     * below decide then.
      */
     if (Pa - Pb > EOS_SOLVEBC_PTOL * fabs(P) &&
         !(bHaveSlope && (Pa - Pb)/(a - b) <= EOS_SOLVEBC_SLOPE_FAC*slope0)) {
-        EOS_WARN("EOSSolveBC: P2(rho, T) is discontinuous at the root "
-                "(P= %g T= %g rho= %g Pb= %g Pa= %g slope= %g slope0= %g).\n",
-                P, T, c, Pb, Pa, (Pa - Pb)/(a - b), slope0);
-        return EOS_FAIL;
+        /*
+         * Second opinion for a root next to a kink. The reference slope is taken where the bracket
+         * is EOS_SOLVEBC_SLOPE_WIDTH wide; if that bracket straddles a kink (P2 cut off at 0 on
+         * one side, the stiff cold curve on the other, as Tillotson at rho0 for T -> 0) it is an
+         * average over both sides and the final slope can exceed it by more than
+         * EOS_SOLVEBC_SLOPE_FAC on a continuous P2. The one-sided secant slopes just outside the
+         * final bracket, over EOS_SOLVEBC_PROBE times its width, tell the two apart: on a
+         * continuous P2 the slope across the bracket is at most about the larger of them, at a
+         * jump it is jump/(a - b), larger by orders of magnitude. Two more evaluations, only in
+         * this case; if a probe cannot be evaluated (table edge) the first verdict stands.
+         */
+        const double h = EOS_SOLVEBC_PROBE*(a - b);
+        double uL, PL, uR, PR;
+        int bContinuous = 0;
+        if (EOSSolveBCEval(material2, b - h, T, &uL, &PL) == EOS_SUCCESS &&
+            EOSSolveBCEval(material2, a + h, T, &uR, &PR) == EOS_SUCCESS) {
+            double sOut = fmax((Pb - PL)/h, (PR - Pa)/h);
+            bContinuous = (sOut > 0.0 && (Pa - Pb)/(a - b) <= EOS_SOLVEBC_SLOPE_FAC*sOut);
+        }
+        if (!bContinuous) {
+            EOS_WARN("EOSSolveBC: P2(rho, T) is discontinuous at the root "
+                    "(P= %g T= %g rho= %g Pb= %g Pa= %g slope= %g slope0= %g).\n",
+                    P, T, c, Pb, Pa, (Pa - Pb)/(a - b), slope0);
+            return EOS_FAIL;
+        }
     }
 
     /*
