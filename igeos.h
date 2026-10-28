@@ -13,9 +13,9 @@
  *          undefined for an ideal gas, not a lookup failure). igeosInitMat
  *          rejects an inconsistent unit pair (fatal): both units > 0 is code
  *          units, both <= 0 is cgs (exactly one <= 0 divided by zero).
- *          nLookupFail and IGEOS_WARN like the other libraries: the entropy
- *          failures (rho <= 0 or T <= 0) are counted and printed by
- *          igeosPrintMat.
+ *          nLookupFail and IGEOS_WARN like the other libraries: every failure and
+ *          fallback is counted once per call (see the failure contract below) and
+ *          printed by igeosPrintMat.
  *          The cold curve is u = 0 (T_min = 0): a state below it (u < 0 or NaN)
  *          falls back to (rho, T = 0) like a state below the cold curve of a
  *          tabulated EOS, counted once: T = 0, P = 0, c = 0, dP/drho = 0, isentrope

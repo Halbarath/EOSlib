@@ -36,160 +36,152 @@
  *          roundoff tolerance at the edges, no GSL). EOSIsInTable treats
  *          the ANEOS table as closed with the same tolerance, so a state on
  *          the edge that the sublibrary evaluates is reported as inside.
- *   1.2.0  one failure contract across EOSlib and all sublibraries (see
- *          "Failure contract" below): requires tillotson 4.0.0, ANEOSmaterial
- *          1.2.0, reos3 1.3.0, scvheos 1.3.0, igeos 1.1.0. API changes:
- *          EOS_SUCCESS is 0 and EOS_FAIL is -99 (were 1 and 0), so test
- *          "== EOS_SUCCESS", never the truth value; EOSSolveBC returns
- *          EOS_SUCCESS/EOS_FAIL (0/-99, "!= 0" still means failure);
- *          EOSWoolfsonCoeff returns EOS_FAIL_VALUE (-1e50) instead of -1.0
- *          (still negative); EOSTofRhoU never fails (T_min of the table,
- *          0 for Tillotson); EOSYieldStrength returns EOS_FAIL_VALUE for an
- *          invalid T or T_melt instead of exiting; per-call diagnostics only
- *          with -DEOSLIB_VERBOSE; no GSL, no brent.o. The Tillotson isentrope
- *          table is the library's standard table (tillInitLookupDefault:
- *          1e-4..100 rho0, 1 K..1e7 K at rho0, 1200 x 1200), built once in
- *          EOSinitMaterial, the same physical table in every unit system
- *          (was 1e-4..200 and v_max = 1200 in code units, built twice).
- *          EOSSolveBC detects a discontinuous P2(rho, T) by the growth of the
- *          secant slope as the bracket closes (EOS_SOLVEBC_SLOPE_WIDTH,
- *          EOS_SOLVEBC_SLOPE_FAC) instead of the pressure gap alone, which
- *          rejected continuous stiff states (K/P > 1e4, rock below ~10 MPa).
- *          The Woolfson pressure threshold is a physical pressure,
- *          WOOLFSON_MIN_PRESSURE_CGS = 1.44 GPa, converted per material
- *          (EOSWoolfsonMinPressure); WOOLFSON_MIN_PRESSURE (1e-3 in code units,
- *          1.44 GPa in Earth units but 1e-4 Pa in cgs) is gone. EOSMATERIAL
- *          records the unit factors dErgPerGmUnit and dGmPerCcUnit.
- *          EOSisbelowColdCurve returns EOS_FAIL where the cold curve cannot be
- *          evaluated or u is not finite (it answered EOS_FALSE there).
- *          One rule for the unit pair in EOSlib and every sublibrary: both
- *          dKpcUnit and dMsolUnit > 0 (and finite) is code units, both <= 0 is
- *          cgs, anything else is fatal (igeos divided by zero, Tillotson only
- *          asserted, ANEOS, SCvH and REOS3 silently used cgs).
- *          EOSIsUsable accepts Tillotson states below rho_min (rho > 0, u >= 0
- *          within roundoff): P, c and T are defined there and the isentrope is
- *          integrated directly. ANEOSmaterial, scvheos and reos3 vendor
- *          interpBilinear 1.0.3; their headers check at compile time that the
- *          copy in effect in this translation unit has their type layout
- *          (INTERP_ABI_VERSION), so EOSlib and the libraries cannot disagree on
- *          the embedded INTERPGRID. EOSlib no longer reads table internals of
- *          the sublibraries: EOSIsInTable uses ANEOSIsInTable, EOSUCold uses
- *          ANEOSUCold/reos3UCold/scvheosUCold, the init uses ANEOSTmin (requires
- *          ANEOSmaterial, reos3 and scvheos with these functions).
- *          EOSPrintMat prints nLookupFail for every library (only reos3 did).
- *          EOSYieldModel documents -2 (Tillotson: no strength model).
- *          The sublibrary versions are checked at compile time (#error in this header);
- *          EOSCheckVersions is removed (callers: drop the call; an outdated sublibrary header
- *          now stops the compilation). Its static "checked" flag in EOSinitMaterial was also
- *          unsynchronised shared state between threads.
- *          EOSYieldStrength gathers the yield parameters once per call (EOSYieldModel and the
- *          core each called ANEOSYieldParameters).
- *          EOSIsentropic documents the clamp of tabulated EOS (ANEOS, SCvH) to the table edge
- *          the isentrope leaves through (ANEOS clamped to the cold curve on both sides).
- *          EOSSolveBC fails at once for a failed state in material 1 (P = EOS_FAIL_VALUE, e.g.
- *          rho1 outside its table); isfinite(P) let the sentinel through as the target
- *          pressure, and the solver failed only after shrinking the lower bracket.
- *          EOSdUdRho returns EOS_FAIL_VALUE where P(rho, u) fails; for ANEOS and SCvH it
- *          returned -1e50/rho^2 (not the sentinel, for rho > 1e5 not even EOSFailed).
- *          nLookupFail counts once per call (see "Failure contract"): ANEOS P, c, s, phase
- *          and the (rho, u) derivatives counted a density outside the table twice, the
- *          ANEOS and SCvH isentropes up to three times, EOSSofRhoU for SCvH twice.
- *          EOSSofRhoU uses the new scvheosSofRhoU: when the versions are bumped, the
- *          required scvheos version (SCVHEOS_VERSION_*_REQUIRED) must follow.
- *          Ideal gas: u < 0 lies below its cold curve u = 0 and falls back to T = 0, P = 0,
- *          c = 0 (counted) like a state below the cold curve of a table; it gave T < 0, P < 0
- *          and c = NaN. EOSIsInTable reports EOS_OUTSIDE_VMIN (u < 0) or EOS_OUTSIDE_RHOMIN
- *          (rho <= 0) and EOSIsUsable is false there (both always succeeded). EOSRhoofPT
- *          returns EOS_FAIL_VALUE for T <= 0 or P < 0 (inf before). EOSPCTofRhoU uses the
- *          new igeosPCTofRhoU: the required igeos version must follow when bumped.
- *          EOSIsInTable/EOSIsUsable for ANEOS agree exactly with the lookups (ANEOSIsInTable
- *          runs the same inversion): about a quarter of the states near the cold curve of the
- *          M-ANEOS tables, which the lookup finds, were reported EOS_OUTSIDE_VMIN and unusable.
- *          EOS_N_MATERIAL_MAX is the size of an array indexed by iMat, MAT_SCVHEOS_MAX + 1 = 131
- *          (it was 130, the largest id: such an array overflowed by one), like
- *          TILL_N_MATERIAL_MAX. Loops over ids must use iMat < EOS_N_MATERIAL_MAX.
- *          Tillotson: EOSinitMaterial builds only the cold curve and the top isentrope of the
- *          standard table (77 kB, ~1 ms, tillInitColdCurveDefault), the full isentrope table
- *          (46 MB, ~0.6 s) is built by EOSinitIsentropicLookup. EOSIsentropic for a Tillotson
- *          material is fatal without EOSinitIsentropicLookup (callers that relied on
- *          EOSinitMaterial building the table must add the call); bEntropyTableInit is
- *          EOS_FALSE until then. Everything else is bit-identical. Requires the
- *          tillInitColdCurve of the Tillotson library (raise the required version when bumped).
- *          EOSSolveBC no longer repeats the last bisection lookup at the end (one evaluation of
- *          material 2 per call less); the result is bit-identical.
- *          EOSYieldStrength and EOSYieldStrengthofRhoTP return EOS_FAIL_VALUE for a failed
- *          pressure (models 1 and 2): the tension clamp max(P, 0) turned P = EOS_FAIL_VALUE
- *          into P_eff = 0 and a finite Y0 * f(T) for a state outside the table.
- *          EOSSolveBC fails at once for a state (rho1, u1) that is not usable in material 1
- *          (EOSIsUsable): u above the column or below the cold curve has a finite P and T, those
- *          of the fallback (rho1, T_min), and the solver matched that wrong target and reported
- *          success. EOSSolveBC accepts a target temperature T2 = T1 - Tjump = 0 (the cold curve of
- *          Tillotson and the ideal gas); only T2 < 0 is rejected (it rejected T2 <= 0).
- *          EOSIsentropic for ANEOS and SCvH starts a state above the u column from the top row
- *          s(rho1, T_max), not from the T_min fallback, which put u2 on the cold curve at rho2
- *          (needs the ANEOSisentropicU and scvheosIsentropicU of this round; raise the required
- *          versions when bumped).
- *          EOSIsentropic for ANEOS returns EOS_FAIL_VALUE for rho1 outside the table, like SCvH
- *          (ANEOSisentropicU returned the cold curve at rho2). Tillotson still integrates the ODE
- *          there: its pressure is analytic, so the isentrope exists outside its table.
- *          EOSYieldStrength evaluates a state above the u column (overheated material) on the top
- *          row T_max, P(rho, T_max), i.e. without strength wherever T_melt <= T_max; with the T_min
- *          fallback it had the full cold strength Y0 f(T_min). The test costs one inversion of the
- *          u column only when T == T_min. EOSYieldStrengthofRhoTP evaluates the T, P it is given
- *          (from T alone the fallback cannot be recognised).
- *          EOSisbelowColdCurve for ANEOS, REOS3 and SCvH is the table status of the lookup
- *          (EOSIsInTable == EOS_OUTSIDE_VMIN); it compared u with u(rho, T_min) and said "below" for
- *          M-ANEOS states below the first row that the lookup finds without a fallback and that
- *          EOSIsInTable reports inside (columns with du/dT < 0 at the cold rows), and for states
- *          within the edge tolerance of the first row. Tillotson and the ideal gas are unchanged.
- *          EOSSolveBC: where material 2 cannot be evaluated at rho1 < rho0 of material 2, the upper
- *          bracket starts at that rho0 (the solver failed at once for a gas envelope, SCvH or REOS3,
- *          below the density range of a condensed core, ANEOS). Where the steps of 1.1 and 0.9
- *          (a factor 1.4e4 up, 2.7e-5 down) do not find a bracket, up to EOS_SOLVEBC_MAX_COARSE steps
- *          of a factor 2 follow (EOS_SOLVEBC_EXPAND_FAC), and a trial beyond the table of material 2
- *          refines the step instead of failing. Wherever the 1.2.0 search succeeded the brackets,
- *          and so the result, are bit-identical: a first version with factor-2 steps and a start at
- *          max(rho1, rho0) ended on another root of a non-monotonic P2 (M-ANEOS iron on forsterite),
- *          and ballic's integration, which iterates over EOSSolveBC, no longer converged. The
- *          discontinuity test gets a second opinion
- *          where the slope test fails: the one-sided secant slopes just outside the final bracket
- *          (EOS_SOLVEBC_PROBE). A root within EOS_SOLVEBC_SLOPE_WIDTH of a kink of a continuous P2
- *          (Tillotson at rho0 near T = 0: P cut off at 0 below, the stiff cold curve above) was
- *          rejected as discontinuous whenever the reference bracket straddled the kink; with the
- *          old brackets this happened not to be the case for the states tested. 
- *          EOSinitIsentropicLookup for REOS3 prints its note only under EOSLIB_VERBOSE (it printed
- *          "entropy lookup table not implemented" on every call). With the reos3 and scvheos of this
- *          round EOSinitMaterial is silent unless compiled with -DEOSLIB_VERBOSE; EOSPrintMat prints
- *          dimensional values in cgs with the unit for every library (igeos and Tillotson printed
- *          code units without a label).
- *          EOSdPdRhoofRhoT and EOSdPdT for the ideal gas: (gamma-1) cv T and (gamma-1) rho cv
- *          (igeosdPdRhoofRhoT, igeosdPdTofRhoT); they were fatal (not implemented). Requires the
- *          igeos of this round (raise the required version when bumped).
- *          EOSisbelowColdCurve for Tillotson uses tillIsBelowColdCurve, u < u_cold - tillUTol(u),
- *          the tolerance of tillIsInTable, tillTempRhoU and EOSIsUsable; it compared u < u_cold and
- *          said "below" for states within roundoff of the cold curve that EOSIsInTable reports
- *          inside, EOSIsUsable accepts and T(rho, u) inverts without a fallback (needs the
- *          tillIsBelowColdCurve of this round; raise the required version when bumped).
- *          The failure contract names the Tillotson exception: P, c and the (rho, u) derivatives are
- *          analytic and evaluated at the given (rho, u) also below the cold curve and outside the
- *          table, uncounted (the contract said every (rho, u) function evaluates such a state at
- *          (rho, T_min) and every out-of-table state returns the sentinel). No change in behaviour.
- *          Invalid density (rho <= 0, NaN, inf) for the analytic EOS: Tillotson and the ideal gas fail
- *          like a density outside a table. P, c and the (rho, u) derivatives (EOSdUdRho included)
- *          return EOS_FAIL_VALUE, T(rho, u) is 0 (T_min), EOSUCold returns EOS_FAIL_VALUE for the gas
- *          and so EOSisbelowColdCurve EOS_FAIL; counted once per call. The ideal gas returned P < 0
- *          for rho < 0, 0 for rho = 0, EOSdUdRho = NaN at rho = 0, EOSUCold = 0 for any rho (so
- *          EOSisbelowColdCurve answered EOS_FALSE where EOSIsInTable said EOS_OUTSIDE_RHOMIN); Tillotson
- *          returned NaN, uncounted. EOSIsInTable for the gas reports EOS_OUTSIDE_RHOMAX for rho = inf.
- *          EOSPCTofRhoU for Tillotson counts an invalid rho once (pressure and T fallback counted it
- *          twice). The ideal gas rejects dConstGamma <= 1 and dMeanMolMass <= 0 or not finite (fatal,
- *          in igeosInitMat). Needs the igeosUCold, igeos and tillotson of this round (raise the
- *          required versions when bumped).
- *          rho0forInterfaceCorrection is documented as not read by EOSlib: EOSWoolfsonCoeff cuts at
- *          0.8*rho0 for every material, the gases included. No change in behaviour.
- *          EOSPrintMat: every value labelled "(cgs units)" now carries its unit in every library (g/cc,
- *          K, erg/g, ...); ANEOS, SCvH and REOS3 printed bare numbers, SCvH its boundaries as log10
- *          values (needs the ANEOSmaterial, scvheos and reos3 of this round).
+ *   1.2.0  Compared with 1.0.9. Requires tillotson 4.0.0, ANEOSmaterial 1.2.0, reos3 1.3.0,
+ *          scvheos 1.3.0 and igeos 1.1.0, each with the functions of this round named below
+ *          (raise the *_VERSION_*_REQUIRED values below when the sublibrary versions are bumped).
+ *
+ *          API changes (callers must check):
+ *          - EOS_SUCCESS is 0 and EOS_FAIL is -99 (were 1 and 0): test "== EOS_SUCCESS", never
+ *            the truth value. EOSSolveBC returns EOS_SUCCESS/EOS_FAIL ("!= 0" still means
+ *            failure). EOSWoolfsonCoeff returns EOS_FAIL_VALUE (-1e50) instead of -1.0 (still
+ *            negative).
+ *          - EOSCheckVersions is removed: the sublibrary versions are checked at compile time
+ *            (#error in this header; callers drop the call). Its static "checked" flag in
+ *            EOSinitMaterial was also unsynchronised shared state between threads.
+ *          - Tillotson: EOSinitMaterial builds only the cold curve and the top isentrope of the
+ *            standard table (77 kB, ~1 ms, tillInitColdCurveDefault); the full isentrope table
+ *            (46 MB, ~0.6 s) is built by EOSinitIsentropicLookup, and EOSIsentropic is fatal
+ *            without it (callers that use EOSIsentropic must add the call; bEntropyTableInit is
+ *            EOS_FALSE until then). The table is the library's standard table (TILL_TABLE_*:
+ *            1e-4..100 rho0, 1 K..1e7 K at rho0, 1200 x 1200), the same physical table in every
+ *            unit system (it was 1e-4..200 rho0 and v_max = 1200 in code units, built twice in
+ *            EOSinitMaterial for every instance). Everything else is bit-identical.
+ *          - EOS_N_MATERIAL_MAX is the size of an array indexed by iMat, MAT_SCVHEOS_MAX + 1 = 131
+ *            (it was 130, the largest id: such an array overflowed by one), like
+ *            TILL_N_MATERIAL_MAX. Loops over ids must use iMat < EOS_N_MATERIAL_MAX.
+ *          - The Woolfson pressure threshold is a physical pressure, WOOLFSON_MIN_PRESSURE_CGS =
+ *            1.44 GPa, converted per material (EOSWoolfsonMinPressure); WOOLFSON_MIN_PRESSURE
+ *            (1e-3 in code units: 1.44 GPa in Earth units but 1e-4 Pa in cgs) is gone.
+ *          - One rule for the unit pair in EOSlib and every sublibrary: both dKpcUnit and
+ *            dMsolUnit > 0 (and finite) is code units, both <= 0 is cgs, anything else is fatal
+ *            (igeos divided by zero, Tillotson only asserted, ANEOS, SCvH and REOS3 silently used
+ *            cgs). EOSMATERIAL records the unit factors dErgPerGmUnit and dGmPerCcUnit.
+ *          - No GSL, no brent.o.
+ *
+ *          Failure contract (see "Failure contract" below), one for EOSlib and all sublibraries:
+ *          - A failed evaluation never exits; it returns EOS_FAIL_VALUE. EOSTofRhoU never fails
+ *            (T_min of the table, 0 for Tillotson and the ideal gas). EOSYieldStrength returns
+ *            EOS_FAIL_VALUE for an invalid T or T_melt instead of exiting.
+ *          - nLookupFail counts every failure and fallback once per call: ANEOS P, c, s, phase
+ *            and the (rho, u) derivatives counted a density outside the table twice, the ANEOS
+ *            and SCvH isentropes up to three times, EOSSofRhoU for SCvH twice (it uses the new
+ *            scvheosSofRhoU). EOSPrintMat prints nLookupFail for every library (only reos3 did).
+ *          - The Tillotson exception is named: P, c and the (rho, u) derivatives are analytic and
+ *            evaluated at the given (rho, u) also below the cold curve and outside the table,
+ *            uncounted, for a valid density.
+ *          - Invalid density (rho <= 0, NaN, inf) for the analytic EOS: Tillotson and the ideal
+ *            gas fail like a density outside a table (P, c and the derivatives EOS_FAIL_VALUE,
+ *            T = 0, counted once; EOSUCold of the gas EOS_FAIL_VALUE via the new igeosUCold,
+ *            EOSisbelowColdCurve EOS_FAIL; EOSIsInTable for the gas EOS_OUTSIDE_RHOMIN, or
+ *            EOS_OUTSIDE_RHOMAX for inf). The gas returned P < 0 for rho < 0, EOSdUdRho = NaN at
+ *            rho = 0 and EOSUCold = 0 for any rho; Tillotson returned NaN, uncounted.
+ *            EOSPCTofRhoU for Tillotson counts an invalid rho once (it counted it twice).
+ *          - EOSdUdRho returns EOS_FAIL_VALUE where P(rho, u) fails; for ANEOS and SCvH it
+ *            returned -1e50/rho^2 (not the sentinel; for rho > 1e5 not even EOSFailed), for the
+ *            gas NaN at rho = 0.
+ *          - Output: per-call diagnostics only with -DEOSLIB_VERBOSE, and EOSinitMaterial and
+ *            EOSinitIsentropicLookup are silent without it (reos3 printed the table name, uRef and
+ *            the unit conversion, reos3 and scvheos their monotonicity reports, sound speed
+ *            repairs and the note that rho0 lies outside the table, EOSinitIsentropicLookup
+ *            "not implemented" for REOS3 on every call; with one instance per thread all of it
+ *            appeared 64 times). Errors before a fatal exit are still printed.
+ *          - EOSPrintMat prints every dimensional value in cgs with its unit (g/cc, K, erg/g,
+ *            ...) for every library: igeos and Tillotson printed code units without a label,
+ *            ANEOS, SCvH and REOS3 bare numbers, SCvH its table boundaries as log10 values.
+ *
+ *          Ideal gas (igeos):
+ *          - igeosInitMat rejects (fatal) dConstGamma <= 1 and dMeanMolMass <= 0 or not finite.
+ *          - u < 0 lies below its cold curve u = 0 and falls back to T = 0, P = 0, c = 0
+ *            (counted), like a state below the cold curve of a table; it gave T < 0, P < 0 and
+ *            c = NaN. EOSIsInTable reports EOS_OUTSIDE_VMIN there and EOSIsUsable is false.
+ *          - EOSRhoofPT returns EOS_FAIL_VALUE for T <= 0 or P < 0 (inf before). EOSPCTofRhoU
+ *            uses the new igeosPCTofRhoU (one count per call).
+ *          - EOSdPdRhoofRhoT and EOSdPdT: (gamma-1) cv T and (gamma-1) rho cv (igeosdPdRhoofRhoT,
+ *            igeosdPdTofRhoT); they were fatal (not implemented).
+ *
+ *          Table status and cold curve:
+ *          - EOSlib no longer reads table internals of the sublibraries: EOSIsInTable uses
+ *            ANEOSIsInTable, EOSUCold uses ANEOSUCold/reos3UCold/scvheosUCold/igeosUCold, the
+ *            init uses ANEOSTmin. ANEOSmaterial, scvheos and reos3 vendor interpBilinear 1.0.3;
+ *            their headers check at compile time that the copy in effect in this translation
+ *            unit has their type layout (INTERP_ABI_VERSION), so EOSlib and the libraries cannot
+ *            disagree on the embedded INTERPGRID.
+ *          - EOSIsInTable/EOSIsUsable for ANEOS agree exactly with the lookups (ANEOSIsInTable
+ *            runs the same inversion): about a quarter of the states near the cold curve of the
+ *            M-ANEOS tables, which the lookup finds, were reported EOS_OUTSIDE_VMIN and unusable.
+ *          - EOSIsUsable accepts Tillotson states below rho_min (rho > 0, u >= 0 within
+ *            roundoff): P, c and T are defined there and the isentrope is integrated directly.
+ *          - EOSisbelowColdCurve returns EOS_FAIL where the cold curve cannot be evaluated or u
+ *            is not finite (it answered EOS_FALSE). For ANEOS, REOS3 and SCvH it is the table
+ *            status of the lookup (EOSIsInTable == EOS_OUTSIDE_VMIN): comparing u with
+ *            u(rho, T_min) said "below" for M-ANEOS states below the first row that the lookup
+ *            finds without a fallback (columns with du/dT < 0 at the cold rows), and for states
+ *            within the edge tolerance of the first row. For Tillotson it is
+ *            tillIsBelowColdCurve, u < u_cold - tillUTol(u), the tolerance of tillIsInTable,
+ *            tillTempRhoU and EOSIsUsable (u < u_cold said "below" within roundoff of the cold
+ *            curve). For the ideal gas u < 0.
+ *
+ *          EOSSolveBC:
+ *          - A discontinuous P2(rho, T) is detected by the growth of the secant slope as the
+ *            bracket closes (EOS_SOLVEBC_SLOPE_WIDTH, EOS_SOLVEBC_SLOPE_FAC) instead of the
+ *            pressure gap alone, which rejected continuous stiff states (K/P > 1e4, rock below
+ *            ~10 MPa). Where the slope test fails, the one-sided secant slopes just outside the
+ *            final bracket give a second opinion (EOS_SOLVEBC_PROBE): a root within
+ *            EOS_SOLVEBC_SLOPE_WIDTH of a kink of a continuous P2 (Tillotson at rho0 near T = 0:
+ *            P cut off at 0 below, the stiff cold curve above) was rejected whenever the
+ *            reference bracket straddled the kink.
+ *          - It fails at once for a failed state in material 1 (P = EOS_FAIL_VALUE; isfinite(P)
+ *            let the sentinel through as the target) and for a state that is not usable in
+ *            material 1 (EOSIsUsable: above the column or below the cold curve P and T are those
+ *            of the fallback, and the solver matched that wrong target and reported success).
+ *          - It accepts a target temperature T2 = T1 - Tjump = 0 (the cold curve of Tillotson and
+ *            the ideal gas); only T2 < 0 is rejected.
+ *          - Bracket search: where material 2 cannot be evaluated at rho1 < rho0 of material 2,
+ *            the upper bracket starts at that rho0 (it failed at once for a gas envelope, SCvH or
+ *            REOS3, below the density range of a condensed core, ANEOS). Where the steps of 1.1
+ *            and 0.9 do not find a bracket, up to EOS_SOLVEBC_MAX_COARSE steps of a factor 2
+ *            follow (EOS_SOLVEBC_EXPAND_FAC), and a trial beyond the table of material 2 refines
+ *            the step instead of failing. Wherever the old search succeeded, the brackets and so
+ *            the result are bit-identical (factor-2 steps from the start ended on another root
+ *            of a non-monotonic P2, M-ANEOS iron on forsterite, and ballic's integration no
+ *            longer converged).
+ *          - The last bisection lookup is not repeated at the end (one evaluation of material 2
+ *            per call less, bit-identical).
+ *
+ *          EOSIsentropic:
+ *          - For ANEOS and SCvH the clamp to the table edge the isentrope leaves through is
+ *            documented (ANEOS clamped to the cold curve on both sides). A state above the u
+ *            column starts from the top row s(rho1, T_max), not from the T_min fallback, which put
+ *            u2 on the cold curve at rho2. For rho1 outside the table ANEOS returns
+ *            EOS_FAIL_VALUE, like SCvH (ANEOSisentropicU returned the cold curve at rho2).
+ *          - Tillotson still integrates the ODE outside its table: its pressure is analytic, so
+ *            the isentrope exists there.
+ *
+ *          Strength:
+ *          - EOSYieldModel documents -2 (Tillotson: no strength model). EOSYieldStrength gathers
+ *            the yield parameters once per call (EOSYieldModel and the core each called
+ *            ANEOSYieldParameters).
+ *          - EOSYieldStrength and EOSYieldStrengthofRhoTP return EOS_FAIL_VALUE for a failed
+ *            pressure (models 1 and 2): the tension clamp max(P, 0) turned P = EOS_FAIL_VALUE into
+ *            P_eff = 0 and a finite Y0 f(T) for a state outside the table.
+ *          - EOSYieldStrength evaluates a state above the u column (overheated material) on the
+ *            top row T_max, P(rho, T_max), i.e. without strength wherever T_melt <= T_max; with
+ *            the T_min fallback it had the full cold strength Y0 f(T_min). The test costs one
+ *            inversion of the u column only when T == T_min. EOSYieldStrengthofRhoTP evaluates the
+ *            T, P it is given (from T alone the fallback cannot be recognised).
+ *
+ *          Documentation only: rho0forInterfaceCorrection is not read by EOSlib (EOSWoolfsonCoeff
+ *          cuts at 0.8*rho0 for every material, the gases included).
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -200,7 +192,7 @@
 /*
  * Minimum versions of the sublibraries. They are compile-time constants on both sides, so they
  * are checked here with #error (as the sublibraries check interpBilinear) instead of at run time
- * (EOSCheckVersions did that up to EOSlib 1.2.0 and has been removed).
+ * (EOSCheckVersions did that before EOSlib 1.2.0 and has been removed).
  */
 #ifdef HAVE_TILLOTSON_H
     #include <tillotson.h>
@@ -260,13 +252,13 @@
 /*
  * EOSWoolfsonCoeff does no correction below this pressure (cgs, dyn/cm^2 = 0.1 Pa). It is a
  * physical pressure, converted with the unit system of the material (EOSWoolfsonMinPressure).
- * Up to EOSlib 1.2.0 the threshold was WOOLFSON_MIN_PRESSURE = 1e-3 in code units, i.e. 1.44 GPa
+ * Before EOSlib 1.2.0 the threshold was WOOLFSON_MIN_PRESSURE = 1e-3 in code units, i.e. 1.44 GPa
  * in Earth units but 1e-4 Pa in cgs; 1.44 GPa keeps the behaviour of Earth-unit runs.
  */
 #define WOOLFSON_MIN_PRESSURE_CGS 1.44e10
 
 /* EOSSolveBC: bracket expansion limits and convergence tolerances. */
-#define EOS_SOLVEBC_MAX_EXPAND  100   /* bracket steps of 1.1 up, 0.9 down (as up to 1.2.0): 1.1^100 ~ 1.4e4, 0.9^100 ~ 2.7e-5 */
+#define EOS_SOLVEBC_MAX_EXPAND  100   /* bracket steps of 1.1 up, 0.9 down (as before 1.2.0): 1.1^100 ~ 1.4e4, 0.9^100 ~ 2.7e-5 */
 #define EOS_SOLVEBC_EXPAND_FAC  2.0   /* then steps of x2 up, /2 down ... */
 #define EOS_SOLVEBC_MAX_COARSE  100   /* ... at most this many more (2^100 ~ 1e30); trials refined at a table edge count too */
 #define EOS_SOLVEBC_MAX_BISECT  200
@@ -448,8 +440,11 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 /*
  * Builds what EOSIsentropic needs beyond EOSinitMaterial: for Tillotson the full isentrope table
  * (46 MB, ~0.6 s per material instance; EOSinitMaterial builds only its cold curve and top
- * isentrope). Call it once per material instance that uses EOSIsentropic; the other libraries
- * need nothing (REOS3: not implemented, a warning). Sets bEntropyTableInit.
+ * isentrope). Call it once per material instance that uses EOSIsentropic; a second call does
+ * nothing. The ideal gas, ANEOS and SCvH need nothing (bEntropyTableInit is EOS_TRUE from
+ * EOSinitMaterial). REOS3 has no entropy table: nothing is built, bEntropyTableInit stays
+ * EOS_FALSE and EOSIsentropic is fatal for it (a note only with -DEOSLIB_VERBOSE). Sets
+ * bEntropyTableInit for Tillotson.
  */
 void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data);
 void EOSfinalizeMaterial(EOSMATERIAL *material);
@@ -586,7 +581,7 @@ double EOSUCold(EOSMATERIAL *material, double rho);
  * fallback) fails at once, without evaluating material 2. The upper bracket
  * starts at rho1 (at rho0 of material 2 if rho1 is below it and cannot be
  * evaluated there), the lower one just below rho0 (and below the upper
- * bracket). Both move by 1.1 and 0.9 per step as up to 1.2.0, so wherever that
+ * bracket). Both move by 1.1 and 0.9 per step as before 1.2.0, so wherever that
  * search succeeds the result is the same; where it fails they go on by
  * EOS_SOLVEBC_EXPAND_FAC per step and close in on the edge of the table of
  * material 2 instead of failing at the first trial beyond it (those trials count

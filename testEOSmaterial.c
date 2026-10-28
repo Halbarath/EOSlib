@@ -199,7 +199,7 @@ static void checkPrintMatRho0(EOSMATERIAL *e)
  * Initialisation must be silent unless the library is compiled with -DEOSLIB_VERBOSE: with one
  * material instance per thread every message appeared 64 times (reos3 printed the table name, uRef
  * and the unit conversion, reos3 and scvheos their monotonicity reports and sound speed repairs,
- * EOSinitIsentropicLookup a REOS3 note on every call, up to EOSlib 1.2.0).
+ * EOSinitIsentropicLookup a REOS3 note on every call, before EOSlib 1.2.0).
  */
 static FILE *stderrCaptureBegin(int *pfdSaved)
 {
@@ -529,7 +529,7 @@ static void testANEOSDispatch(EOSMATERIAL *e)
      * Below the cold curve means exactly: the lookup falls back to T_min (counted). EOSisbelowColdCurve,
      * EOSIsInTable and the lookup must agree on every state around the first row, from below the
      * column's minimum (defective cold rows: u(rho, T) dips below u(rho, T_min) at the next rows) to
-     * above u(rho, T_min), including the edge tolerance. Up to EOSlib 1.2.0 EOSisbelowColdCurve
+     * above u(rho, T_min), including the edge tolerance. Before EOSlib 1.2.0 EOSisbelowColdCurve
      * compared with u(rho, T_min) and said "below" for states the lookup finds.
      */
     {
@@ -698,7 +698,7 @@ static void testANEOSYield(EOSMATERIAL *e)
 
     /*
      * Overheated material: u above the column. T(rho, u) falls back to T_min and P to P(rho, T_min),
-     * which gave the full cold strength Y0 f(T_min) up to EOSlib 1.2.0. The strength is that of the
+     * which gave the full cold strength Y0 f(T_min) before EOSlib 1.2.0. The strength is that of the
      * top row (T_max, P(rho, T_max)), 0 where T_melt <= T_max; the lookup counts the fallback once,
      * the strength nothing more. In the table and below the cold curve Y(rho, u) is Y(rho, T, P) of
      * the lookup; EOSYieldStrengthofRhoTP evaluates the fallback T, P as given (it cannot recognise
@@ -741,7 +741,7 @@ static void testANEOSYield(EOSMATERIAL *e)
     /*
      * A failed lookup gives the sentinel, not a strength: the tension clamp
      * fmax(P, 0) turned P = EOS_FAIL_VALUE into P_eff = 0 and Y = Y0 * f(T)
-     * (up to EOSlib 1.2.0 before this fix).
+     * (before EOSlib 1.2.0).
      */
     {
         double rhoMid = sampleRho(m, NSAMPLE / 2);
@@ -991,7 +991,7 @@ static void testSCVHSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
     for (int a = 2; a < NSAMPLE_SCVH - 2; a += 4) for (int b = 1; b < NSAMPLE_SCVH - 3; b += 4) {
         /* State at the base of the envelope; its pressure must exceed the interface-correction
          * floor like in the ANEOS test. The solver brackets from max(rho1, rho0 of the core), so
-         * rho1 may lie below the core's table (up to EOSlib 1.2.0 it started at rho1 and failed
+         * rho1 may lie below the core's table (before EOSlib 1.2.0 it started at rho1 and failed
          * at once there). */
         double rho1 = scvhSampleRho(s, a), T1 = scvhSampleT(s, b);
         if (!scvhEnergyMonotonic(s, rho1)) continue;
@@ -1290,7 +1290,7 @@ static void testFailureContract(EOSMATERIAL *e, double rhoOk, double uOk, double
     CHECK(EOSFailed(EOSPofRhoT(e, rhoHi, TMin)), "P(rho, T) above rhoMax");
     CHECK(EOSFailed(EOSdPdRho(e, rhoHi, uOk)), "dP/drho above rhoMax");
     CHECK(EOSFailed(EOSdPdU(e, rhoHi, uOk)), "dP/du above rhoMax");
-    /* Exactly the sentinel: ANEOS and SCvH divided it by rho^2 up to 1.2.0 (-1e50/rho^2, for
+    /* Exactly the sentinel: ANEOS and SCvH divided it by rho^2 before 1.2.0 (-1e50/rho^2, for
      * rho > 1e5 not even EOSFailed). */
     CHECK(EOSdUdRho(e, rhoHi, uOk) == EOS_FAIL_VALUE, "du/drho above rhoMax = %g", EOSdUdRho(e, rhoHi, uOk));
     CHECK(EOSdUdRho(e, 1e6 * rhoHi, uOk) == EOS_FAIL_VALUE, "du/drho at 1e6 rhoMax = %g", EOSdUdRho(e, 1e6 * rhoHi, uOk));
@@ -1315,7 +1315,7 @@ static void testFailureContract(EOSMATERIAL *e, double rhoOk, double uOk, double
     }
     /*
      * Once per call: a call that fails or falls back adds exactly 1 to nLookupFail, however many
-     * of its steps do. Up to 1.2.0 a density outside the table counted 2 in the ANEOS (rho, u)
+     * of its steps do. Before 1.2.0 a density outside the table counted 2 in the ANEOS (rho, u)
      * functions (T fallback, then the lookup at (rho, T_min)) and in EOSSofRhoU for SCvH, and the
      * ANEOS and SCvH isentropes counted 2 or 3.
      */
@@ -1347,7 +1347,7 @@ static void testFailureContract(EOSMATERIAL *e, double rhoOk, double uOk, double
             ONCE(EOSIsentropic(e, rhoHi, uOk, rhoHi), "isentrope, rho1 and rho2 above the table");
             ONCE(EOSIsentropic(e, rhoOk, uHi, rhoHi), "isentrope, u1 above the column and rho2 above the table");
             /* rho1 outside a table: no entropy, the sentinel in every tabulated library (ANEOS gave the
-             * cold curve at rho2 up to 1.2.0). Tillotson integrates there (analytic P), tested separately. */
+             * cold curve at rho2 before 1.2.0). Tillotson integrates there (analytic P), tested separately. */
             if (e->matType != EOSTILLOTSON) {
                 CHECK(EOSFailed(EOSIsentropic(e, rhoHi, uOk, rhoOk)), "isentrope, rho1 above the table");
                 CHECK(EOSFailed(EOSIsentropic(e, rhoHi, uOk, rhoHi)), "isentrope, rho1 and rho2 above the table");
@@ -1369,7 +1369,7 @@ static void testFailureContract(EOSMATERIAL *e, double rhoOk, double uOk, double
  * fail and leave the outputs untouched. So must a fallback state (u above the column or below the
  * cold curve at a valid rho1): its P and T are finite, those of (rho1, T_min), and up to EOSlib
  * 1.2.0 before the fix the solver matched that target in the ideal gas and returned EOS_SUCCESS. Material 2 is an ideal gas, valid at every density, so
- * the solver is not stopped by material 2 leaving its table: up to EOSlib 1.2.0 before the fix
+ * the solver is not stopped by material 2 leaving its table: before EOSlib 1.2.0
  * isfinite(P) took the sentinel as the target pressure and the lower bracket shrank
  * EOS_SOLVEBC_MAX_EXPAND times before the solver failed. The return value was EOS_FAIL then
  * as well, so this pins the contract (a failed target can never give a solution); the
@@ -1379,7 +1379,7 @@ static void testFailureContract(EOSMATERIAL *e, double rhoOk, double uOk, double
 /*
  * A gas envelope far below the density range of a condensed core (ANEOS): an ideal gas whose mean
  * molecular mass is chosen so that, at the (P, T) of every core state tested, its density
- * rho = P mu m_H/(k T) lies a factor 1e3 or more below the core's table. Up to EOSlib 1.2.0
+ * rho = P mu m_H/(k T) lies a factor 1e3 or more below the core's table. Before EOSlib 1.2.0
  * EOSSolveBC started the upper bracket at rho1 and failed at once there; now it starts at rho0 of
  * the core where rho1 cannot be evaluated. The target (P, T) is taken from a core state (rho*, T), so a root
  * exists; where P(rho, T) of the core is not monotonic the solver may find another one or fail
@@ -1729,7 +1729,7 @@ static void testTillotsonTableStatus(EOSMATERIAL *e)
      * Below the cold curve means exactly: the lookup falls back to T = 0 (counted), the table status is
      * OUTSIDE_VMIN (or, below rhomin, the state is unusable). Within roundoff below the cold curve
      * (0.1 tillUTol) the state is on it, EOSisbelowColdCurve says FALSE; 10 tolerances below it says
-     * TRUE. Up to EOSlib 1.2.0 it compared u < u_cold and said TRUE for the first state, which is in
+     * TRUE. Before EOSlib 1.2.0 it compared u < u_cold and said TRUE for the first state, which is in
      * the table, usable and inverted without a fallback.
      */
     {
@@ -1878,7 +1878,7 @@ static void testTillotsonSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
     }
     /*
      * T2 = 0 is a valid target (the cold curve, T_min = 0 for Tillotson): a compressed state on the
-     * cold curve of granite (T1 = 0 exactly; rejected up to EOSlib 1.2.0, which required T2 > 0),
+     * cold curve of granite (T1 = 0 exactly; rejected before EOSlib 1.2.0, which required T2 > 0),
      * and a warm state with Tjump = T1 (T2 = 0 up to roundoff). Both must solve onto the cold curve
      * of iron.
      */
@@ -1916,7 +1916,7 @@ static void testTillotsonSolveBC(EOSMATERIAL *inner, EOSMATERIAL *outer)
  * Stiff, low-pressure interface: granite on iron at small compression and very low T, where
  * K/P is 1e4..1e7. The pressure gap of the final density bracket, ~ (K/P) EOS_SOLVEBC_TOL P,
  * then exceeds EOS_SOLVEBC_PTOL P although P2(rho, T) is continuous; the solver must succeed
- * (it rejected these states as discontinuous up to EOSlib 1.2.0 before the slope test).
+ * (it rejected these states as discontinuous before EOSlib 1.2.0, without the slope test).
  */
 static void testTillotsonSolveBCStiff(EOSMATERIAL *inner, EOSMATERIAL *outer)
 {
@@ -2008,7 +2008,7 @@ static void testTillotsonSolveBCJump(EOSMATERIAL *iron, EOSMATERIAL *granite)
 /*
  * The Woolfson pressure threshold is a physical pressure: the same physical (P, T) gives the same
  * f_ij in every unit system, no correction just below WOOLFSON_MIN_PRESSURE_CGS and the correction
- * just above it. Up to EOSlib 1.2.0 it was 1e-3 in code units (1.44 GPa in Earth units, 1e-4 Pa
+ * just above it. Before EOSlib 1.2.0 it was 1e-3 in code units (1.44 GPa in Earth units, 1e-4 Pa
  * in cgs). The unit factors of EOSMATERIAL must agree with those of the sublibraries.
  */
 static void testWoolfsonUnits(void)
@@ -2066,7 +2066,7 @@ static int isentropicFatal(EOSMATERIAL *e, double rho1, double u1, double rho2)
 
 /*
  * EOSinitMaterial builds only the cold curve and the top isentrope of the Tillotson table (77 kB),
- * EOSinitIsentropicLookup the full table (46 MB). Up to 1.2.0 EOSinitMaterial built the table for
+ * EOSinitIsentropicLookup the full table (46 MB). Before 1.2.0 EOSinitMaterial built the table for
  * every instance (with one instance per thread 6 GB and over a minute for 64 threads x 2
  * materials). Everything but the isentrope must be bit-identical before and after the table is
  * built, the edge curves must be the first and last rows of the table, and EOSIsentropic without

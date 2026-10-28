@@ -113,7 +113,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
          * 1 K..1e7 K at rho0) and its two edge isentropes, the cold curve and the top isentrope:
          * all that P, c, T(rho, u), u(rho, T), rho(P, T) and the table status need (77 kB, ~1 ms).
          * The full isentrope table (46 MB, ~0.6 s), which only EOSIsentropic needs, is built by
-         * EOSinitIsentropicLookup. Up to 1.2.0 it was built here, for every material instance:
+         * EOSinitIsentropicLookup. Before 1.2.0 it was built here, for every material instance:
          * with one instance per thread 6 GB and over a minute of startup for 64 threads x 2
          * materials, also in codes that never call EOSIsentropic.
          */
@@ -1049,7 +1049,7 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
  * Tillotson and the ideal gas have an analytic cold curve. Tillotson uses tillIsBelowColdCurve,
  * u < u_cold(rho) - tillUTol(u), the roundoff tolerance of tillIsInTable, tillTempRhoU and
  * EOSIsUsable (also below rho_min, where u_cold = 0 and EOSIsInTable reports EOS_OUTSIDE_RHOMIN):
- * up to 1.2.0 it compared u < u_cold without a tolerance and said "below" for states within
+ * before 1.2.0 it compared u < u_cold without a tolerance and said "below" for states within
  * roundoff of the cold curve that are in the table, usable and inverted without a fallback. The
  * ideal gas keeps u < 0, exactly where igeos falls back to T = 0.
  *
@@ -1276,7 +1276,7 @@ double EOSdPdU(EOSMATERIAL *material, double rho, double u)
  * Calculates the derivative dudrho(rho,u) = P/rho^2 for a material
  * (EOS_FAIL_VALUE where P(rho, u) fails: tabulated EOS outside the table).
  * The sentinel is passed on as it is, never divided by rho^2 (ANEOS and SCvH
- * did that up to 1.2.0; igeos and Tillotson have an analytic P).
+ * did that before 1.2.0; igeos and Tillotson have an analytic P).
  *
  * Required: ballic
  */
@@ -1603,7 +1603,7 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
      * fallback in nLookupFail (EOSIsUsable, a status query, counts nothing).
      *
      * T2 = T1 - Tjump = 0 is a valid target: the cold curve of Tillotson and the ideal gas
-     * (T_min = 0), e.g. a cold compressed interface (it was rejected with T <= 0 up to 1.2.0).
+     * (T_min = 0), e.g. a cold compressed interface (it was rejected with T <= 0 before 1.2.0).
      * A tabulated material 2 has T_min > 0, and EOSSolveBCEval fails cleanly there, because
      * u(rho, T2) of material 2 fails below its table. Only T2 < 0 is invalid input.
      */
@@ -1619,7 +1619,7 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
      * until P2 >= P. If material 2 cannot be evaluated at rho1 and rho1 is below its reference
      * density, start at rho0 of material 2 instead: a gas envelope (SCvH, REOS3 at 1e-6 g/cc) on a
      * condensed core (ANEOS) has rho1 below the core's table, and the solver failed at once there
-     * up to 1.2.0. Wherever rho1 can be evaluated the start is rho1 as before, so the solver finds
+     * before 1.2.0. Wherever rho1 can be evaluated the start is rho1 as before, so the solver finds
      * the same root (see EOSSolveBCExpand).
      */
     a = rho1;
@@ -1751,7 +1751,7 @@ int EOSSolveBC(EOSMATERIAL *material1, EOSMATERIAL *material2, double rho1, doub
 
     /*
      * The returned (rho2, u2) must be a consistent pair. After the bisection (c, uc) are the values
-     * of its last evaluation at c, so nothing is left to do (up to 1.2.0 that lookup was repeated
+     * of its last evaluation at c, so nothing is left to do (before 1.2.0 that lookup was repeated
      * here, one evaluation of material 2 per call for nothing). Only if the loop never ran is uc
      * still ub, from another density: evaluate at c then. That cannot happen with the brackets
      * above, which start at least 0.1% apart (b <= 0.999 a), far wider than EOS_SOLVEBC_TOL; the
