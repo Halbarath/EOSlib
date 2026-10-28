@@ -125,6 +125,10 @@
  *          of the fallback (rho1, T_min), and the solver matched that wrong target and reported
  *          success. EOSSolveBC accepts a target temperature T2 = T1 - Tjump = 0 (the cold curve of
  *          Tillotson and the ideal gas); only T2 < 0 is rejected (it rejected T2 <= 0).
+ *          EOSIsentropic for ANEOS and SCvH starts a state above the u column from the top row
+ *          s(rho1, T_max), not from the T_min fallback, which put u2 on the cold curve at rho2
+ *          (needs the ANEOSisentropicU and scvheosIsentropicU of this round; raise the required
+ *          versions when bumped).
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -376,7 +380,9 @@ double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, doub
  * u2 on the isentrope through (rho1, u1) at rho2. If (rho1, u1) is below the
  * cold curve (the lowest tabulated temperature), all libraries follow the
  * coldest isentrope, i.e. return the cold curve at rho2 (counted in
- * nLookupFail). Where the isentrope leaves a tabulated EOS (ANEOS, SCvH) at
+ * nLookupFail). If it is above the u column of a tabulated EOS (ANEOS, SCvH),
+ * the isentrope starts from the top row, s(rho1, T_max) (counted); the energy
+ * above the top row is lost. Where the isentrope leaves a tabulated EOS at
  * rho2, u2 is clamped to the edge it leaves through: the cold curve u(rho2,
  * T_min) below, the top row u(rho2, T_max) above (counted as well);
  * EOS_FAIL_VALUE only for an invalid input or rho2 outside a
