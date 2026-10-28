@@ -91,6 +91,11 @@
  *          pressure, and the solver failed only after shrinking the lower bracket.
  *          EOSdUdRho returns EOS_FAIL_VALUE where P(rho, u) fails; for ANEOS and SCvH it
  *          returned -1e50/rho^2 (not the sentinel, for rho > 1e5 not even EOSFailed).
+ *          nLookupFail counts once per call (see "Failure contract"): ANEOS P, c, s, phase
+ *          and the (rho, u) derivatives counted a density outside the table twice, the
+ *          ANEOS and SCvH isentropes up to three times, EOSSofRhoU for SCvH twice.
+ *          EOSSofRhoU uses the new scvheosSofRhoU: when the versions are bumped, the
+ *          required scvheos version (SCVHEOS_VERSION_*_REQUIRED) must follow.
  *          EOSYieldStrength and EOSYieldStrengthofRhoTP return EOS_FAIL_VALUE for a failed
  *          pressure (models 1 and 2): the tension clamp max(P, 0) turned P = EOS_FAIL_VALUE
  *          into P_eff = 0 and a finite Y0 * f(T) for a state outside the table.
@@ -226,7 +231,10 @@
  * functions return EOS_FAIL or an EOS_OUTSIDE_* code.
  *
  * Every failure and every fallback is counted in the sublibrary's
- * nLookupFail (printed by EOSPrintMat for every library) and reported on stderr only when the
+ * nLookupFail (printed by EOSPrintMat for every library), once per call: a
+ * call that fails or falls back counts exactly 1, however many of its
+ * internal steps do (a density outside the table is one bad state, not a
+ * T fallback plus a failed lookup). It is reported on stderr only when the
  * libraries are compiled with -DEOSLIB_VERBOSE (EOS_WARN and the *_WARN of
  * each sublibrary). Test a returned value with EOSFailed(x), which is true
  * for the sentinel and for NaN.

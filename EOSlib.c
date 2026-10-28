@@ -597,12 +597,10 @@ double EOSSofRhoU(EOSMATERIAL *material, double rho, double u)
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
-        case EOSSCVHEOS: {
-            /* T(rho, u) never fails (T_min fallback); s(rho, T) does if rho is outside the table. */
-            double T = scvheosTofRhoU(material->scvheosmaterial, rho, u);
-            S = scvheosSofRhoT(material->scvheosmaterial, rho, T);
+        case EOSSCVHEOS:
+            /* One cell lookup, counted once (T(rho, u) then s(rho, T) counted a density outside the table twice). */
+            S = scvheosSofRhoU(material->scvheosmaterial, rho, u);
             break;
-        }
 #endif
         default: EOS_UNKNOWN_MATERIAL(material);
     }

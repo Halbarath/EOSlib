@@ -1009,6 +1009,45 @@ static void testFailureContract(EOSMATERIAL *e, double rhoOk, double uOk, double
         CHECK(EOSisbelowColdCurve(e, rhoOk, INFINITY) == EOS_FAIL, "isbelowColdCurve for an infinite u");
         CHECK(EOSisbelowColdCurve(e, rhoOk, uOk) == EOS_FALSE, "isbelowColdCurve in the table");
     }
+    /*
+     * Once per call: a call that fails or falls back adds exactly 1 to nLookupFail, however many
+     * of its steps do. Up to 1.2.0 a density outside the table counted 2 in the ANEOS (rho, u)
+     * functions (T fallback, then the lookup at (rho, T_min)) and in EOSSofRhoU for SCvH, and the
+     * ANEOS and SCvH isentropes counted 2 or 3.
+     */
+    {
+#define ONCE(expr, what) do { long n_ = *pnLookupFail; (void) (expr); \
+            CHECK(*pnLookupFail == n_ + 1, "%s counted %ld times", what, *pnLookupFail - n_); } while (0)
+        double cc, TT;
+        const double uCold = EOSUofRhoT(e, rhoOk, TMin);
+        const double uLo = uCold - 10.0 * fabs(uCold) - 1.0;   /* below the cold curve: T_min fallback */
+        const double rhos[3] = {rhoHi, rhoOk, rhoOk}, us[3] = {uOk, uHi, uLo};
+        const char *where[3] = {"rho above the table", "u above the column", "u below the cold curve"};
+        for (int k = 0; k < 3; k++) {
+            char what[96];
+            double r = rhos[k], uu = us[k];
+#define ONCEK(expr, name) do { snprintf(what, sizeof(what), "%s, %s", name, where[k]); ONCE(expr, what); } while (0)
+            ONCEK(EOSPofRhoU(e, r, uu), "P(rho, u)");
+            ONCEK(EOSCofRhoU(e, r, uu), "c(rho, u)");
+            ONCEK(EOSPCTofRhoU(e, r, uu, &cc, &TT), "PCT(rho, u)");
+            ONCEK(EOSTofRhoU(e, r, uu), "T(rho, u)");
+            if (e->bEntropy) ONCEK(EOSSofRhoU(e, r, uu), "s(rho, u)");
+            ONCEK(EOSdPdRho(e, r, uu), "dP/drho");
+            ONCEK(EOSdPdU(e, r, uu), "dP/du");
+            ONCEK(EOSdUdRho(e, r, uu), "du/drho");
+#undef ONCEK
+        }
+        if (e->matType != EOSREOS3) {   /* EOSIsentropic is not implemented for REOS3 */
+            ONCE(EOSIsentropic(e, rhoHi, uOk, rhoOk), "isentrope, rho1 above the table");
+            ONCE(EOSIsentropic(e, rhoOk, uOk, rhoHi), "isentrope, rho2 above the table");
+            ONCE(EOSIsentropic(e, rhoHi, uOk, rhoHi), "isentrope, rho1 and rho2 above the table");
+            ONCE(EOSIsentropic(e, rhoOk, uHi, rhoHi), "isentrope, u1 above the column and rho2 above the table");
+            long n = *pnLookupFail;
+            (void) EOSIsentropic(e, rhoOk, uOk, rhoOk);
+            CHECK(*pnLookupFail == n, "isentrope inside the table counted %ld times", *pnLookupFail - n);
+        }
+#undef ONCE
+    }
     CHECK(*pnLookupFail > nf0, "failures not counted (%ld -> %ld)", nf0, *pnLookupFail);
     *pnLookupFail = nf0;
     END_TEST();
