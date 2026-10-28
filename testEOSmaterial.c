@@ -1506,6 +1506,17 @@ static void testTillotsonTableStatus(EOSMATERIAL *e)
     CHECK(EOSisbelowColdCurve(e, rhoOk, 0.5 * ucold) == EOS_TRUE, "below cold curve");
     CHECK(EOSisbelowColdCurve(e, rhoOk, uOk) == EOS_FALSE, "above cold curve");
     CHECK(EOSisbelowColdCurve(e, rhoLo, -1.0) == EOS_TRUE, "below cold curve below rhomin (u_cold = 0)");
+    /* The Tillotson layer gives the same answer there (tillIsBelowColdCurve failed below rhomin up to 4.0.0). */
+    {
+        const double rs[4] = { rhoLo, rhoOk, 0.5 * m->rho0, m->rho0 };
+        const double us[4] = { -1.0, 0.0, uOk, 0.5 * ucold };
+        for (int i = 0; i < 4; i++) for (int k = 0; k < 4; k++) {
+            int st = tillIsBelowColdCurve(m, rs[i], us[k]);
+            CHECK(st == 0 || st == 1, "tillIsBelowColdCurve = %d at rho=%g u=%g", st, rs[i], us[k]);
+            CHECK((st == 1) == (EOSisbelowColdCurve(e, rs[i], us[k]) == EOS_TRUE),
+                  "tillIsBelowColdCurve %d vs EOSisbelowColdCurve %d at rho=%g u=%g", st, EOSisbelowColdCurve(e, rs[i], us[k]), rs[i], us[k]);
+        }
+    }
     CHECK(EOSisbelowColdCurve(e, rhoOk, NAN) == EOS_FAIL, "isbelowColdCurve for a NaN u");
     {
         /* Above rhomax the cold curve is not tabulated: undecidable, counted (was "not below"). */
