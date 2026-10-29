@@ -1092,6 +1092,9 @@ int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u)
  * Returns EOS_SUCCESS if it does, otherwise one of EOS_OUTSIDE_RHOMIN,
  * EOS_OUTSIDE_RHOMAX, EOS_OUTSIDE_VMIN, EOS_OUTSIDE_VMAX indicating which
  * bound was violated, or EOS_FAIL if the sublibrary reports an unknown status.
+ * Non-finite input is reported by the side it lies on, the same for every
+ * library: rho <= 0 and NaN RHOMIN, rho = +inf RHOMAX; u = NaN and -inf VMIN,
+ * u = +inf VMAX (rho is checked first).
  * No tolerance policy is applied here; use EOSIsUsable for that.
  *
  * Required: ballic, gasoline, tipsytools
@@ -1105,7 +1108,8 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
             /* No table; the cold curve is u = 0 (T_min = 0), as for Tillotson. rho must be positive and finite (igeos). */
             if (!(rho > 0.0)) return EOS_OUTSIDE_RHOMIN;   /* also NaN */
             if (!isfinite(rho)) return EOS_OUTSIDE_RHOMAX;
-            if (!(u >= 0.0)) return EOS_OUTSIDE_VMIN;   /* also NaN */
+            if (!(u >= 0.0)) return EOS_OUTSIDE_VMIN;   /* also NaN and -inf */
+            if (!isfinite(u)) return EOS_OUTSIDE_VMAX;  /* +inf: it was EOS_SUCCESS, and usable */
             return EOS_SUCCESS;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
@@ -1115,6 +1119,13 @@ int EOSIsInTable(EOSMATERIAL *material, double rho, double u)
             if (iret == TILL_LOOKUP_OUTSIDE_RHOMAX) return EOS_OUTSIDE_RHOMAX;
             if (iret == TILL_LOOKUP_OUTSIDE_VMIN) return EOS_OUTSIDE_VMIN;
             if (iret == TILL_LOOKUP_OUTSIDE_VMAX) return EOS_OUTSIDE_VMAX;
+            /*
+             * TILL_FAIL: a non-finite u at a density inside the table. Reported by the side it lies
+             * on, like every other library: NaN and -inf below the cold curve, +inf above the table.
+             * It was EOS_FAIL. EOSIsUsable rejects both (OUTSIDE_VMAX is tolerated for Tillotson
+             * only for a finite u).
+             */
+            if (iret == TILL_FAIL) return (u > 0.0) ? EOS_OUTSIDE_VMAX : EOS_OUTSIDE_VMIN;
             return EOS_FAIL;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
@@ -1183,8 +1194,8 @@ int EOSIsUsable(EOSMATERIAL *material, double rho, double u)
             return EOS_FALSE;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            /* Pressure is analytic; only the isentrope lookup needs u <= u_max. */
-            if (iret == EOS_OUTSIDE_VMAX) return EOS_TRUE;
+            /* Pressure is analytic; only the isentrope lookup needs u <= u_max. Not u = +inf. */
+            if (iret == EOS_OUTSIDE_VMAX) return isfinite(u) ? EOS_TRUE : EOS_FALSE;
             /* Below rho_min (see above): the cold curve is u = 0. */
             if (iret == EOS_OUTSIDE_RHOMIN)
                 return ((rho > 0.0) && isfinite(rho) && isfinite(u) &&

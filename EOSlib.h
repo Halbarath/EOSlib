@@ -141,6 +141,13 @@
  *            tillIsBelowColdCurve, u < u_cold - tillUTol(u), the tolerance of tillIsInTable,
  *            tillTempRhoU and EOSIsUsable (u < u_cold said "below" within roundoff of the cold
  *            curve). For the ideal gas u < 0.
+ *          - EOSIsInTable reports non-finite input by the side it lies on, the same for every
+ *            library: rho <= 0 and NaN EOS_OUTSIDE_RHOMIN, rho = +inf EOS_OUTSIDE_RHOMAX, u = NaN
+ *            and -inf EOS_OUTSIDE_VMIN, u = +inf EOS_OUTSIDE_VMAX. EOSIsUsable is EOS_FALSE for all
+ *            of them. Before: the ideal gas reported u = +inf as EOS_SUCCESS (and usable), SCvH and
+ *            REOS3 reported +inf as RHOMIN and VMIN, Tillotson a non-finite u as EOS_FAIL, and ANEOS
+ *            u = +-inf as EOS_SUCCESS (found at T_min by the node tolerance of the tolerant inversion,
+ *            fixed in interpBilinear). EOS_FAIL is left for an unknown sublibrary status.
  *
  *          EOSSolveBC:
  *          - A discontinuous P2(rho, T) is detected by the growth of the secant slope as the
@@ -351,7 +358,9 @@
  * density (rho <= 0, NaN, inf) is outside every table, also of the analytic
  * EOS (ideal gas, Tillotson): EOS_FAIL_VALUE, T(rho, u) = T_min, EOSIsInTable
  * EOS_OUTSIDE_RHOMIN (EOS_OUTSIDE_RHOMAX for inf), EOSisbelowColdCurve
- * EOS_FAIL. Status functions return EOS_FAIL or an EOS_OUTSIDE_* code.
+ * EOS_FAIL. A non-finite u at a valid density is outside as well: EOSIsInTable
+ * EOS_OUTSIDE_VMIN for NaN and -inf, EOS_OUTSIDE_VMAX for +inf, and T(rho, u)
+ * falls back to T_min. Status functions return EOS_FAIL or an EOS_OUTSIDE_* code.
  *
  * Exception, Tillotson: its pressure is an analytic function of (rho, u),
  * so EOSPofRhoU, EOSCofRhoU, EOSPCofRhoU, the P and c of EOSPCTofRhoU,
@@ -545,14 +554,16 @@ int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u);
 
 /*
  * EOSIsInTable reports the raw table status of (rho, u) for the material:
- * EOS_SUCCESS, or one of the EOS_OUTSIDE_* codes, or EOS_FAIL. It never
- * applies a tolerance policy.
+ * EOS_SUCCESS, or one of the EOS_OUTSIDE_* codes, or EOS_FAIL (an unknown
+ * sublibrary status). It never applies a tolerance policy. Non-finite input
+ * gets the code of the side it lies on (rho <= 0, NaN: RHOMIN; rho = +inf:
+ * RHOMAX; u = NaN, -inf: VMIN; u = +inf: VMAX), for every library.
  *
  * EOSIsUsable applies the library policy: returns EOS_TRUE if P(rho, u),
  * c(rho, u) and T(rho, u) can be evaluated for this material even if the
- * state lies outside the lookup table (for Tillotson: u > u_max, and rho <
- * rho_min with u >= 0, where the cold curve is zero; for the ideal gas every
- * rho > 0 and u >= 0), EOS_FALSE otherwise. Use this in the hydro code; use
+ * state lies outside the lookup table (for Tillotson: a finite u > u_max, and
+ * rho < rho_min with a finite u >= 0, where the cold curve is zero; for the
+ * ideal gas every finite rho > 0 and u >= 0), EOS_FALSE otherwise. Use this in the hydro code; use
  * EOSIsInTable when you need to know *why* a state is out of range or whether
  * isentropic lookups (EOSIsentropic) are available.
  */

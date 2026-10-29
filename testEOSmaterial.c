@@ -364,6 +364,9 @@ static void testIdealGas(double dKpcUnit, double dMsolUnit)
             double c, T, P = EOSPCTofRhoU(g, rho, 0.0, &c, &T);
             CHECK(P == 0.0 && c == 0.0 && T == 0.0 && ig->nLookupFail == n, "gas: u = 0 is a valid state");
             CHECK(EOSIsInTable(g, rho, 0.0) == EOS_SUCCESS && EOSIsUsable(g, rho, 0.0) == EOS_TRUE, "gas: u = 0 usable");
+            /* u = +inf is above the "table" and not usable (it was EOS_SUCCESS and usable); -inf below. */
+            CHECK(EOSIsInTable(g, rho, INFINITY) == EOS_OUTSIDE_VMAX && EOSIsUsable(g, rho, INFINITY) == EOS_FALSE, "gas: u = +inf");
+            CHECK(EOSIsInTable(g, rho, -INFINITY) == EOS_OUTSIDE_VMIN && EOSIsUsable(g, rho, -INFINITY) == EOS_FALSE, "gas: u = -inf");
         }
         CHECK(EOSIsInTable(g, 0.0, 1.0) == EOS_OUTSIDE_RHOMIN && EOSIsUsable(g, -1.0, 1.0) == EOS_FALSE, "gas: rho <= 0");
         /* T below T_min = 0, rho(P, T) without a solution: the sentinel, counted. */
@@ -1284,6 +1287,28 @@ static void testFailureContract(EOSMATERIAL *e, double rhoOk, double uOk, double
     CHECK(EOSIsInTable(e, rhoHi, uOk) == EOS_OUTSIDE_RHOMAX, "status above rhoMax");
     CHECK(EOSIsInTable(e, rhoOk, uHi) == EOS_OUTSIDE_VMAX, "status above the column");
     CHECK(EOSIsUsable(e, rhoHi, uOk) == EOS_FALSE, "usable above rhoMax");
+    /*
+     * Non-finite input by the side it lies on, the same in every library (SCvH and REOS3 reported
+     * +inf as RHOMIN and TMIN; ANEOS found u = +-inf at T_min without a fallback, reported inside).
+     * Never usable; T(rho, u) of a non-finite u is the counted T_min fallback.
+     */
+    {
+        long nf = *pnLookupFail;
+        CHECK(EOSIsInTable(e, INFINITY, uOk) == EOS_OUTSIDE_RHOMAX, "status for rho = +inf: %d", EOSIsInTable(e, INFINITY, uOk));
+        CHECK(EOSIsInTable(e, NAN, uOk) == EOS_OUTSIDE_RHOMIN && EOSIsInTable(e, -1.0, uOk) == EOS_OUTSIDE_RHOMIN, "status for rho = NaN, < 0");
+        CHECK(EOSIsInTable(e, rhoOk, INFINITY) == EOS_OUTSIDE_VMAX, "status for u = +inf: %d", EOSIsInTable(e, rhoOk, INFINITY));
+        CHECK(EOSIsInTable(e, rhoOk, -INFINITY) == EOS_OUTSIDE_VMIN, "status for u = -inf: %d", EOSIsInTable(e, rhoOk, -INFINITY));
+        CHECK(EOSIsInTable(e, rhoOk, NAN) == EOS_OUTSIDE_VMIN, "status for u = NaN: %d", EOSIsInTable(e, rhoOk, NAN));
+        CHECK(EOSIsUsable(e, INFINITY, uOk) == EOS_FALSE && EOSIsUsable(e, rhoOk, INFINITY) == EOS_FALSE &&
+              EOSIsUsable(e, rhoOk, -INFINITY) == EOS_FALSE && EOSIsUsable(e, rhoOk, NAN) == EOS_FALSE, "non-finite input usable");
+        CHECK(*pnLookupFail == nf, "status queries for non-finite input counted");
+        const double us[3] = { INFINITY, -INFINITY, NAN };
+        for (int q = 0; q < 3; q++) {
+            nf = *pnLookupFail;
+            CHECK_REL(EOSTofRhoU(e, rhoOk, us[q]), TMin, 1e-12, "T(rho, u = %g) falls back to T_min", us[q]);
+            CHECK(*pnLookupFail == nf + 1, "T(rho, u = %g) counted %ld times", us[q], *pnLookupFail - nf);
+        }
+    }
     CHECK(EOSFailed(EOSPofRhoU(e, rhoHi, uOk)), "P above rhoMax");
     CHECK(EOSFailed(EOSCofRhoU(e, rhoHi, uOk)), "c above rhoMax");
     CHECK(EOSFailed(EOSUofRhoT(e, rhoHi, TMin)), "u(rho, T) above rhoMax");
@@ -1596,9 +1621,12 @@ static void testTillotsonTableStatus(EOSMATERIAL *e)
     CHECK(EOSIsInTable(e, NAN, uOk) == EOS_OUTSIDE_RHOMIN, "NaN rho");
     CHECK(EOSIsInTable(e, rhoOk, 0.5 * ucold) == EOS_OUTSIDE_VMIN, "below the cold curve");
     CHECK(EOSIsInTable(e, rhoOk, uHuge) == EOS_OUTSIDE_VMAX, "above the table");
-    /* A non-finite u is no state at all: EOS_FAIL, not OUTSIDE_VMAX (which EOSIsUsable tolerates). */
-    CHECK(EOSIsInTable(e, rhoOk, NAN) == EOS_FAIL, "NaN u");
-    CHECK(EOSIsInTable(e, rhoOk, INFINITY) == EOS_FAIL, "+inf u");
+    /* A non-finite u by the side it lies on, as in every library (it was EOS_FAIL); never usable. */
+    CHECK(EOSIsInTable(e, rhoOk, NAN) == EOS_OUTSIDE_VMIN, "NaN u");
+    CHECK(EOSIsInTable(e, rhoOk, -INFINITY) == EOS_OUTSIDE_VMIN, "-inf u");
+    CHECK(EOSIsInTable(e, rhoOk, INFINITY) == EOS_OUTSIDE_VMAX, "+inf u");
+    CHECK(EOSIsUsable(e, rhoOk, -INFINITY) == EOS_FALSE, "not usable for -inf u");
+    CHECK(EOSIsInTable(e, 2.0 * m->rhomax, NAN) == EOS_OUTSIDE_RHOMAX && EOSIsInTable(e, INFINITY, uOk) == EOS_OUTSIDE_RHOMAX, "rho first, +inf rho");
 
     /*
      * An invalid density (rho <= 0, NaN, inf) fails also for the analytic Tillotson pressure (it
