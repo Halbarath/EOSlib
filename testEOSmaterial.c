@@ -199,7 +199,9 @@ static void checkPrintMatRho0(EOSMATERIAL *e)
  * Initialisation must be silent unless the library is compiled with -DEOSLIB_VERBOSE: with one
  * material instance per thread every message appeared 64 times (reos3 printed the table name, uRef
  * and the unit conversion, reos3 and scvheos their monotonicity reports and sound speed repairs,
- * EOSinitIsentropicLookup a REOS3 note on every call, before EOSlib 1.2.0).
+ * EOSinitIsentropicLookup a REOS3 note on every call, before EOSlib 1.2.0). initQuiet with
+ * bIsentrope = 1 calls EOSinitIsentropicLookup twice inside the capture (the second call must be a
+ * no-op); every material whose isentropes are used is initialised that way.
  */
 static FILE *stderrCaptureBegin(int *pfdSaved)
 {
@@ -2206,11 +2208,11 @@ static void testTillotson(double dKpcUnit, double dMsolUnit)
     testTillotsonColdCurveOnly(1, dKpcUnit, dMsolUnit);
     /* Iron (2) and granite (1): the two Tillotson materials with a unique
      * rho(P, T) in the condensed region; ice and water are not (intermediate region).
-     * EOSIsentropic is used below, so the isentrope table is built (EOSinitIsentropicLookup). */
-    EOSMATERIAL *iron = initQuiet(2, dKpcUnit, dMsolUnit, NULL, 0);
-    EOSMATERIAL *granite = initQuiet(1, dKpcUnit, dMsolUnit, NULL, 0);
-    EOSinitIsentropicLookup(iron, NULL);
-    EOSinitIsentropicLookup(granite, NULL);
+     * EOSIsentropic is used below, so the isentrope table is built (EOSinitIsentropicLookup), inside
+     * the stderr capture: for Tillotson it integrates the full table, the only init with real work
+     * after EOSinitMaterial, and was called outside the capture, so its silence was never tested. */
+    EOSMATERIAL *iron = initQuiet(2, dKpcUnit, dMsolUnit, NULL, 1);
+    EOSMATERIAL *granite = initQuiet(1, dKpcUnit, dMsolUnit, NULL, 1);
     printf("  T1: %s  T2: %s\n", granite->MatString, iron->MatString);
     testTillotsonDispatch(granite);
     testTillotsonDispatch(iron);
@@ -2406,10 +2408,8 @@ int main(int argc, char *argv[])
     testGasParams();
 
 #ifdef HAVE_ANEOSMATERIAL_H
-    EOSMATERIAL *A = initQuiet(iMatA, dKpcUnit, dMsolUnit, NULL, 0);
-    EOSMATERIAL *B = initQuiet(iMatB, dKpcUnit, dMsolUnit, NULL, 0);
-    EOSinitIsentropicLookup(A, NULL);
-    EOSinitIsentropicLookup(B, NULL);
+    EOSMATERIAL *A = initQuiet(iMatA, dKpcUnit, dMsolUnit, NULL, 1);
+    EOSMATERIAL *B = initQuiet(iMatB, dKpcUnit, dMsolUnit, NULL, 1);
     printf("  A: %s  B: %s\n", A->MatString, B->MatString);
 
     testANEOSDispatch(A);
