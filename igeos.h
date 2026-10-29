@@ -37,7 +37,7 @@
  */
 #define IGEOS_VERSION_TEXT    "1.1.0"
 #define IGEOS_VERSION_MAJOR   1
-#define IGEOS_VERSION_MINOR   1
+#define IGEOS_VERSION_MINOR   2
 #define IGEOS_VERSION_PATCH   0
 
 /*
