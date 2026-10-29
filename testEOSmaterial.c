@@ -2015,21 +2015,25 @@ static void testTillotsonSolveBCJump(EOSMATERIAL *iron, EOSMATERIAL *granite)
 /*
  * The Woolfson pressure threshold is a physical pressure: the same physical (P, T) gives the same
  * f_ij in every unit system, no correction just below WOOLFSON_MIN_PRESSURE_CGS and the correction
- * just above it. Before EOSlib 1.2.0 it was 1e-3 in code units (1.44 GPa in Earth units, 1e-4 Pa
- * in cgs). The unit factors of EOSMATERIAL must agree with those of the sublibraries.
+ * just above it. Before EOSlib 1.2.0 it was 1e-3 in code units, which meant a different pressure
+ * in every unit system (0.37 MPa in the pkdgrav3 units, 1.44 GPa in true Earth units, 1e-4 Pa in
+ * cgs). WOOLFSON_MIN_PRESSURE_CGS keeps the threshold of the pkdgrav3 units: there it is still
+ * 1e-3 in code units. The unit factors of EOSMATERIAL must agree with those of the sublibraries.
  */
 static void testWoolfsonUnits(void)
 {
     int failsBefore = nFails;
     TEST("EOSWoolfsonCoeff threshold in every unit system");
-    const double units[3][2] = {
+    enum { NUNITS = 4 };
+    const double units[NUNITS][2] = {
         {0.0, 0.0},                           /* cgs */
-        {2.06701e-13, 4.80438e-08},           /* Earth radius and mass */
+        {2.06701e-13, 4.80438e-08},           /* pkdgrav3 units: Earth radius, 9.56e25 g (density unit 0.3685 g/cc) */
+        {6.371e8 / 3.085678e21, 5.972e27 / 1.99e33},   /* true Earth radius and mass */
         {1.3e8 / 3.085678e21, 1.0},           /* one solar mass in 1300 km */
     };
     const double T = 300.0;
-    double fAbove[3];
-    for (int iu = 0; iu < 3; iu++) {
+    double fAbove[NUNITS];
+    for (int iu = 0; iu < NUNITS; iu++) {
         EOSMATERIAL *granite = EOSinitMaterial(1, units[iu][0], units[iu][1], NULL);
         EOSMATERIAL *iron = EOSinitMaterial(2, units[iu][0], units[iu][1], NULL);
         struct igeosParam gp = {5.0 / 3.0, 1.0};
@@ -2040,6 +2044,8 @@ static void testWoolfsonUnits(void)
         CHECK_REL(gas->dErgPerGmUnit, gas->igeosmaterial->dErgPerGmUnit, 1e-15, "dErgPerGmUnit vs igeos (units %d)", iu);
         CHECK_REL(gas->dGmPerCcUnit, gas->igeosmaterial->dGmPerCcUnit, 1e-15, "dGmPerCcUnit vs igeos (units %d)", iu);
         CHECK_REL(EOSWoolfsonMinPressure(granite) * Punit, WOOLFSON_MIN_PRESSURE_CGS, 1e-14, "threshold in cgs (units %d)", iu);
+        /* The pkdgrav3 units keep the threshold of EOSlib before 1.2.0, 1e-3 in code units. */
+        if (iu == 1) CHECK_REL(EOSWoolfsonMinPressure(granite), 1e-3, 1e-12, "threshold in the pkdgrav3 units is 1e-3 in code units");
         CHECK(EOSWoolfsonCoeff(granite, iron, WOOLFSON_MIN_PRESSURE_CGS * (1.0 - 1e-6) / Punit, T) == 1.0, "no correction just below the threshold (units %d)", iu);
         fAbove[iu] = EOSWoolfsonCoeff(granite, iron, WOOLFSON_MIN_PRESSURE_CGS * (1.0 + 1e-6) / Punit, T);
         CHECK(!EOSFailed(fAbove[iu]) && fAbove[iu] > 0.0 && fAbove[iu] < 1.0, "correction just above the threshold (units %d): f= %g", iu, fAbove[iu]);
@@ -2050,7 +2056,7 @@ static void testWoolfsonUnits(void)
         EOSfinalizeMaterial(iron);
         EOSfinalizeMaterial(gas);
     }
-    for (int iu = 1; iu < 3; iu++) CHECK_REL(fAbove[iu], fAbove[0], 1e-8, "f above the threshold in unit system %d", iu);
+    for (int iu = 1; iu < NUNITS; iu++) CHECK_REL(fAbove[iu], fAbove[0], 1e-8, "f above the threshold in unit system %d", iu);
     END_TEST();
 }
 
@@ -2335,7 +2341,7 @@ int main(int argc, char *argv[])
     int iMatSCVH = 114;                /* 0: SCvH tests skipped */
     int iMatREOS3 = 104;               /* 0: REOS3 tests skipped */
     double dKpcUnit = 2.06701e-13;   /* Earth radius */
-    double dMsolUnit = 4.80438e-08;  /* Earth mass */
+    double dMsolUnit = 4.80438e-08;  /* 9.56e25 g, not the Earth mass: density unit 0.3685 g/cc (pkdgrav3 units) */
 
     if (argc > 2) { iMatA = atoi(argv[1]); iMatB = atoi(argv[2]); }
     if (argc > 4) { dKpcUnit = atof(argv[3]); dMsolUnit = atof(argv[4]); }

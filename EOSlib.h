@@ -67,8 +67,12 @@
  *            (it was 130, the largest id: such an array overflowed by one), like
  *            TILL_N_MATERIAL_MAX. Loops over ids must use iMat < EOS_N_MATERIAL_MAX.
  *          - The Woolfson pressure threshold is a physical pressure, WOOLFSON_MIN_PRESSURE_CGS =
- *            1.44 GPa, converted per material (EOSWoolfsonMinPressure); WOOLFSON_MIN_PRESSURE
- *            (1e-3 in code units: 1.44 GPa in Earth units but 1e-4 Pa in cgs) is gone.
+ *            3.684e6 dyn/cm^2 (0.37 MPa), converted per material (EOSWoolfsonMinPressure);
+ *            WOOLFSON_MIN_PRESSURE (1e-3 in code units) is gone. 3.684e6 dyn/cm^2 is 1e-3 in the
+ *            pkdgrav3/ballic units dKpcUnit = 2.06701e-13, dMsolUnit = 4.80438e-08, so runs in these
+ *            units keep their threshold (to roundoff). The old threshold was 1e-4 Pa in cgs and
+ *            1.44 GPa in true Earth units (R_E = 6.371e8 cm, M_E = 5.972e27 g); runs in those unit
+ *            systems now use 0.37 MPa as well.
  *          - One rule for the unit pair in EOSlib and every sublibrary: both dKpcUnit and
  *            dMsolUnit > 0 (and finite) is code units, both <= 0 is cgs, anything else is fatal
  *            (igeos divided by zero, Tillotson only asserted, ANEOS, SCvH and REOS3 silently used
@@ -259,10 +263,15 @@
 /*
  * EOSWoolfsonCoeff does no correction below this pressure (cgs, dyn/cm^2 = 0.1 Pa). It is a
  * physical pressure, converted with the unit system of the material (EOSWoolfsonMinPressure).
- * Before EOSlib 1.2.0 the threshold was WOOLFSON_MIN_PRESSURE = 1e-3 in code units, i.e. 1.44 GPa
- * in Earth units but 1e-4 Pa in cgs; 1.44 GPa keeps the behaviour of Earth-unit runs.
+ * Before EOSlib 1.2.0 the threshold was WOOLFSON_MIN_PRESSURE = 1e-3 in code units. The value
+ * here is that threshold in the pkdgrav3/ballic units dKpcUnit = 2.06701e-13 (Earth radius),
+ * dMsolUnit = 4.80438e-08 (9.56e25 g, not the Earth mass): energy unit 9.998e9 erg/g, density
+ * unit 0.3685 g/cc, pressure unit 3.684e9 dyn/cm^2, so 1e-3 = 3.684e6 dyn/cm^2 = 0.37 MPa and
+ * runs in these units behave as before. In other unit systems the old code-unit threshold meant
+ * a different pressure (1e-4 Pa in cgs, 1.44 GPa in true Earth units R_E, M_E); all of them use
+ * 0.37 MPa now.
  */
-#define WOOLFSON_MIN_PRESSURE_CGS 1.44e10
+#define WOOLFSON_MIN_PRESSURE_CGS 3.684121632893488e6
 
 /* EOSSolveBC: bracket expansion limits and convergence tolerances. */
 #define EOS_SOLVEBC_MAX_EXPAND  100   /* bracket steps of 1.1 up, 0.9 down (as before 1.2.0): 1.1^100 ~ 1.4e4, 0.9^100 ~ 2.7e-5 */
