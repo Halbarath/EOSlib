@@ -67,12 +67,8 @@
  *            (it was 130, the largest id: such an array overflowed by one), like
  *            TILL_N_MATERIAL_MAX. Loops over ids must use iMat < EOS_N_MATERIAL_MAX.
  *          - The Woolfson pressure threshold is a physical pressure, WOOLFSON_MIN_PRESSURE_CGS =
- *            3.684e6 dyn/cm^2 (0.37 MPa), converted per material (EOSWoolfsonMinPressure);
- *            WOOLFSON_MIN_PRESSURE (1e-3 in code units) is gone. 3.684e6 dyn/cm^2 is 1e-3 in the
- *            pkdgrav3/ballic units dKpcUnit = 2.06701e-13, dMsolUnit = 4.80438e-08, so runs in these
- *            units keep their threshold (to roundoff). The old threshold was 1e-4 Pa in cgs and
- *            1.44 GPa in true Earth units (R_E = 6.371e8 cm, M_E = 5.972e27 g); runs in those unit
- *            systems now use 0.37 MPa as well.
+ *            1.44 GPa, converted per material (EOSWoolfsonMinPressure); WOOLFSON_MIN_PRESSURE
+ *            (1e-3 in code units: 1.44 GPa in Earth units but 1e-4 Pa in cgs) is gone.
  *          - One rule for the unit pair in EOSlib and every sublibrary: both dKpcUnit and
  *            dMsolUnit > 0 (and finite) is code units, both <= 0 is cgs, anything else is fatal
  *            (igeos divided by zero, Tillotson only asserted, ANEOS, SCvH and REOS3 silently used
@@ -123,8 +119,7 @@
  *          Table status and cold curve:
  *          - EOSlib no longer reads table internals of the sublibraries: EOSIsInTable uses
  *            ANEOSIsInTable, EOSUCold uses ANEOSUCold/reos3UCold/scvheosUCold/igeosUCold, the
- *            init uses ANEOSTmin and the yield clamp above the table ANEOSTmin/ANEOSTmax.
- *            ANEOSmaterial, scvheos and reos3 vendor interpBilinear 1.0.3;
+ *            init uses ANEOSTmin. ANEOSmaterial, scvheos and reos3 vendor interpBilinear 1.0.3;
  *            their headers check at compile time that the copy in effect in this translation
  *            unit has their type layout (INTERP_ABI_VERSION), so EOSlib and the libraries cannot
  *            disagree on the embedded INTERPGRID.
@@ -141,15 +136,7 @@
  *            within the edge tolerance of the first row. For Tillotson it is
  *            tillIsBelowColdCurve, u < u_cold - tillUTol(u), the tolerance of tillIsInTable,
  *            tillTempRhoU and EOSIsUsable (u < u_cold said "below" within roundoff of the cold
- *            curve), with one cold-curve lookup per call (it did two, EOSUCold and the one inside
- *            tillIsBelowColdCurve). For the ideal gas u < 0.
- *          - EOSIsInTable reports non-finite input by the side it lies on, the same for every
- *            library: rho <= 0 and NaN EOS_OUTSIDE_RHOMIN, rho = +inf EOS_OUTSIDE_RHOMAX, u = NaN
- *            and -inf EOS_OUTSIDE_VMIN, u = +inf EOS_OUTSIDE_VMAX. EOSIsUsable is EOS_FALSE for all
- *            of them. Before: the ideal gas reported u = +inf as EOS_SUCCESS (and usable), SCvH and
- *            REOS3 reported +inf as RHOMIN and VMIN, Tillotson a non-finite u as EOS_FAIL, and ANEOS
- *            u = +-inf as EOS_SUCCESS (found at T_min by the node tolerance of the tolerant inversion,
- *            fixed in interpBilinear). EOS_FAIL is left for an unknown sublibrary status.
+ *            curve). For the ideal gas u < 0.
  *
  *          EOSSolveBC:
  *          - A discontinuous P2(rho, T) is detected by the growth of the secant slope as the
@@ -177,9 +164,6 @@
  *            longer converged).
  *          - The last bisection lookup is not repeated at the end (one evaluation of material 2
  *            per call less, bit-identical).
- *          - Each evaluation of material 2 skips EOSIsUsable for ANEOS and Tillotson, where a u
- *            from a successful u(rho, T) is always usable (testANEOSmaterial and testtillotson
- *            check it): for ANEOS one of the two u-column inversions per step, bit-identical.
  *
  *          EOSIsentropic:
  *          - For ANEOS and SCvH the clamp to the table edge the isentrope leaves through is
@@ -205,6 +189,33 @@
  *
  *          Documentation only: rho0forInterfaceCorrection is not read by EOSlib (EOSWoolfsonCoeff
  *          cuts at 0.8*rho0 for every material, the gases included).
+ *   1.3.0  Compared with 1.2.0. Requires ANEOSmaterial 1.3.0 (ANEOSTmax), scvheos 1.3.1 and reos3
+ *          1.3.1 (the status of non-finite input), all three with interpBilinear 1.0.4; tillotson
+ *          4.0.0 and igeos 1.1.0 as before.
+ *          - The Woolfson pressure threshold WOOLFSON_MIN_PRESSURE_CGS is 3.684e6 dyn/cm^2
+ *            (0.37 MPa): 1e-3 in the pkdgrav3/ballic units dKpcUnit = 2.06701e-13, dMsolUnit =
+ *            4.80438e-08 (9.56e25 g, not the Earth mass), i.e. the threshold that runs in these
+ *            units had before 1.2.0 (to roundoff). 1.2.0 used 1.44 GPa, the old code-unit threshold
+ *            of true Earth units (R_E = 6.371e8 cm, M_E = 5.972e27 g), which raised it by a factor
+ *            3900 for the pkdgrav3 units. Runs in cgs (1e-4 Pa before 1.2.0) and in true Earth units
+ *            use 0.37 MPa as well.
+ *          - EOSIsInTable reports non-finite input by the side it lies on, the same for every
+ *            library: rho <= 0 and NaN EOS_OUTSIDE_RHOMIN, rho = +inf EOS_OUTSIDE_RHOMAX, u = NaN
+ *            and -inf EOS_OUTSIDE_VMIN, u = +inf EOS_OUTSIDE_VMAX. EOSIsUsable is EOS_FALSE for all
+ *            of them. Before: the ideal gas reported u = +inf as EOS_SUCCESS (and usable), SCvH and
+ *            REOS3 reported +inf as RHOMIN and VMIN, Tillotson a non-finite u as EOS_FAIL, and ANEOS
+ *            u = +-inf as EOS_SUCCESS (found at T_min by the node tolerance of the tolerant inversion,
+ *            fixed in interpBilinear 1.0.4); T(rho, +-inf) fell back to T_min uncounted for ANEOS.
+ *            EOS_FAIL is left for an unknown sublibrary status.
+ *          - EOSYieldStrength clamps a state above the ANEOS table with ANEOSTmin and ANEOSTmax: it
+ *            read the T axis of the table, contrary to the 1.2.0 entry (EOSlib no longer reads
+ *            sublibrary internals). Same results.
+ *          - EOSSolveBC: each evaluation of material 2 skips EOSIsUsable for ANEOS and Tillotson,
+ *            where a u from a successful u(rho, T) is always usable (testANEOSmaterial and
+ *            testtillotson check it): for ANEOS one of the two u-column inversions per step.
+ *            Bit-identical.
+ *          - EOSisbelowColdCurve for Tillotson does one cold-curve lookup per call (it did two,
+ *            EOSUCold and the one inside tillIsBelowColdCurve). Same results and counts.
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -221,7 +232,7 @@
     #include <tillotson.h>
 #define TILL_VERSION_MAJOR_REQUIRED 4
 #define TILL_VERSION_MINOR_REQUIRED 0
-#define TILL_VERSION_PATCH_REQUIRED 0
+#define TILL_VERSION_PATCH_REQUIRED 1
 #if (TILL_VERSION_MAJOR * 10000 + TILL_VERSION_MINOR * 100 + TILL_VERSION_PATCH) < \
     (TILL_VERSION_MAJOR_REQUIRED * 10000 + TILL_VERSION_MINOR_REQUIRED * 100 + TILL_VERSION_PATCH_REQUIRED)
 #error "EOSlib: the Tillotson library (tillotson.h) is older than the version EOSlib requires (TILL_VERSION_*_REQUIRED)"
@@ -230,7 +241,7 @@
 #ifdef HAVE_ANEOSMATERIAL_H
     #include <ANEOSmaterial.h>
 #define ANEOS_VERSION_MAJOR_REQUIRED 1
-#define ANEOS_VERSION_MINOR_REQUIRED 2
+#define ANEOS_VERSION_MINOR_REQUIRED 3
 #define ANEOS_VERSION_PATCH_REQUIRED 0
 #if (ANEOS_VERSION_MAJOR * 10000 + ANEOS_VERSION_MINOR * 100 + ANEOS_VERSION_PATCH) < \
     (ANEOS_VERSION_MAJOR_REQUIRED * 10000 + ANEOS_VERSION_MINOR_REQUIRED * 100 + ANEOS_VERSION_PATCH_REQUIRED)
@@ -241,7 +252,7 @@
     #include <reos3.h>
 #define REOS3_VERSION_MAJOR_REQUIRED 1
 #define REOS3_VERSION_MINOR_REQUIRED 3
-#define REOS3_VERSION_PATCH_REQUIRED 0
+#define REOS3_VERSION_PATCH_REQUIRED 1
 #if (REOS3_VERSION_MAJOR * 10000 + REOS3_VERSION_MINOR * 100 + REOS3_VERSION_PATCH) < \
     (REOS3_VERSION_MAJOR_REQUIRED * 10000 + REOS3_VERSION_MINOR_REQUIRED * 100 + REOS3_VERSION_PATCH_REQUIRED)
 #error "EOSlib: the REOS3 library (reos3.h) is older than the version EOSlib requires (REOS3_VERSION_*_REQUIRED)"
@@ -251,7 +262,7 @@
     #include <scvheos.h>
 #define SCVHEOS_VERSION_MAJOR_REQUIRED 1
 #define SCVHEOS_VERSION_MINOR_REQUIRED 3
-#define SCVHEOS_VERSION_PATCH_REQUIRED 0
+#define SCVHEOS_VERSION_PATCH_REQUIRED 1
 #if (SCVHEOS_VERSION_MAJOR * 10000 + SCVHEOS_VERSION_MINOR * 100 + SCVHEOS_VERSION_PATCH) < \
     (SCVHEOS_VERSION_MAJOR_REQUIRED * 10000 + SCVHEOS_VERSION_MINOR_REQUIRED * 100 + SCVHEOS_VERSION_PATCH_REQUIRED)
 #error "EOSlib: the SCvH library (scvheos.h) is older than the version EOSlib requires (SCVHEOS_VERSION_*_REQUIRED)"
@@ -267,9 +278,9 @@
 #error "EOSlib: the ideal gas library (igeos.h) is older than the version EOSlib requires (IGEOS_VERSION_*_REQUIRED)"
 #endif
 
-#define EOS_VERSION_TEXT    "1.2.0"
+#define EOS_VERSION_TEXT    "1.3.0"
 #define EOS_VERSION_MAJOR   1
-#define EOS_VERSION_MINOR   2
+#define EOS_VERSION_MINOR   3
 #define EOS_VERSION_PATCH   0
 
 /*
@@ -279,9 +290,9 @@
  * here is that threshold in the pkdgrav3/ballic units dKpcUnit = 2.06701e-13 (Earth radius),
  * dMsolUnit = 4.80438e-08 (9.56e25 g, not the Earth mass): energy unit 9.998e9 erg/g, density
  * unit 0.3685 g/cc, pressure unit 3.684e9 dyn/cm^2, so 1e-3 = 3.684e6 dyn/cm^2 = 0.37 MPa and
- * runs in these units behave as before. In other unit systems the old code-unit threshold meant
- * a different pressure (1e-4 Pa in cgs, 1.44 GPa in true Earth units R_E, M_E); all of them use
- * 0.37 MPa now.
+ * runs in these units behave as before 1.2.0. In other unit systems the old code-unit threshold
+ * meant a different pressure (1e-4 Pa in cgs, 1.44 GPa in true Earth units R_E, M_E); all of them
+ * use 0.37 MPa now. EOSlib 1.2.0 used 1.44 GPa (see the version history).
  */
 #define WOOLFSON_MIN_PRESSURE_CGS 3.684121632893488e6
 
