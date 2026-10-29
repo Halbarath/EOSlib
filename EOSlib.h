@@ -141,7 +141,8 @@
  *            within the edge tolerance of the first row. For Tillotson it is
  *            tillIsBelowColdCurve, u < u_cold - tillUTol(u), the tolerance of tillIsInTable,
  *            tillTempRhoU and EOSIsUsable (u < u_cold said "below" within roundoff of the cold
- *            curve). For the ideal gas u < 0.
+ *            curve), with one cold-curve lookup per call (it did two, EOSUCold and the one inside
+ *            tillIsBelowColdCurve). For the ideal gas u < 0.
  *          - EOSIsInTable reports non-finite input by the side it lies on, the same for every
  *            library: rho <= 0 and NaN EOS_OUTSIDE_RHOMIN, rho = +inf EOS_OUTSIDE_RHOMAX, u = NaN
  *            and -inf EOS_OUTSIDE_VMIN, u = +inf EOS_OUTSIDE_VMAX. EOSIsUsable is EOS_FALSE for all
@@ -176,6 +177,9 @@
  *            longer converged).
  *          - The last bisection lookup is not repeated at the end (one evaluation of material 2
  *            per call less, bit-identical).
+ *          - Each evaluation of material 2 skips EOSIsUsable for ANEOS and Tillotson, where a u
+ *            from a successful u(rho, T) is always usable (testANEOSmaterial and testtillotson
+ *            check it): for ANEOS one of the two u-column inversions per step, bit-identical.
  *
  *          EOSIsentropic:
  *          - For ANEOS and SCvH the clamp to the table edge the isentrope leaves through is

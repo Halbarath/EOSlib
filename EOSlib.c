@@ -1061,8 +1061,26 @@ double EOSRhoofUT(EOSMATERIAL *material, double u, double T)
  */
 int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u)
 {
+    double ucold;
+
+#ifdef HAVE_TILLOTSON_H
+    /*
+     * Tillotson with a finite u: tillIsBelowColdCurve evaluates u_cold itself and counts an invalid
+     * rho there, so the EOSUCold below would be a second identical cold-curve lookup. A non-finite u
+     * takes the common path, so that it is reported as for the other EOS (an invalid rho counted
+     * once, a non-finite u not counted; tillIsBelowColdCurve would count it).
+     */
+    if (material->matType == EOSTILLOTSON && isfinite(u)) {
+        int iret = tillIsBelowColdCurve(material->tillmaterial, rho, u);
+        if (iret == 1) return EOS_TRUE;
+        if (iret == 0) return EOS_FALSE;
+        EOS_WARN("EOSisbelowColdCurve: cold curve not available (rho= %g u= %g, material %d).\n", rho, u, material->iMat);
+        return EOS_FAIL;
+    }
+#endif
+
     /* u_cold first, also for the tabulated EOS: rho outside the table is counted there (EOSIsInTable is a status query and counts nothing). */
-    double ucold = EOSUCold(material, rho);
+    ucold = EOSUCold(material, rho);
 
     if (EOSFailed(ucold) || !isfinite(u)) {
         EOS_WARN("EOSisbelowColdCurve: cold curve not available (rho= %g u= %g u_cold= %g, material %d).\n", rho, u, ucold, material->iMat);
@@ -1077,12 +1095,7 @@ int EOSisbelowColdCurve(EOSMATERIAL *material, double rho, double u)
         EOS_WARN("EOSisbelowColdCurve: table status %d at rho= %g u= %g (material %d).\n", st, rho, u, material->iMat);
         return EOS_FAIL;
     }
-#ifdef HAVE_TILLOTSON_H
-    if (material->matType == EOSTILLOTSON) {
-        /* rho and u are valid here (u_cold succeeded, u finite), so this is 1 or 0, never TILL_FAIL. */
-        return (tillIsBelowColdCurve(material->tillmaterial, rho, u) == 1) ? EOS_TRUE : EOS_FALSE;
-    }
-#endif
+    /* Tillotson is answered above (a non-finite u has returned EOS_FAIL). The ideal gas: u < 0. */
     return (u < ucold) ? EOS_TRUE : EOS_FALSE;
 }
 
@@ -1506,6 +1519,21 @@ double EOSUCold(EOSMATERIAL *material, double rho)
 /*
  * Evaluate u(rho,T) and P(rho,u) for a material and check that the state is
  * valid (inside the EOS table, finite). Returns EOS_SUCCESS or EOS_FAIL.
+ *
+ * u comes from a successful u(rho, T), i.e. it lies on the u(T) line of the table at rho. Whether
+ * EOSIsUsable can still reject it depends on the library:
+ *   - ANEOS: no. The tolerant inversion finds every value the line attains (ANEOSIsInTable is
+ *     ANEOS_SUCCESS, testANEOSmaterial checks it on every sampled (rho, T), also on columns with
+ *     du/dT < 0 and at the edges), so the status query, a second full inversion of the u column
+ *     next to the one in P(rho, u), is skipped. This is the expensive case, called 35-200 times per
+ *     EOSSolveBC.
+ *   - Tillotson: no. u = u_cold(rho) + cv T with T >= 0, and tillURhoTemp fails wherever u_cold
+ *     does (rho > rho_max); below rho_min EOSIsUsable accepts u >= 0. Skipped as well
+ *     (testtillotson checks the status of u(rho, T)).
+ *   - SCvH and REOS3: yes. The strict inversion rejects a u that a non-monotonic column attains
+ *     only outside its end nodes, so the check stays.
+ *   - Ideal gas: kept; it is a comparison, no lookup.
+ * Skipping a check that cannot fail changes no result.
  */
 static int EOSSolveBCEval(EOSMATERIAL *material, double rho, double T,
                           double *pu, double *pP)
@@ -1517,7 +1545,8 @@ static int EOSSolveBCEval(EOSMATERIAL *material, double rho, double T,
     u = EOSUofRhoT(material, rho, T);
     if (EOSFailed(u) || !isfinite(u)) return EOS_FAIL;
 
-    if (!EOSIsUsable(material, rho, u)) return EOS_FAIL;
+    if (material->matType != EOSANEOS && material->matType != EOSTILLOTSON && !EOSIsUsable(material, rho, u))
+        return EOS_FAIL;
 
     /* EOSFailed, not only isfinite: the sentinel -1e50 is finite (NaN is caught by both). */
     P = EOSPofRhoU(material, rho, u);
