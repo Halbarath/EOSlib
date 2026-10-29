@@ -827,7 +827,7 @@ static double EOSYieldStrengthCore(EOSMATERIAL *material, int yieldStrengthModel
  * instead, T = T_max and P = P(rho, T_max), the convention of the isentropes for a state above the
  * table; the thermal softening then gives 0 wherever T_melt(rho) <= T_max.
  *
- * The fallback T is exactly TAxis[0], so only T == T_min needs the status test (ANEOSIsInTable,
+ * The fallback T is exactly ANEOSTmin, so only T == T_min needs the status test (ANEOSIsInTable,
  * one inversion of the u column; it agrees exactly with the lookup, also on the M-ANEOS columns
  * whose cold rows have du/dT < 0). A state in the table at T_min, or below the cold curve (cold
  * material, full strength), is left alone. Not counted again: the lookup that produced T counted
@@ -838,8 +838,8 @@ static void EOSYieldClampAboveTable(EOSMATERIAL *material, double rho, double u,
 #ifdef HAVE_ANEOSMATERIAL_H
     if (material->matType == EOSANEOS) {
         ANEOSMATERIAL *m = material->ANEOSmaterial;
-        if (*pT == m->TAxis[0] && !EOSFailed(*pP) && ANEOSIsInTable(m, rho, u) == ANEOS_OUTSIDE_TMAX) {
-            *pT = m->TAxis[m->nT - 1];
+        if (*pT == ANEOSTmin(m) && !EOSFailed(*pP) && ANEOSIsInTable(m, rho, u) == ANEOS_OUTSIDE_TMAX) {
+            *pT = ANEOSTmax(m);
             *pP = ANEOSPofRhoT(m, rho, *pT);
         }
     }

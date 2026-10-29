@@ -123,7 +123,8 @@
  *          Table status and cold curve:
  *          - EOSlib no longer reads table internals of the sublibraries: EOSIsInTable uses
  *            ANEOSIsInTable, EOSUCold uses ANEOSUCold/reos3UCold/scvheosUCold/igeosUCold, the
- *            init uses ANEOSTmin. ANEOSmaterial, scvheos and reos3 vendor interpBilinear 1.0.3;
+ *            init uses ANEOSTmin and the yield clamp above the table ANEOSTmin/ANEOSTmax.
+ *            ANEOSmaterial, scvheos and reos3 vendor interpBilinear 1.0.3;
  *            their headers check at compile time that the copy in effect in this translation
  *            unit has their type layout (INTERP_ABI_VERSION), so EOSlib and the libraries cannot
  *            disagree on the embedded INTERPGRID.
