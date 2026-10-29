@@ -32,9 +32,9 @@
  * and policy, interface solver between iron and granite) run only if
  * HAVE_TILLOTSON_H is defined and need no table files. With HAVE_SCVHEOS_H / HAVE_REOS3_H and a
  * non-zero iMatSCVH / iMatREOS3 the SCvH and REOS3 paths are tested too
- * (0 skips them), including the boundary condition solver for a gas envelope
- * on the denser ANEOS material; the gas tables must be in the working
- * directory. Exit status is the number of failed checks.
+ * (0 skips them), also without HAVE_ANEOSMATERIAL_H, and with it the boundary
+ * condition solver for a gas envelope on the denser ANEOS material; the gas
+ * tables must be in the working directory. Exit status is the number of failed checks.
  *
  * The failure contract of the wrapper (EOS_FAIL_VALUE, the T_min fallback of
  * EOSTofRhoU, EOSSolveBC/EOSWoolfsonCoeff return codes) is tested per
@@ -1092,7 +1092,8 @@ static void testREOS3Dispatch(EOSMATERIAL *e)
     TEST("REOS3 dispatch matches reos3 directly");
     REOS3MAT *r = e->reos3material;
     CHECK(e->matType == EOSREOS3, "matType");
-    CHECK(!e->bEntropy && !e->bEntropyTableInit, "REOS3 has no entropy");
+    /* No entropy, but the isentrope table (built by initQuiet with EOSinitIsentropicLookup). */
+    CHECK(!e->bEntropy && e->bEntropyTableInit && r->dIsenLogUArray != NULL, "REOS3: no entropy, isentrope table built");
     CHECK_REL(e->rho0, r->rho0, 0.0, "rho0");
     CHECK(e->rho0forInterfaceCorrection == 0.0, "gas has no interface-correction cutoff");
     CHECK(strlen(e->MatString) > 0, "MatString empty");
@@ -1101,9 +1102,12 @@ static void testREOS3Dispatch(EOSMATERIAL *e)
     CHECK(EOSGammaofRhoT(e, reos3SampleRho(r, 1), reos3SampleT(r, 1)) == 0.0, "shear modulus for gas");
     CHECK(EOSSofRhoU(e, reos3SampleRho(r, 1), 1.0) == EOS_FAIL_VALUE, "entropy sentinel (rho,u)");
     CHECK(EOSSofRhoT(e, reos3SampleRho(r, 1), reos3SampleT(r, 1)) == EOS_FAIL_VALUE, "entropy sentinel (rho,T)");
-    /* EOSinitIsentropicLookup has nothing to build for REOS3 (a note under EOSLIB_VERBOSE only). */
-    EOSinitIsentropicLookup(e, NULL);
-    CHECK(!e->bEntropyTableInit, "isentropic lookup must stay uninitialised");
+    /* A second EOSinitIsentropicLookup does nothing. */
+    {
+        const double *z = r->dIsenLogUArray;
+        EOSinitIsentropicLookup(e, NULL);
+        CHECK(e->bEntropyTableInit && r->dIsenLogUArray == z, "second EOSinitIsentropicLookup rebuilt the REOS3 isentrope table");
+    }
 
     int nSkipped = 0;
     for (int a = 0; a < NSAMPLE_REOS3; a++) for (int b = 0; b < NSAMPLE_REOS3; b++) {
@@ -1137,6 +1141,13 @@ static void testREOS3Dispatch(EOSMATERIAL *e)
         CHECK(EOSisbelowColdCurve(e, rho, u) == 0, "above cold curve (u at T=%g)", T);
         CHECK(EOSIsInTable(e, rho, u) == EOS_SUCCESS, "in table at rho=%g T=%g", rho, T);
         CHECK(EOSIsUsable(e, rho, u) == EOS_TRUE, "usable at rho=%g T=%g", rho, T);
+        /* Isentropes: identity, and dispatch (a compressed isentrope may leave through the top row, counted in both). */
+        CHECK_REL(EOSIsentropic(e, rho, u, rho), u, 1e-12, "isentrope to the same rho at rho=%g T=%g", rho, T);
+        if (b % 5 == 0) {
+            const long nf = r->nLookupFail;
+            CHECK(EOSIsentropic(e, rho, u, 1.5 * rho) == reos3IsentropicU(r, rho, u, 1.5 * rho), "EOSIsentropic dispatch at rho=%g T=%g", rho, T);
+            r->nLookupFail = nf;
+        }
     }
     /* rho(P, T) dispatch and round trip, where the row is monotonic (the
      * library may return another root otherwise, a table defect). */
@@ -1232,6 +1243,44 @@ static void testREOS3TableStatus(EOSMATERIAL *e)
             CHECK(0, "in-table state rejected at rho=%g u=%g", rho, u);
         }
     }
+    END_TEST();
+}
+
+/*
+ * EOSIsentropic for REOS3 needs the isentrope table of EOSinitIsentropicLookup (as for Tillotson):
+ * EOSinitMaterial does not build it, bEntropyTableInit is EOS_FALSE, and EOSIsentropic is fatal
+ * until EOSinitIsentropicLookup (it was fatal for REOS3 in any case before EOSlib 1.4.0).
+ */
+static int reos3IsentropicFatal(EOSMATERIAL *e, double rho1, double u1, double rho2)
+{
+    fflush(NULL);
+    pid_t pid = fork();
+    if (pid == 0) {
+        if (freopen("/dev/null", "w", stderr) == NULL) _exit(3);   /* the expected diagnostic */
+        (void) EOSIsentropic(e, rho1, u1, rho2);
+        _exit(0);
+    }
+    int status = 0;
+    if (pid < 0 || waitpid(pid, &status, 0) != pid) return -1;
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) return 0;
+    if ((WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT) || (WIFEXITED(status) && WEXITSTATUS(status) == 1)) return 1;
+    return -1;
+}
+
+static void testREOS3IsentropeNotBuilt(int iMat, double dKpcUnit, double dMsolUnit)
+{
+    int failsBefore = nFails;
+    TEST("REOS3: EOSIsentropic needs the isentrope table");
+    EOSMATERIAL *e = EOSinitMaterial(iMat, dKpcUnit, dMsolUnit, NULL);
+    REOS3MAT *r = e->reos3material;
+    const double rho = reos3SampleRho(r, NSAMPLE_REOS3 / 2), u = EOSUofRhoT(e, rho, reos3SampleT(r, NSAMPLE_REOS3 / 2));
+    CHECK(e->bEntropyTableInit == EOS_FALSE && r->dIsenLogUArray == NULL, "isentrope table built by EOSinitMaterial");
+    CHECK(reos3IsentropicFatal(e, rho, u, 2.0 * rho) == 1, "EOSIsentropic without EOSinitIsentropicLookup must be fatal");
+    EOSinitIsentropicLookup(e, NULL);
+    CHECK(e->bEntropyTableInit == EOS_TRUE && e->bEntropy == EOS_FALSE, "flags after EOSinitIsentropicLookup");
+    CHECK(reos3IsentropicFatal(e, rho, u, 2.0 * rho) == 0, "EOSIsentropic with the table must return");
+    CHECK(EOSSofRhoU(e, rho, u) == EOS_FAIL_VALUE, "REOS3 still has no entropy");
+    EOSfinalizeMaterial(e);
     END_TEST();
 }
 
@@ -1368,7 +1417,7 @@ static void testFailureContract(EOSMATERIAL *e, double rhoOk, double uOk, double
             ONCEK(EOSdUdRho(e, r, uu), "du/drho");
 #undef ONCEK
         }
-        if (e->matType != EOSREOS3) {   /* EOSIsentropic is not implemented for REOS3 */
+        {
             ONCE(EOSIsentropic(e, rhoHi, uOk, rhoOk), "isentrope, rho1 above the table");
             ONCE(EOSIsentropic(e, rhoOk, uOk, rhoHi), "isentrope, rho2 above the table");
             ONCE(EOSIsentropic(e, rhoHi, uOk, rhoHi), "isentrope, rho1 and rho2 above the table");
@@ -2437,7 +2486,11 @@ int main(int argc, char *argv[])
     /* Convention: the denser material is the inner one. */
     if (A->rho0 >= B->rho0) { testSolveBC(A, B); testWoolfson(B, A); }
     else                    { testSolveBC(B, A); testWoolfson(A, B); }
+#else
+    printf("  (ANEOS tests skipped: HAVE_ANEOSMATERIAL_H not defined)\n");
+#endif
 
+    /* The gases run without ANEOS too; only the interface with an ANEOS core needs it. */
 #ifdef HAVE_SCVHEOS_H
     if (iMatSCVH > 0) {
         EOSMATERIAL *S = initQuiet(iMatSCVH, dKpcUnit, dMsolUnit, NULL, 1);
@@ -2457,13 +2510,16 @@ int main(int argc, char *argv[])
             checkPrintMatRho0(S);
             END_TEST();
         }
+#ifdef HAVE_ANEOSMATERIAL_H
         if (A->rho0 >= B->rho0) testSCVHSolveBC(A, S); else testSCVHSolveBC(B, S);
+#endif
         EOSfinalizeMaterial(S);
     }
 #endif
 
 #ifdef HAVE_REOS3_H
     if (iMatREOS3 > 0) {
+        testREOS3IsentropeNotBuilt(iMatREOS3, dKpcUnit, dMsolUnit);
         EOSMATERIAL *R = initQuiet(iMatREOS3, dKpcUnit, dMsolUnit, NULL, 1);
         printf("  R: %s\n", R->MatString);
         testREOS3Dispatch(R);
@@ -2482,15 +2538,16 @@ int main(int argc, char *argv[])
             checkPrintMatRho0(R);
             END_TEST();
         }
+#ifdef HAVE_ANEOSMATERIAL_H
         if (A->rho0 >= B->rho0) testREOS3SolveBC(A, R); else testREOS3SolveBC(B, R);
+#endif
         EOSfinalizeMaterial(R);
     }
 #endif
 
+#ifdef HAVE_ANEOSMATERIAL_H
     EOSfinalizeMaterial(A);
     EOSfinalizeMaterial(B);
-#else
-    printf("  (ANEOS tests skipped: HAVE_ANEOSMATERIAL_H not defined)\n");
 #endif
 
 #ifdef HAVE_TILLOTSON_H

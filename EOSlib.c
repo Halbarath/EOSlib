@@ -152,7 +152,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
          */
         material->rho0 = material->reos3material->rho0;
         material->rho0forInterfaceCorrection = 0.0; // Not read by EOSlib; EOSWoolfsonCoeff cuts at 0.8*rho0, see EOSlib.h
-        // So far we do not have entropy for REOS3.
+        // No entropy for REOS3; the isentrope table for EOSIsentropic is built by EOSinitIsentropicLookup.
         material->bEntropyTableInit = EOS_FALSE;
         // How do we define a minimum sound speed and reference density for H and He?
         material->minSoundSpeed = 0.0;
@@ -227,11 +227,12 @@ void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
             /*
-             * No entropy table: nothing to build, EOSIsentropic is fatal for REOS3 (documented) and
-             * bEntropyTableInit stays EOS_FALSE. Reported only under EOSLIB_VERBOSE: the message was
-             * printed unconditionally on every call, once per instance and thread.
+             * REOS3 has no entropy: the isentropes are integrated from the table's P(rho, u) into an
+             * isentrope table (~2 s, 16 MB for REOS3_H_HE), as for Tillotson. bEntropy stays EOS_FALSE
+             * (there is no entropy value, only the isentropes).
              */
-            EOS_WARN("EOSinitIsentropicLookup: REOS3 (material %d) has no entropy table, EOSIsentropic is not available.\n", material->iMat);
+            reos3InitIsentropicLookup(material->reos3material);
+            material->bEntropyTableInit = EOS_TRUE;
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H
@@ -577,7 +578,15 @@ double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2)
 #endif
 #ifdef HAVE_REOS3_H
         case EOSREOS3:
-            EOS_NOT_IMPLEMENTED(material);   /* REOS3 has no entropy table */
+            /* The isentrope table is built by EOSinitIsentropicLookup, as for Tillotson: without it a programming error. */
+            if (material->bEntropyTableInit != EOS_TRUE) {
+                fprintf(stderr, "EOSIsentropic: the isentrope table of material %d (%s) is not built. "
+                        "Call EOSinitIsentropicLookup after EOSinitMaterial for a REOS3 material.\n",
+                        material->iMat, material->MatString);
+                assert(0);
+                exit(1);
+            }
+            u2 = reos3IsentropicU(material->reos3material, rho1, u1, rho2);
             break;
 #endif
 #ifdef HAVE_SCVHEOS_H

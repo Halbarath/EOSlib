@@ -216,6 +216,18 @@
  *            Bit-identical.
  *          - EOSisbelowColdCurve for Tillotson does one cold-curve lookup per call (it did two,
  *            EOSUCold and the one inside tillIsBelowColdCurve). Same results and counts.
+ *   1.4.0  Compared with 1.3.0. Requires reos3 1.4.0 (reos3InitIsentropicLookup,
+ *          reos3IsentropicU); the other sublibraries as before.
+ *          - EOSIsentropic for REOS3 (it was fatal, "not implemented"): REOS3 has no entropy, so
+ *            reos3 integrates du/dlogrho = P(rho, u)/rho of its interpolant into an isentrope table,
+ *            as Tillotson does (see "Isentrope table" in reos3.h). EOSinitIsentropicLookup builds it
+ *            (~2 s, 16 MB for REOS3_H_HE) and sets bEntropyTableInit; EOSIsentropic without it is
+ *            fatal, as for Tillotson (callers that use EOSIsentropic with REOS3 must add the call).
+ *            The clamps are those of ANEOS and SCvH (below the cold curve: the isentrope through
+ *            (rho1, T_min); above the top row: through (rho1, T_max); leaving the table: its edge
+ *            at rho2; counted once). bEntropy stays EOS_FALSE (EOSSofRhoU/EOSSofRhoT unchanged).
+ *          - EOSinitIsentropicLookup no longer prints a note for REOS3.
+ *          - EOS_VERSION_PATCH was 1 for EOS_VERSION_TEXT "1.3.0"; both are 1.4.0 now.
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -251,8 +263,8 @@
 #ifdef HAVE_REOS3_H
     #include <reos3.h>
 #define REOS3_VERSION_MAJOR_REQUIRED 1
-#define REOS3_VERSION_MINOR_REQUIRED 3
-#define REOS3_VERSION_PATCH_REQUIRED 1
+#define REOS3_VERSION_MINOR_REQUIRED 4
+#define REOS3_VERSION_PATCH_REQUIRED 0
 #if (REOS3_VERSION_MAJOR * 10000 + REOS3_VERSION_MINOR * 100 + REOS3_VERSION_PATCH) < \
     (REOS3_VERSION_MAJOR_REQUIRED * 10000 + REOS3_VERSION_MINOR_REQUIRED * 100 + REOS3_VERSION_PATCH_REQUIRED)
 #error "EOSlib: the REOS3 library (reos3.h) is older than the version EOSlib requires (REOS3_VERSION_*_REQUIRED)"
@@ -278,10 +290,10 @@
 #error "EOSlib: the ideal gas library (igeos.h) is older than the version EOSlib requires (IGEOS_VERSION_*_REQUIRED)"
 #endif
 
-#define EOS_VERSION_TEXT    "1.3.0"
+#define EOS_VERSION_TEXT    "1.4.0"
 #define EOS_VERSION_MAJOR   1
-#define EOS_VERSION_MINOR   3
-#define EOS_VERSION_PATCH   1
+#define EOS_VERSION_MINOR   4
+#define EOS_VERSION_PATCH   0
 
 /*
  * EOSWoolfsonCoeff does no correction below this pressure (cgs, dyn/cm^2 = 0.1 Pa). It is a
@@ -404,8 +416,9 @@
  * Fatal (message on stderr, then assert(0); exit(1)): initialisation errors
  * (unknown material, missing or defective table, version mismatch) and
  * calling a function that is not implemented for the material (EOSRhoofUT
- * for all but ANEOS, EOSIsentropic for REOS3, EOSdPdRhoofRhoT/EOSdPdT for
- * Tillotson, EOSGammaofRhoT/EOSYieldStrength for Tillotson); those are
+ * for all but ANEOS, EOSdPdRhoofRhoT/EOSdPdT for Tillotson,
+ * EOSGammaofRhoT/EOSYieldStrength for Tillotson) or EOSIsentropic for
+ * Tillotson and REOS3 without EOSinitIsentropicLookup; those are
  * programming errors, not lookup failures. The assert(0) comes first on
  * purpose: in an MPI run a plain exit() on one rank can leave the others
  * waiting in a collective and the job hangs, while SIGABRT makes the
@@ -481,11 +494,12 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
 /*
  * Builds what EOSIsentropic needs beyond EOSinitMaterial: for Tillotson the full isentrope table
  * (46 MB, ~0.6 s per material instance; EOSinitMaterial builds only its cold curve and top
- * isentrope). Call it once per material instance that uses EOSIsentropic; a second call does
+ * isentrope), for REOS3 its isentrope table (reos3InitIsentropicLookup, ~16 MB and ~2 s for
+ * REOS3_H_HE: REOS3 has no entropy, the isentropes are integrated from P(rho, u) as for
+ * Tillotson). Call it once per material instance that uses EOSIsentropic; a second call does
  * nothing. The ideal gas, ANEOS and SCvH need nothing (bEntropyTableInit is EOS_TRUE from
- * EOSinitMaterial). REOS3 has no entropy table: nothing is built, bEntropyTableInit stays
- * EOS_FALSE and EOSIsentropic is fatal for it (a note only with -DEOSLIB_VERBOSE). Sets
- * bEntropyTableInit for Tillotson.
+ * EOSinitMaterial). Sets bEntropyTableInit for Tillotson and REOS3; bEntropy stays EOS_FALSE for
+ * both (no entropy values, EOSSofRhoU/EOSSofRhoT give EOS_FAIL_VALUE).
  */
 void EOSinitIsentropicLookup(EOSMATERIAL *material, const void * additional_data);
 void EOSfinalizeMaterial(EOSMATERIAL *material);
@@ -511,8 +525,11 @@ double EOSPCTofRhoU(EOSMATERIAL *material, double rho, double u, double *c, doub
  * EOS_FAIL_VALUE only for an invalid input or rho1 or rho2 outside a
  * tabulated EOS (no entropy at rho1, no s(T) line at rho2). Tillotson has an analytic P and integrates the ODE directly
  * where (rho1, u1) or rho2 is outside its table (counted as a fallback); it
- * needs EOSinitIsentropicLookup first (fatal without). Not implemented (fatal)
- * for REOS3.
+ * needs EOSinitIsentropicLookup first (fatal without). REOS3 has no entropy:
+ * its isentropes are those of du/dlogrho = P(rho, u)/rho, integrated into a
+ * table by EOSinitIsentropicLookup (fatal without), with the same clamps as
+ * ANEOS and SCvH; rho1 or rho2 outside the lookup limits (the table and its
+ * ideal-gas extrapolation) gives EOS_FAIL_VALUE.
  */
 double EOSIsentropic(EOSMATERIAL *material, double rho1, double u1, double rho2);
 
