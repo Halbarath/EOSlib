@@ -53,9 +53,16 @@
  *            (46 MB, ~0.6 s) is built by EOSinitIsentropicLookup, and EOSIsentropic is fatal
  *            without it (callers that use EOSIsentropic must add the call; bEntropyTableInit is
  *            EOS_FALSE until then). The table is the library's standard table (TILL_TABLE_*:
- *            1e-4..100 rho0, 1 K..1e7 K at rho0, 1200 x 1200), the same physical table in every
- *            unit system (it was 1e-4..200 rho0 and v_max = 1200 in code units, built twice in
- *            EOSinitMaterial for every instance). Everything else is bit-identical.
+ *            rho from 1e-4 rho0 to 100.58 rho0, the first node at or above 100 rho0 so that rho0
+ *            is a node; 1 K..1e7 K at rho0; 1200 x 1200), the same physical table for every
+ *            material and unit system. Before 1.2.0 the table was fixed in code units, rho in
+ *            1e-4..200 and v = u(rho0) up to 1200, and was built twice in EOSinitMaterial for every
+ *            instance. Its physical range therefore depended on the material and the unit system:
+ *            with dKpcUnit = 2.06701e-13, dMsolUnit = 4.80438e-08 (code density 0.3685 g/cc) it
+ *            covered 1.4e-5..27 rho0 for granite and 4.7e-6..9.4 rho0 for iron, up to 1.5e6 K at
+ *            rho0 for granite; in cgs 3.7e-5..74 rho0 for granite but only up to 1.5e-4 K. Results
+ *            of states inside both tables differ by the interpolation error of the two grids. The
+ *            material with the cold curve only gives bit-identical results to the full table.
  *          - EOS_N_MATERIAL_MAX is the size of an array indexed by iMat, MAT_SCVHEOS_MAX + 1 = 131
  *            (it was 130, the largest id: such an array overflowed by one), like
  *            TILL_N_MATERIAL_MAX. Loops over ids must use iMat < EOS_N_MATERIAL_MAX.
