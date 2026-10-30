@@ -1591,7 +1591,10 @@ static void testTillotsonDispatch(EOSMATERIAL *e)
     CHECK_REL(e->rho0forInterfaceCorrection, m->rho0, 0.0, "interface-correction cutoff");
     CHECK_REL(e->minSoundSpeed, sqrt(m->A / m->rho0), 1e-15, "minSoundSpeed");
     CHECK(strlen(e->MatString) > 0, "MatString empty");
-    CHECK(EOSYieldModel(e) == -2, "yield model %d (no strength for Tillotson)", EOSYieldModel(e));
+    /* -1 without the strength files (it was -2, no strength model, before EOSlib 1.5.0); testTillotsonStrength writes them. */
+    CHECK(EOSYieldModel(e) == m->yieldStrengthModel, "yield model %d vs %d", EOSYieldModel(e), m->yieldStrengthModel);
+    if (EOSYieldModel(e) <= 0) CHECK(EOSYieldStrength(e, m->rho0, 1.0) == 0.0, "no strength model but Y != 0");
+    CHECK(EOSGammaofRhoT(e, m->rho0, 300.0) > 0.0, "shear modulus of Tillotson (it was fatal)");
     CHECK(EOSSofRhoU(e, m->rho0, 1.0) == EOS_FAIL_VALUE, "entropy sentinel (rho,u)");
     CHECK(EOSSofRhoT(e, m->rho0, 300.0) == EOS_FAIL_VALUE, "entropy sentinel (rho,T)");
     long nf0 = m->nLookupFail;
@@ -2252,6 +2255,153 @@ static void testTillotsonColdCurveOnly(int iMat, double dKpcUnit, double dMsolUn
     END_TEST();
 }
 
+/*
+ * Tillotson strength (EOSlib 1.5.0, tillotson 4.1.0). EOSinitMaterial reads
+ * tillotson_<name>.in_strength and tillotson_<name>.in_tmelt from the working directory; the test
+ * writes them for granite (intact, model 1, fixed Gamma) and iron (damaged, model 2, Gamma from the
+ * bulk modulus) in a temporary directory. Checked: the model and the parameters, Y(rho, u) =
+ * Y(rho, T, P) of the lookup in the table, the tension clamp, Y(P = 0) = Y0 f(T) (intact) and 0
+ * (damaged), no strength above the melt curve, T = 0 on the cold curve (f = 1, or 0 where
+ * T_melt = 0), a state below the cold curve with the strength of the cold curve, the failures
+ * (rho above the table, non-finite u, invalid rho) counted once, and the shear modulus.
+ */
+static void tillWriteText(const char *path, const char *text)
+{
+    FILE *fp = fopen(path, "w");
+    if (fp == NULL) { perror(path); exit(1); }
+    fputs(text, fp);
+    fclose(fp);
+}
+
+static void tillWriteMelt(const char *path, int n, const double *rho, const double *T)
+{
+    FILE *fp = fopen(path, "wb");
+    if (fp == NULL) { perror(path); exit(1); }
+    fwrite(&n, sizeof(int), 1, fp);
+    fwrite(rho, sizeof(double), (size_t) n, fp);
+    fwrite(T, sizeof(double), (size_t) n, fp);
+    fclose(fp);
+}
+
+static void testTillotsonStrength(double dKpcUnit, double dMsolUnit)
+{
+    int failsBefore = nFails;
+    TEST("Tillotson strength (EOSYieldStrength)");
+    char cwd[4096], dir[] = "testEOSmaterial_XXXXXX";
+    if (getcwd(cwd, sizeof(cwd)) == NULL || mkdtemp(dir) == NULL || chdir(dir) != 0) { CHECK(0, "temporary directory"); END_TEST(); return; }
+
+    /* T_melt = 0 below 0.1 rho0 of granite (no condensed phase there). */
+    const double rhoG[4] = { 0.27, 2.7, 10.0, 30.0 }, TG[4] = { 0.0, 1500.0, 3000.0, 6000.0 };
+    const double rhoI[4] = { 1.0, 7.86, 20.0, 80.0 }, TI[4] = { 500.0, 1800.0, 4000.0, 10000.0 };
+    tillWriteText("tillotson_granite.in_strength", "yieldStrengthModel = 1\nY0 = 1e8\nYM = 3.5e10\nmui = 1.5\nxi = 1.2\nGamma = 3e11\n");
+    tillWriteMelt("tillotson_granite.in_tmelt", 4, rhoG, TG);
+    tillWriteText("tillotson_iron.in_strength", "yieldStrengthModel = 2\nY0 = 1e8\nYM = 2.5e10\nmui = 2\nmud = 0.6\nxi = 1.2\nGamma = -1\n");
+    tillWriteMelt("tillotson_iron.in_tmelt", 4, rhoI, TI);
+
+    EOSMATERIAL *mats[2];
+    mats[0] = EOSinitMaterial(GRANITE, dKpcUnit, dMsolUnit, NULL);
+    mats[1] = EOSinitMaterial(IRON, dKpcUnit, dMsolUnit, NULL);
+    remove("tillotson_granite.in_strength"); remove("tillotson_granite.in_tmelt");
+    remove("tillotson_iron.in_strength"); remove("tillotson_iron.in_tmelt");
+    if (chdir(cwd) != 0) CHECK(0, "chdir back");
+    rmdir(dir);
+
+    for (int q = 0; q < 2; q++) {
+        EOSMATERIAL *e = mats[q];
+        TILLMATERIAL *m = e->tillmaterial;
+        const int model = EOSYieldModel(e);
+        const double dPUnit = e->dErgPerGmUnit*e->dGmPerCcUnit;
+        double Y0, YM, mui, mud, xi;
+        const long nf0 = m->nLookupFail;
+        int nTested = 0, nMelted = 0;
+
+        CHECK(model == q + 1, "%s: yield model %d", e->MatString, model);
+        CHECK(tillYieldParameters(m, &Y0, &YM, &mui, &mud, &xi) == model, "model dispatch");
+        CHECK_REL(Y0*dPUnit, 1e8, 1e-14, "Y0");
+
+        for (int a = 0; a < 60; a++) for (int b = 0; b < 60; b++) {
+            const double rho = m->rho0*pow(10.0, -0.3 + 0.8*a/59.0), T = 10.0*pow(10.0, 3.0*b/59.0);
+            const double u = EOSUofRhoT(e, rho, T), Tm = tillTmeltofRho(m, rho);
+            double c, Tf, P = EOSPCTofRhoU(e, rho, u, &c, &Tf);
+            double Y = EOSYieldStrength(e, rho, u), Ytp = EOSYieldStrengthofRhoTP(e, rho, Tf, P);
+            CHECK(Y >= 0.0 && isfinite(Y), "Y = %g at rho=%g T=%g", Y, rho, T);
+            CHECK(Y == Ytp, "Y(rho, u) = Y(rho, T, P) at rho=%g T=%g: %g vs %g", rho, T, Y, Ytp);
+            /* Tension: the strength at P < 0 is that at P = 0. */
+            const double Yzero = EOSYieldStrengthofRhoTP(e, rho, T, 0.0);
+            CHECK(EOSYieldStrengthofRhoTP(e, rho, T, -10.0*fabs(P) - 1.0) == Yzero, "tension clamp at rho=%g T=%g", rho, T);
+            const double f = fmax(tanh(xi*(Tm/T - 1.0)), 0.0), ff = fmax(tanh(xi*(Tm/Tf - 1.0)), 0.0);
+            if (model == 1) {
+                CHECK_REL(Yzero, Y0*f, 1e-13, "Y(P = 0) = Y0 f(T) at rho=%g T=%g", rho, T);
+                CHECK_REL(Y, (Y0 + mui*fmax(P, 0.0)/(1.0 + mui*fmax(P, 0.0)/(YM - Y0)))*ff, 1e-13, "intact Y at rho=%g T=%g", rho, T);
+            } else {
+                const double Pe = fmax(P, 0.0), Yi = Y0 + mui*Pe/(1.0 + mui*Pe/(YM - Y0));
+                CHECK(Yzero == 0.0, "damaged Y(P = 0) = %g", Yzero);
+                CHECK_REL(Y + 1e-300, fmin(Yi, mud*Pe)*ff + 1e-300, 1e-13, "damaged Y at rho=%g T=%g", rho, T);
+            }
+            CHECK(EOSYieldStrengthofRhoTP(e, rho, T, 2.0*fabs(P) + 1.0) >= EOSYieldStrengthofRhoTP(e, rho, T, fabs(P)), "Y increases with P");
+            if (Tf >= Tm) { CHECK(Y == 0.0, "Y above the melt curve = %g at rho=%g T=%g", Y, rho, T); nMelted++; }
+            nTested++;
+        }
+        CHECK(nTested > 0 && nMelted > 0, "states tested %d, above the melt curve %d", nTested, nMelted);
+        CHECK(m->nLookupFail == nf0, "in-table strength lookups counted %ld", m->nLookupFail - nf0);
+
+        for (int a = 0; a < 40; a++) {
+            const double rho = m->rho0*pow(10.0, -0.3 + 0.8*a/39.0);
+            const double ucold = EOSUCold(e, rho), Tm = tillTmeltofRho(m, rho);
+            /* On the cold curve T = 0 is valid: f(0) = 1 (T_melt > 0), the strength of P(rho, u_cold). */
+            const double Ycold = EOSYieldStrength(e, rho, ucold);
+            const double Pcold = EOSPofRhoU(e, rho, ucold);
+            CHECK(m->nLookupFail == nf0, "cold-curve strength counted at rho=%g", rho);
+            CHECK(Ycold == EOSYieldStrengthofRhoTP(e, rho, 0.0, Pcold), "cold curve: Y(rho, u_cold) = Y(rho, 0, P) at rho=%g", rho);
+            if (Tm > 0.0 && model == 1) CHECK(Ycold >= Y0*(1.0 - 1e-14), "cold curve: full strength at rho=%g: %g", rho, Ycold);
+            /* Below the cold curve (u < u_cold): the strength of the cold curve, the T fallback counted once. */
+            const double ub = ucold - fabs(ucold) - 1e-3*m->u0;
+            CHECK(EOSPofRhoU(e, rho, ub) != Pcold || rho < m->rho0, "below the cold curve P(rho, u) differs at rho=%g", rho);
+            long n = m->nLookupFail;
+            const double Yb = EOSYieldStrength(e, rho, ub);
+            CHECK(m->nLookupFail == n + 1, "below the cold curve counted %ld times", m->nLookupFail - n);
+            CHECK(Yb == Ycold, "below the cold curve: Y = %g, cold curve %g at rho=%g", Yb, Ycold, rho);
+            m->nLookupFail = nf0;
+        }
+
+        /* No temperature: rho above the table, a non-finite u, an invalid rho. Each counted once. */
+        {
+            const double u = EOSUofRhoT(e, 2.0*m->rho0, 300.0);
+            const double cases[6][2] = { {2.0*m->rhomax, u}, {2.0*m->rho0, NAN}, {2.0*m->rho0, INFINITY}, {2.0*m->rho0, -INFINITY},
+                                         {0.0, u}, {NAN, u} };
+            for (int k = 0; k < 6; k++) {
+                long n = m->nLookupFail;
+                double Y = EOSYieldStrength(e, cases[k][0], cases[k][1]);
+                CHECK(Y == EOS_FAIL_VALUE, "Y(rho= %g, u= %g) = %g", cases[k][0], cases[k][1], Y);
+                CHECK(m->nLookupFail == n + 1, "Y(rho= %g, u= %g) counted %ld times", cases[k][0], cases[k][1], m->nLookupFail - n);
+            }
+            CHECK(EOSYieldStrengthofRhoTP(e, 2.0*m->rho0, 300.0, INFINITY) == EOS_FAIL_VALUE, "Y(rho, T, P = inf)");
+            CHECK(EOSYieldStrengthofRhoTP(e, 2.0*m->rho0, -1.0, 1.0) == EOS_FAIL_VALUE, "Y(rho, T < 0, P)");
+            m->nLookupFail = nf0;
+        }
+
+        /* Shear modulus. */
+        for (int a = 0; a < 20; a++) {
+            const double rho = m->rho0*pow(10.0, -0.3 + 0.04*a), T = 10.0*pow(10.0, 0.15*a);
+            double G = EOSGammaofRhoT(e, rho, T);
+            if (q == 0) CHECK_REL(G*dPUnit, 3e11, 1e-14, "fixed Gamma");
+            else CHECK_REL(G, 0.6*rho*EOSCofRhoU(e, rho, EOSUofRhoT(e, rho, T))*EOSCofRhoU(e, rho, EOSUofRhoT(e, rho, T)), 1e-14, "Gamma = 0.6 rho c^2");
+        }
+        checkPrintMatRho0(e);
+    }
+
+    /* Granite below 0.1 rho0: T_melt = 0, no condensed phase, so no strength even on the cold curve (T = 0). */
+    {
+        TILLMATERIAL *m = mats[0]->tillmaterial;
+        const double rho = 0.05*m->rho0;
+        CHECK(tillTmeltofRho(m, rho) == 0.0, "granite T_melt at 0.05 rho0");
+        CHECK(EOSYieldStrength(mats[0], rho, 0.0) == 0.0, "no strength at T = 0 where T_melt = 0: %g", EOSYieldStrength(mats[0], rho, 0.0));
+    }
+    EOSfinalizeMaterial(mats[0]);
+    EOSfinalizeMaterial(mats[1]);
+    END_TEST();
+}
+
 static void testTillotson(double dKpcUnit, double dMsolUnit)
 {
     testTillotsonColdCurveOnly(1, dKpcUnit, dMsolUnit);
@@ -2277,6 +2427,7 @@ static void testTillotson(double dKpcUnit, double dMsolUnit)
     EOSfinalizeMaterial(iron);
     EOSfinalizeMaterial(granite);
     testWoolfsonUnits();
+    testTillotsonStrength(dKpcUnit, dMsolUnit);
 }
 #endif
 
