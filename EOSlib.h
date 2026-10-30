@@ -228,6 +228,26 @@
  *            at rho2; counted once). bEntropy stays EOS_FALSE (EOSSofRhoU/EOSSofRhoT unchanged).
  *          - EOSinitIsentropicLookup no longer prints a note for REOS3.
  *          - EOS_VERSION_PATCH was 1 for EOS_VERSION_TEXT "1.3.0"; both are 1.4.0 now.
+ *   1.5.0  Compared with 1.4.0. Requires tillotson 4.1.0 (material strength); the other
+ *          sublibraries as before.
+ *          - Material strength for Tillotson, as for ANEOS: EOSinitMaterial reads the optional files
+ *            tillotson_<name>.in_strength and tillotson_<name>.in_tmelt (granite, iron, basalt, ice,
+ *            water, dunite, forsterite) from the working directory; see "Material strength" in
+ *            tillotson.h for the formats (the strength file is the ANEOS text format, the melt curve
+ *            is binary with its own density axis). EOSYieldModel returns -1 without a strength file
+ *            and the model of the file otherwise; it returned -2 (no strength model) and
+ *            EOSYieldStrength and EOSGammaofRhoT were fatal for Tillotson. -2 is no longer returned.
+ *          - EOSYieldStrength for Tillotson: P(rho, u) is analytic and evaluated at the given u, while
+ *            T(rho, u) falls back to 0 below the cold curve, above rho_max and for a non-finite u. A
+ *            state below the cold curve gets the strength of the cold curve, P = P(rho, u_cold) (as
+ *            the tabulated EOS, whose P there is that of (rho, T_min)); above rho_max and for a
+ *            non-finite u the strength is EOS_FAIL_VALUE (as for rho outside an ANEOS table).
+ *          - The thermal softening accepts T = 0 (the cold curve of Tillotson): f(T -> 0) = 1 for
+ *            T_melt > 0, 0 for T_melt = 0. An infinite P gives EOS_FAIL_VALUE (it gave NaN). Both
+ *            cannot occur for ANEOS (T_min > 0, P finite): unchanged there.
+ *          - EOSGammaofRhoT for Tillotson: the fixed Gamma of the strength file, or rho c^2
+ *            3(1 - 2 nu)/(2(1 + nu)) with nu = 0.25 and c = c(rho, u(rho, T)); EOS_FAIL_VALUE where
+ *            u(rho, T) fails.
  */
 
 #ifndef EOSLIB_HINCLUDED
@@ -243,8 +263,8 @@
 #ifdef HAVE_TILLOTSON_H
     #include <tillotson.h>
 #define TILL_VERSION_MAJOR_REQUIRED 4
-#define TILL_VERSION_MINOR_REQUIRED 0
-#define TILL_VERSION_PATCH_REQUIRED 1
+#define TILL_VERSION_MINOR_REQUIRED 1
+#define TILL_VERSION_PATCH_REQUIRED 0
 #if (TILL_VERSION_MAJOR * 10000 + TILL_VERSION_MINOR * 100 + TILL_VERSION_PATCH) < \
     (TILL_VERSION_MAJOR_REQUIRED * 10000 + TILL_VERSION_MINOR_REQUIRED * 100 + TILL_VERSION_PATCH_REQUIRED)
 #error "EOSlib: the Tillotson library (tillotson.h) is older than the version EOSlib requires (TILL_VERSION_*_REQUIRED)"
@@ -290,9 +310,9 @@
 #error "EOSlib: the ideal gas library (igeos.h) is older than the version EOSlib requires (IGEOS_VERSION_*_REQUIRED)"
 #endif
 
-#define EOS_VERSION_TEXT    "1.4.0"
+#define EOS_VERSION_TEXT    "1.5.0"
 #define EOS_VERSION_MAJOR   1
-#define EOS_VERSION_MINOR   4
+#define EOS_VERSION_MINOR   5
 #define EOS_VERSION_PATCH   0
 
 /*
@@ -416,8 +436,7 @@
  * Fatal (message on stderr, then assert(0); exit(1)): initialisation errors
  * (unknown material, missing or defective table, version mismatch) and
  * calling a function that is not implemented for the material (EOSRhoofUT
- * for all but ANEOS, EOSdPdRhoofRhoT/EOSdPdT for Tillotson,
- * EOSGammaofRhoT/EOSYieldStrength for Tillotson) or EOSIsentropic for
+ * for all but ANEOS, EOSdPdRhoofRhoT/EOSdPdT for Tillotson) or EOSIsentropic for
  * Tillotson and REOS3 without EOSinitIsentropicLookup; those are
  * programming errors, not lookup failures. The assert(0) comes first on
  * purpose: in an MPI run a plain exit() on one rank can leave the others
@@ -547,16 +566,20 @@ double EOSSofRhoU(EOSMATERIAL *material, double rho, double u);
 double EOSSofRhoT(EOSMATERIAL *material, double rho, double T);
 
 /*
- * Yield strength model: -2 no strength model for this EOS (Tillotson, EOSYieldStrength is
- * fatal), -1 no yield stress, 0 no limiter, 1 intact, 2 damaged material (see EOSlib.c).
+ * Yield strength model: -1 no yield stress (ANEOS or Tillotson without a strength file), 0 no
+ * limiter, 1 intact, 2 damaged material (see EOSlib.c). ANEOS reads <table>_strength and
+ * <table>_tmelt, Tillotson tillotson_<name>.in_strength and tillotson_<name>.in_tmelt (see
+ * tillotson.h); models 1 and 2 need the melt curve. -2 is no longer returned (it meant "no
+ * strength model" for Tillotson before 1.5.0).
  */
 int EOSYieldModel(EOSMATERIAL *material);
 /*
  * Yield strength for models 1 and 2 (0 for models -1 and 0). Returns EOS_FAIL_VALUE if the
  * pressure lookup fails (rho outside the table) or T, T_melt is invalid; test with EOSFailed.
- * A state above the u column (overheated, T(rho, u) falls back to T_min) is evaluated on the top
- * row, T = T_max and P = P(rho, T_max), so it has no strength wherever T_melt <= T_max; a state
- * below the cold curve has the strength of the cold curve.
+ * A state above the u column of an ANEOS table (overheated, T(rho, u) falls back to T_min) is
+ * evaluated on the top row, T = T_max and P = P(rho, T_max), so it has no strength wherever
+ * T_melt <= T_max; a state below the cold curve has the strength of the cold curve (for Tillotson
+ * P(rho, u_cold), T = 0). Tillotson above rho_max or with a non-finite u: EOS_FAIL_VALUE.
  */
 double EOSYieldStrength(EOSMATERIAL *material, double rho, double u);
 /*
@@ -617,6 +640,11 @@ double EOSdUdRho(EOSMATERIAL *material, double rho, double u);
 double EOSdPdRhoofRhoT(EOSMATERIAL *material, double rho, double T);
 double EOSdPdT(EOSMATERIAL *material, double rho, double T);
 
+/*
+ * Shear modulus (code units): the fixed Gamma of the strength file, or from the bulk modulus rho c^2
+ * with a Poisson ratio nu = 0.25 (ANEOS, Tillotson); 0 for the gases. EOS_FAIL_VALUE where the
+ * sound speed at (rho, T) cannot be evaluated.
+ */
 double EOSGammaofRhoT(EOSMATERIAL *material, double rho, double T);
 
 double EOSUCold(EOSMATERIAL *material, double rho);

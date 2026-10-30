@@ -103,6 +103,7 @@ EOSMATERIAL *EOSinitMaterial(int iMat, double dKpcUnit, double dMsolUnit, const 
     {
 #ifdef HAVE_TILLOTSON_H
         material->matType = EOSTILLOTSON;
+        /* Also reads the optional strength files tillotson_<name>.in_strength/_tmelt (see tillotson.h). */
         material->tillmaterial = tillInitMaterial(iMat, dKpcUnit, dMsolUnit);
         material->rho0 = material->tillmaterial->rho0;
         material->rho0forInterfaceCorrection = material->rho0;
@@ -690,15 +691,14 @@ double EOSSofRhoT(EOSMATERIAL *material, double rho, double T)
 
     return S;
 }
-
 /*
  * Yield strength parameters of a material in code units, gathered once per evaluation. Returns the
  * yield strength model:
- *   -2: no strength model exists for this EOS (Tillotson); EOSYieldStrength is fatal
- *   -1: no yield stress (ANEOS material without a strength file)
+ *   -1: no yield stress (ANEOS or Tillotson material without a strength file)
  *    0: no limiter (gases, or a strength file with model 0)
  *    1: pressure-dependent yield strength of intact material (Collins et al. 2004)
  *    2: pressure-dependent yield strength of damaged material
+ * (-2, "no strength model for this EOS", was returned for Tillotson before EOSlib 1.5.0.)
  */
 typedef struct {
     double Y0;    // Yield strength at 0 pressure
@@ -722,7 +722,7 @@ static int EOSYieldParams(EOSMATERIAL *material, EOSYIELDPARAMS *p)
             return 0;   // No yield strength for gas type EOS
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            return -2;  // Change this if/when yield is added to tillotson
+            return tillYieldParameters(material->tillmaterial, &p->Y0, &p->YM, &p->mui, &p->mud, &p->xi);
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
         case EOSANEOS:
@@ -750,6 +750,29 @@ int EOSYieldModel(EOSMATERIAL *material){
 }
 
 /*
+ * The melt temperature T_melt(rho) of a material with a strength model > 0 (ANEOS or Tillotson;
+ * both load it with the strength file, and models 1 and 2 are fatal at load without it).
+ * EOS_FAIL_VALUE (counted by the sublibrary) for an invalid rho.
+ */
+static double EOSTmeltofRho(EOSMATERIAL *material, double rho)
+{
+    (void) rho;   /* unused without ANEOS and Tillotson */
+    switch(material->matType)
+    {
+#ifdef HAVE_TILLOTSON_H
+        case EOSTILLOTSON:
+            return tillTmeltofRho(material->tillmaterial, rho);
+#endif
+#ifdef HAVE_ANEOSMATERIAL_H
+        case EOSANEOS:
+            return ANEOSTmeltofRho(material->ANEOSmaterial, rho);
+#endif
+        default: EOS_NOT_IMPLEMENTED(material);   /* no strength model > 0 for this EOS */
+    }
+    return EOS_FAIL_VALUE;   /* not reached */
+}
+
+/*
  * Strength limiter from (rho, T, P) for the model and parameters from EOSYieldParams. The two
  * public entry points gather the parameters once (they did it twice in EOSYieldStrength: once in
  * EOSYieldModel and once here) and differ only in how T and P are obtained.
@@ -761,7 +784,6 @@ static double EOSYieldStrengthCore(EOSMATERIAL *material, int yieldStrengthModel
 
     /*
      * Yield strength models (EOSYieldModel):
-     * -2: No strength model for this EOS (Tillotson): fatal
      * -1: No yield stress
      *  0: No limiter, so the yield strength returned is irrelevant (not called).
      *  1: Pressure dependent yield strength for intact material (Collins et al. 2004)
@@ -772,28 +794,28 @@ static double EOSYieldStrengthCore(EOSMATERIAL *material, int yieldStrengthModel
      * strength vanishes. This also keeps the intact-strength denominator
      * 1 + mui*P/(YM-Y0) strictly positive.
      */
-    if (yieldStrengthModel == -2) EOS_NOT_IMPLEMENTED(material);   /* no strength model for Tillotson yet */
 
     /*
-     * The parameters are validated when they are read (ANEOSReadStrengthParameters:
-     * YM > Y0, mui > 0, xi > 0, mud >= 0 for model 2, model 0..2), so the checks
-     * below cannot fire for a material from EOSinitMaterial.
+     * The parameters are validated when they are read (ANEOSReadStrengthParameters,
+     * tillReadStrengthParameters: YM > Y0, mui > 0, xi > 0, mud >= 0 for model 2, model 0..2), so
+     * the checks below cannot fire for a material from EOSinitMaterial.
      */
     if (yieldStrengthModel > 0) {
+        double Peff, Yi, Tmelt, fT;
         /*
          * A failed pressure (EOS_FAIL_VALUE from a lookup outside the table, or a
          * failed P passed to EOSYieldStrengthofRhoTP) must not reach the tension
          * clamp below: fmax(-1e50, 0) = 0 turned it into the finite strength
-         * Y0*f(T). EOSFailed also catches NaN. Not counted in nLookupFail: the
-         * failed lookup that produced P was counted already.
+         * Y0*f(T). EOSFailed also catches NaN, isfinite an infinite P (inf/inf in
+         * the intact strength). Not counted in nLookupFail: the failed lookup that
+         * produced P was counted already.
          */
-        if (EOSFailed(P)) {
+        if (EOSFailed(P) || !isfinite(P)) {
             EOS_WARN("EOSYieldStrength: failed pressure P= %g for material %d (rho= %g T= %g).\n", P, material->iMat, rho, T);
             return EOS_FAIL_VALUE;
         }
-        double Peff = fmax(P, 0.0);
-        double Yi = p->Y0 + p->mui * Peff / (1.0 + p->mui * Peff / (p->YM - p->Y0));
-        double Tmelt = 0.0;
+        Peff = fmax(P, 0.0);
+        Yi = p->Y0 + p->mui * Peff / (1.0 + p->mui * Peff / (p->YM - p->Y0));
 
         if (yieldStrengthModel == 1) {
             Y = Yi;
@@ -804,23 +826,25 @@ static double EOSYieldStrengthCore(EOSMATERIAL *material, int yieldStrengthModel
             EOS_FATAL("EOSYieldStrength: yieldStrengthModel = %d not supported (material %d).\n", yieldStrengthModel, material->iMat);
         }
 
-#ifdef HAVE_ANEOSMATERIAL_H
-        /* Only ANEOS materials have a model > 0. */
-        Tmelt = ANEOSTmeltofRho(material->ANEOSmaterial, rho);
-#endif
+        Tmelt = EOSTmeltofRho(material, rho);
 
         /*
-         * Thermal softening (Ohnaka 1995), zero at and above the melt
-         * temperature. T comes from a lookup (T_min fallback, never the
-         * sentinel) and T_melt from the melt curve (sentinel for an invalid
-         * rho): an invalid pair is a lookup failure, so return the sentinel
-         * rather than exit.
+         * Thermal softening (Ohnaka 1995), f(T) = max(tanh(xi (T_melt/T - 1)), 0), zero at and above
+         * the melt temperature. T comes from a lookup (T_min fallback, never the sentinel) and
+         * T_melt from the melt curve (sentinel for an invalid rho): an invalid pair is a lookup
+         * failure, so return the sentinel rather than exit.
+         *
+         * T = 0 is a valid temperature for Tillotson (its cold curve, T_min = 0): there f is the
+         * limit T -> 0, 1 for T_melt > 0 and 0 for T_melt = 0 (no condensed phase). The tabulated
+         * EOS have T_min > 0, so nothing changes for them (T = 0 was rejected before 1.5.0).
          */
-        if (!(T > 0.0) || !(Tmelt >= 0.0) || !isfinite(T)) {
+        if (!(T >= 0.0) || !(Tmelt >= 0.0) || !isfinite(T)) {
             EOS_WARN("EOSYieldStrength: invalid T= %g or Tmelt= %g for material %d (rho= %g P= %g).\n", T, Tmelt, material->iMat, rho, P);
             return EOS_FAIL_VALUE;
         }
-        Y *= fmax(tanh(p->xi * (Tmelt / T - 1.0)), 0.0);
+        if (T > 0.0) fT = fmax(tanh(p->xi * (Tmelt / T - 1.0)), 0.0);
+        else fT = (Tmelt > 0.0) ? 1.0 : 0.0;
+        Y *= fT;
 
         /* Guard against roundoff; the strength is never negative. */
         Y = fmax(Y, 0.0);
@@ -830,19 +854,32 @@ static double EOSYieldStrengthCore(EOSMATERIAL *material, int yieldStrengthModel
 }
 
 /*
- * A state above the u column of the table (overheated material): T(rho, u) falls back to T_min by
- * contract and P, c to their values at (rho, T_min), so the strength was the full cold strength
- * Y0 f(T_min) of a material hotter than anything tabulated. Such a state is clamped to the top row
- * instead, T = T_max and P = P(rho, T_max), the convention of the isentropes for a state above the
- * table; the thermal softening then gives 0 wherever T_melt(rho) <= T_max.
+ * The (T, P) at which the strength of a (rho, u) state is evaluated, where the lookup did not
+ * give the T and P of the state itself. Not counted again: the lookup that produced T counted the
+ * fallback (and the extra lookups here are status queries).
  *
- * The fallback T is exactly ANEOSTmin, so only T == T_min needs the status test (ANEOSIsInTable,
- * one inversion of the u column; it agrees exactly with the lookup, also on the M-ANEOS columns
- * whose cold rows have du/dT < 0). A state in the table at T_min, or below the cold curve (cold
- * material, full strength), is left alone. Not counted again: the lookup that produced T counted
- * the fallback. Only ANEOS has strength models > 0.
+ * ANEOS: a state above the u column of the table (overheated material): T(rho, u) falls back to
+ * T_min by contract and P, c to their values at (rho, T_min), so the strength was the full cold
+ * strength Y0 f(T_min) of a material hotter than anything tabulated. Such a state is clamped to
+ * the top row instead, T = T_max and P = P(rho, T_max), the convention of the isentropes for a
+ * state above the table; the thermal softening then gives 0 wherever T_melt(rho) <= T_max. The
+ * fallback T is exactly ANEOSTmin, so only T == T_min needs the status test (ANEOSIsInTable, one
+ * inversion of the u column; it agrees exactly with the lookup, also on the M-ANEOS columns whose
+ * cold rows have du/dT < 0). A state in the table at T_min, or below the cold curve (cold
+ * material, full strength), is left alone.
+ *
+ * Tillotson: T(rho, u) = (u - u_cold)/cv has no upper limit, so an overheated state has its own T.
+ * T falls back to 0 below the cold curve, above rho_max and for a non-finite u, while P(rho, u) is
+ * analytic and evaluated at the given u (the Tillotson exception of the failure contract), so P
+ * would not belong to T there. Only T == 0 needs a test (one cold-curve lookup):
+ *   - below the cold curve (u < u_cold - tillUTol(u), as in tillIsBelowColdCurve): the state is
+ *     evaluated on the cold curve, P = P(rho, u_cold), the strength of the cold curve, as for
+ *     the tabulated EOS (their P below the cold curve is that of (rho, T_min));
+ *   - rho above the table (no cold curve) or a non-finite u: no temperature, P = EOS_FAIL_VALUE,
+ *     so the strength fails as for a density outside an ANEOS table.
+ * A state on the cold curve (within roundoff) keeps its T = 0 and P.
  */
-static void EOSYieldClampAboveTable(EOSMATERIAL *material, double rho, double u, double *pT, double *pP)
+static void EOSYieldClampState(EOSMATERIAL *material, double rho, double u, double *pT, double *pP)
 {
 #ifdef HAVE_ANEOSMATERIAL_H
     if (material->matType == EOSANEOS) {
@@ -852,14 +889,28 @@ static void EOSYieldClampAboveTable(EOSMATERIAL *material, double rho, double u,
             *pP = ANEOSPofRhoT(m, rho, *pT);
         }
     }
-#else
-    (void) material; (void) rho; (void) u; (void) pT; (void) pP;
 #endif
+#ifdef HAVE_TILLOTSON_H
+    if (material->matType == EOSTILLOTSON) {
+        TILLMATERIAL *m = material->tillmaterial;
+        if (*pT == 0.0 && !EOSFailed(*pP)) {
+            const long nLookupFail0 = m->nLookupFail;
+            const double ucold = tillColdULookup(m, rho);
+            m->nLookupFail = nLookupFail0;   /* counted already by T(rho, u) */
+            if (tillFailed(ucold) || !isfinite(u)) {
+                *pP = EOS_FAIL_VALUE;
+            } else if (u < ucold - tillUTol(m, u)) {
+                *pP = tillPressure(m, rho, ucold);
+            }
+        }
+    }
+#endif
+    (void) material; (void) rho; (void) u; (void) pT; (void) pP;
 }
 
 /*
- * Calculate strength limiter from (rho, u). Derives T and P with one fused
- * lookup. A state above the table is evaluated on the top row (EOSYieldClampAboveTable).
+ * Calculate strength limiter from (rho, u). Derives T and P with one fused lookup. A state that
+ * the lookup cannot invert is evaluated as described at EOSYieldClampState.
  */
 double EOSYieldStrength(EOSMATERIAL *material, double rho, double u)
 {
@@ -869,7 +920,7 @@ double EOSYieldStrength(EOSMATERIAL *material, double rho, double u)
 
     if (yieldStrengthModel > 0) {
         P = EOSPCTofRhoU(material, rho, u, &c, &T);
-        EOSYieldClampAboveTable(material, rho, u, &T, &P);
+        EOSYieldClampState(material, rho, u, &T, &P);
     }
     return EOSYieldStrengthCore(material, yieldStrengthModel, &p, rho, T, P);
 }
@@ -1438,8 +1489,9 @@ double EOSdPdT(EOSMATERIAL *material, double rho, double T)
 }
 
 /*
- * Calculate the shear modulus Gamma(rho,T)
- * using a fixed guessed Poisson ratio nu
+ * Calculate the shear modulus Gamma(rho,T): the fixed Gamma of the strength file, or from the bulk
+ * modulus with a guessed Poisson ratio nu = 0.25 (ANEOS, Tillotson); 0 for the gases.
+ * EOS_FAIL_VALUE where the sound speed at (rho, T) cannot be evaluated.
  */
 double EOSGammaofRhoT(EOSMATERIAL *material, double rho, double T){
     double Gamma = 0.0;
@@ -1451,7 +1503,8 @@ double EOSGammaofRhoT(EOSMATERIAL *material, double rho, double T){
             break;
 #ifdef HAVE_TILLOTSON_H
         case EOSTILLOTSON:
-            EOS_NOT_IMPLEMENTED(material);   /* no strength model for Tillotson yet */
+            /* Fixed Gamma of the strength file, or from the bulk modulus rho c^2 (nu = 0.25), as for ANEOS. */
+            Gamma = tillGammaofRhoT(material->tillmaterial, rho, T);
             break;
 #endif
 #ifdef HAVE_ANEOSMATERIAL_H
