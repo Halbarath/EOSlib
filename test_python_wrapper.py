@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 import sys
+import os
 
 # Specify the location of the python wrapper eoslib.py and the library libeoslib.so
-sys.path.insert(0, "/home/thomas/code/EOSlib")
+sys.path.insert(0, os.path.expanduser("~/code/EOSlib"))
 
 import eoslib
 
