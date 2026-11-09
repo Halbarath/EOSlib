@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+import sys
+
+# Specify the location of the python wrapper eoslib.py and the library libeoslib.so
+sys.path.insert(0, "/home/thomas/code/EOSlib")
+
 import eoslib
 
 dKpcUnit = 2.06701e-13;
